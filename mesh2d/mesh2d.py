@@ -1,5 +1,6 @@
 import math
-from .vector2 import Vector2
+from .vector2 import Vector2, ZeroSegmentError
+
 
 def plus_wrap(pos, num):
 			return 0 if pos == num - 1 else pos + 1
@@ -138,6 +139,10 @@ class Polygon2d:
 		return is_convex
 
 
+
+
+
+
 	def find_spikes(self):
 		vrt = self.vertices
 		num_verts = len(vrt)
@@ -154,7 +159,11 @@ class Polygon2d:
 		return spikes
 
 
-	def break_into_convex(self):
+
+
+
+
+	def get_portals(self, canvas=None):
 
 		"""
 		This function uses algorithm from R. Oliva and N. Pelechano - 
@@ -163,9 +172,97 @@ class Polygon2d:
 		"""
 
 		spikes = self.find_spikes()
-		# for spike_i in spikes:
-		# 	clos_vert_i = self.find_closest_vert(spike_i)
-		# 	clos_seg = self.find_closest_edge(spike_i)
+		portals = []
+
+		for spike_i in spikes:
+			
+
+			(closest_seg_i1, closest_seg_i2), closest_seg_point, closest_seg_dst = \
+				self.find_closest_edge(spike_i)
+
+			closest_vert_i, closest_vert_dst = self.find_closest_vert(spike_i)
+
+			closest_portal, closest_portal_point, closest_portal_dst = \
+				self.find_closest_portal(spike_i, portals)
+
+			if closest_portal is not None:
+				closest_portal_v1 = closest_portal[0]
+				closest_portal_v2 = closest_portal[1]
+				if canvas is not None:
+					x = closest_portal_point.x
+					y = closest_portal_point.y
+					sz = 5
+					spike_v = self.vertices[spike_i]
+					canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='cyan')
+					canvas.create_line(x, y, spike_v.x, spike_v.y, fill='cyan')
+
+
+			# closest edge always exist
+			# closest vertex - not always (there might be no vertices inside the anticone)
+			# closest portal - not always (there might be no portals inside the anticone
+			#                              or no portals at all)
+			
+			new_portal_endpoint = [closest_seg_point]
+			closest_dst = closest_seg_dst
+
+			# check if there is a vertex closer than the closest edge
+			if closest_vert_dst is not None and closest_vert_dst < closest_dst:
+				new_portal_endpoint = [self.vertices[closest_vert_i]]
+				closest_dst = closest_vert_dst
+
+
+			if closest_portal_dst is not None and closest_portal_dst < closest_dst:
+				closest_dst = closest_portal_dst
+				# figure out if we want to create one or two portals
+
+				# closest_portal_point can either be one of the endpoints,
+				# or a middle point of the portal
+
+				# we only want to connect to one or two endpoints,
+				# not to the middle of the portal
+
+				if closest_portal_point == closest_portal_v1:
+					new_portal_endpoint = [closest_portal_v1]
+
+				elif closest_portal_point == closest_portal_v2:
+					new_portal_endpoint = [closest_portal_v2]
+
+				else:
+					spike_v = self.vertices[spike_i]
+					prev_v = self.vertices[minus_wrap(spike_i, len(self.vertices))]
+					next_v = self.vertices[plus_wrap(spike_i, len(self.vertices))]
+
+					v1_inside = self._inside_anticone(closest_portal_v1, prev_v, spike_v, next_v)
+					v2_inside = self._inside_anticone(closest_portal_v2, prev_v, spike_v, next_v)
+
+					# if both portal endpoints are inside
+					if v1_inside and v2_inside:
+						# pick the closest one
+						dst1 = Vector2.distance(closest_portal_v1, spike_v)
+						dst2 = Vector2.distance(closest_portal_v2, spike_v)
+
+						new_portal_endpoint = [closest_portal_v1] \
+							if dst1 < dst2 else [closest_portal_v2]
+
+					# if only one portal endpoint is inside
+					elif v1_inside:
+						new_portal_endpoint = [closest_portal_v1]
+
+					elif v2_inside:
+						new_portal_endpoint = [closest_portal_v2]
+
+					# if none of the portal endpoints is inside
+					else:
+						new_portal_endpoint = [closest_portal_v1, closest_portal_v2]
+
+
+			for portal_endpoint in new_portal_endpoint:
+				portals.append( (self.vertices[spike_i], portal_endpoint) )
+
+		return portals
+
+
+
 
 
 
@@ -189,6 +286,12 @@ class Polygon2d:
 						closest_ind = cur_i
 
 		return closest_ind, closest_dst
+
+
+
+
+
+
 
 
 	def find_closest_edge(self, spike_i):
@@ -222,49 +325,9 @@ class Polygon2d:
 			seg_v2 = vrt[seg_i2]
 
 			if self._segment_inside_anticone(seg_v1, seg_v2, prev_v, spike_v, next_v):
-				proj_vert = Vector2.project_to_line(spike_v, seg_v1, seg_v2)
 
-				# if projected point is inside anticone:
-				if self._inside_anticone(proj_vert, prev_v, spike_v, next_v):
-
-					# 1st case: projected point is inside anticone and inside segment:
-					if Vector2.point_between(proj_vert, seg_v1, seg_v2):
-
-						dst = Vector2.distance(proj_vert, spike_v)
-						candidate_point = proj_vert
-
-					# 2nd case: projected point is inside anticone and outside segment:
-					else:
-
-						# choose the closest endpoint of the segment:
-						dist1 = Vector2.distance(seg_v1, spike_v)
-						dist2 = Vector2.distance(seg_v2, spike_v)
-						dst = min(dist1, dist2)
-						candidate_point = seg_v1 if dist1 < dist2 else seg_v2
-
-				# 3rd case: projected point is outside anticone:
-				else:
-
-					# if this edge is adjacent to the spike (previous egde)
-					if seg_i2 == prev_i:
-						dst = Vector2.distance(spike_v, seg_v1)
-						candidate_point = seg_v1
-
-					# if this edge is adjacent to the spike (next egde)
-					elif seg_i1 == next_i:
-						dst = Vector2.distance(spike_v, seg_v2)
-						candidate_point = seg_v2
-
-					# if this edge is not adjacent to the spike:
-					else:
-
-						new_v1 = Vector2.where_segment_crosses_ray(seg_v1, seg_v2, prev_v, spike_v)
-						new_v2 = Vector2.where_segment_crosses_ray(seg_v1, seg_v2, next_v, spike_v)
-
-						dist1 = Vector2.distance(spike_v, new_v1) if new_v1 is not None else 9999999.0
-						dist2 = Vector2.distance(spike_v, new_v2) if new_v2 is not None else 9999999.0
-						dst = min(dist1, dist2)
-						candidate_point = new_v1 if dist1 < dist2 else new_v2
+				candidate_point, dst = \
+				self.segment_closest_point_inside_anticone(seg_v1, seg_v2, prev_v, spike_v, next_v)
 
 				if closest_dst is None or dst < closest_dst:
 					closest_dst = dst
@@ -272,6 +335,49 @@ class Polygon2d:
 					closest_point = candidate_point
 
 		return closest_seg, closest_point, closest_dst
+
+
+
+
+
+	def find_closest_portal(self, spike_i, portals):
+
+		num_verts = len(self.vertices)
+		prev_i = minus_wrap(spike_i, num_verts)
+		next_i = plus_wrap(spike_i, num_verts)
+
+		spike_v = self.vertices[spike_i]
+		prev_v = self.vertices[prev_i]
+		next_v = self.vertices[next_i]
+
+		closest_portal = None
+		closest_dst = None
+		closest_point = None
+
+		for portal in portals:
+
+			port1 = portal[0]
+			port2 = portal[1]
+
+			candidate_point = None
+			dst = None
+
+			if self._segment_inside_anticone(port1, port2, prev_v, spike_v, next_v):
+
+				candidate_point, dst = \
+				self.segment_closest_point_inside_anticone(port1, port2, prev_v, spike_v, next_v)
+
+			else:
+				continue
+
+
+			if closest_dst is None or dst < closest_dst:
+				closest_dst = dst
+				closest_point = candidate_point
+				closest_portal = portal
+
+		return closest_portal, closest_point, closest_dst
+
 
 
 
@@ -292,6 +398,51 @@ class Polygon2d:
 				return False
 
 
+
 	def _inside_anticone(self, vert, prev_v, spike_v, next_v):
 		return Vector2.are_points_ccw(prev_v, spike_v, vert) and \
 			Vector2.are_points_ccw(spike_v, next_v, vert)
+
+
+
+
+	def segment_closest_point_inside_anticone(self, seg1, seg2, prev, spike, next):
+		proj_vert = Vector2.project_to_line(spike, seg1, seg2)
+
+		# if projected point is inside anticone:
+		if self._inside_anticone(proj_vert, prev, spike, next):
+
+			# 1st case: projected point is inside anticone and inside segment:
+			if Vector2.point_between(proj_vert, seg1, seg2):
+
+				dst = Vector2.distance(proj_vert, spike)
+				closest_point = proj_vert
+
+			# 2nd case: projected point is inside anticone and outside segment:
+			else:
+
+				# choose the closest endpoint of the segment:
+				dist1 = Vector2.distance(seg1, spike)
+				dist2 = Vector2.distance(seg2, spike)
+				dst = min(dist1, dist2)
+				closest_point = seg1 if dist1 < dist2 else seg2
+
+		# 3rd case: projected point is outside anticone:
+		else:
+			new_v1 = Vector2.where_segment_crosses_ray(seg1, seg2, prev, spike)
+			new_v2 = Vector2.where_segment_crosses_ray(seg1, seg2, next, spike)
+
+			# sometimes segment and ray intersect at the starting point of the ray:
+			# we treat these cases as non-intersections:
+			if new_v1 is not None and new_v1 == prev:
+				new_v1 = None
+
+			if new_v2 is not None and new_v2 == next:
+				new_v2 = None
+
+			dist1 = Vector2.distance(spike, new_v1) if new_v1 is not None else 9999999.0
+			dist2 = Vector2.distance(spike, new_v2) if new_v2 is not None else 9999999.0
+			dst = min(dist1, dist2)
+			closest_point = new_v1 if dist1 < dist2 else new_v2
+
+		return closest_point, dst

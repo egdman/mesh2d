@@ -29,6 +29,9 @@ class Vector2:
 	def __rmul__(self, left_operand):
 		return Vector2(self.x * left_operand, self.y * left_operand)
 
+	def __eq__(self, right_operand):
+		return self.x == right_operand.x and self.y == right_operand.y
+
 
 	@staticmethod
 	def cross(v1, v2):
@@ -67,6 +70,9 @@ class Vector2:
 
 	@staticmethod
 	def project_to_line(vert, line1, line2):
+		if line1 == line2:
+			raise ZeroSegmentError("Line is defined by coincident points", [line1, line2])
+
 		line_span = line2 - line1
 		coef = (vert - line1).dot_product(line_span) / (line_span.dot_product(line_span))
 		return line1 + (line_span * coef)
@@ -75,6 +81,22 @@ class Vector2:
 	def vertex_to_line_dist(vert, line1, line2):
 		proj = Vector2.project_to_line(vert, line1, line2)
 		return Vector2.distance(proj, vert)
+
+
+	@staticmethod
+	def vertex_to_segment_dist(vert, seg1, seg2):
+		proj_point = Vector2.project_to_line(vert, seg1, seg2)
+		if Vector2.point_between(proj_point, seg1, seg2):
+			dist = Vector2.distance(proj_point, vert)
+
+		else:
+			dist1 = Vector2.distance(seg1, vert)
+			dist2 = Vector2.distance(seg2, vert)
+			dist = min(dist1, dist2)
+			proj_point = seg1 if dist1 < dist2 else seg2
+
+		return dist, proj_point
+
 
 	@staticmethod
 	def point_between(vert, vert1, vert2):
@@ -95,7 +117,7 @@ class Vector2:
 	@staticmethod
 	def segment_crosses_ray(seg1, seg2, ray1, ray2):
 		'''
-		Return True if ray [ray1, ray2> intersects segment [seg1, seg2]
+		Returns True if ray [ray1, ray2> intersects segment [seg1, seg2]
 		'''
 		s1_left = Vector2.are_points_ccw(ray1, ray2, seg1)
 		s2_left = Vector2.are_points_ccw(ray1, ray2, seg2)
@@ -150,3 +172,14 @@ class Vector2:
 			return Vector2(int_x, int_y)
 
 
+
+class ZeroSegmentError(Exception):
+	def __init__(self, message, segment):
+		self._mes = message
+		self._seg = segment
+
+	def message(self):
+		return self._mes
+
+	def segment(self):
+		return self._seg
