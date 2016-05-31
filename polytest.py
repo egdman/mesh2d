@@ -49,6 +49,7 @@ class Application(tk.Frame):
 
 
 	def _add_polygon(self, event):
+		threshold = 10.0 # degrees
 		new_poly = Polygon2d(self._new_vertices)
 		del self._new_vertices[:]
 
@@ -77,18 +78,24 @@ class Application(tk.Frame):
 
 		try:
 
-			portals = new_poly.get_portals()
+			portals = new_poly.get_portals(threshold, self.canvas)
 		
 			for portal in portals:
 				p1 = portal[0]
 				p2 = portal[1]
 				self.canvas.create_line([p1.x, p1.y, p2.x, p2.y], fill='yellow')
 
-			spikes = new_poly.find_spikes()
+			spikes = new_poly.find_spikes(threshold)
 			for spike in spikes:
 				sp_v = new_poly.vertices[spike]
 				sz = self.dot_size
 				self.canvas.create_oval(sp_v.x - sz, sp_v.y - sz, sp_v.x + sz, sp_v.y + sz, fill='red')
+
+				antic1, antic2 = new_poly.get_anticone(spike, 30.0)
+				ant_v1 = sp_v + antic1*20.0
+				ant_v2 = sp_v + antic2*20.0
+				self.canvas.create_line(ant_v1.x, ant_v1.y, sp_v.x, sp_v.y, ant_v2.x, ant_v2.y, fill='magenta')
+
 
 
 		except ZeroSegmentError as ex:

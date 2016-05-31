@@ -26,11 +26,17 @@ class Vector2:
 	def __mul__(self, right_operand):
 		return Vector2(self.x * right_operand, self.y * right_operand)
 
+	def __div__(self, right_operand):
+		return Vector2(self.x / right_operand, self.y / right_operand)
+
 	def __rmul__(self, left_operand):
 		return Vector2(self.x * left_operand, self.y * left_operand)
 
 	def __eq__(self, right_operand):
 		return self.x == right_operand.x and self.y == right_operand.y
+
+	def length(self):
+		return math.sqrt(self.dot_product(self))
 
 
 	@staticmethod
@@ -81,6 +87,22 @@ class Vector2:
 	def vertex_to_line_dist(vert, line1, line2):
 		proj = Vector2.project_to_line(vert, line1, line2)
 		return Vector2.distance(proj, vert)
+
+
+	@staticmethod
+	def angle(vect1, vect2):
+		double_area = Vector2.double_signed_area(Vector2(0, 0), vect1, vect2)
+		cos_angle = vect1.dot_product(vect2) / (vect1.length() * vect2.length())
+		return math.acos(cos_angle)
+
+
+	@staticmethod
+	def mul_mtx(matrix, vector):
+		if len(matrix) != 4:
+			raise RuntimeError("Matrix must be 2x2")
+		x = matrix[0]*vector.x + matrix[1]*vector.y
+		y = matrix[2]*vector.x + matrix[3]*vector.y
+		return Vector2(x, y)
 
 
 	@staticmethod

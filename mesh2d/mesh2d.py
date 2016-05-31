@@ -143,7 +143,7 @@ class Polygon2d:
 
 
 
-	def find_spikes(self):
+	def find_spikes(self, threshold = 0.0):
 		vrt = self.vertices
 		num_verts = len(vrt)
 		indices = range(num_verts)
@@ -153,9 +153,21 @@ class Polygon2d:
 		for cur_ind in indices:
 			next_ind = plus_wrap(cur_ind, num_verts)
 			prev_ind = minus_wrap(cur_ind, num_verts)
-			if not Vector2.are_points_ccw(vrt[prev_ind], vrt[cur_ind], vrt[next_ind]):
-				spikes.append(cur_ind)
 
+			prev_v = vrt[prev_ind]
+			cand_v = vrt[cur_ind]
+			next_v = vrt[next_ind]
+
+			signed_area = Vector2.double_signed_area(prev_v, cand_v, next_v)
+			if signed_area < 0.0:
+
+				side1 = cand_v - prev_v
+				side2 = next_v - cand_v
+				external_angle = Vector2.angle(side1, side2)
+				external_angle = external_angle*180.0 / math.pi
+
+				if external_angle > threshold:
+					spikes.append(cur_ind)
 		return spikes
 
 
@@ -163,24 +175,32 @@ class Polygon2d:
 
 
 
-	def get_portals(self, canvas=None):
+	def get_portals(self, threshold = 0.0, canvas=None):
 
 		"""
 		This function uses algorithm from R. Oliva and N. Pelechano - 
 		Automatic Generation of Suboptimal NavMeshes
 		This is work in progress
 		"""
-
-		spikes = self.find_spikes()
+		sz = 5
+		spikes = self.find_spikes(threshold)
 		portals = []
 
 		for spike_i in spikes:
-			
+
+			conevec1, conevec2 = self.get_anticone(spike_i, threshold)
+			tip_v = self.vertices[spike_i]
+			left_v = tip_v + conevec2
+			right_v = tip_v + conevec1
 
 			(closest_seg_i1, closest_seg_i2), closest_seg_point, closest_seg_dst = \
 				self.find_closest_edge(spike_i)
 
-			closest_vert_i, closest_vert_dst = self.find_closest_vert(spike_i)
+			closest_vert_i, closest_vert_dst = self.find_closest_vert(left_v, tip_v, right_v)
+
+			if canvas is not None and closest_vert_i is not None:
+				vrt = self.vertices[closest_vert_i]
+				canvas.create_oval(vrt.x - sz, vrt.y - sz, vrt.x + sz, vrt.y + sz, fill='cyan')
 
 			closest_portal, closest_portal_point, closest_portal_dst = \
 				self.find_closest_portal(spike_i, portals)
@@ -188,13 +208,13 @@ class Polygon2d:
 			if closest_portal is not None:
 				closest_portal_v1 = closest_portal[0]
 				closest_portal_v2 = closest_portal[1]
-				if canvas is not None:
-					x = closest_portal_point.x
-					y = closest_portal_point.y
-					sz = 5
-					spike_v = self.vertices[spike_i]
-					canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='cyan')
-					canvas.create_line(x, y, spike_v.x, spike_v.y, fill='cyan')
+				# if canvas is not None:
+				# 	x = closest_portal_point.x
+				# 	y = closest_portal_point.y
+					
+				# 	spike_v = self.vertices[spike_i]
+				# 	canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='cyan')
+				# 	canvas.create_line(x, y, spike_v.x, spike_v.y, fill='cyan')
 
 
 			# closest edge always exist
@@ -266,21 +286,21 @@ class Polygon2d:
 
 
 
-	def find_closest_vert(self, spike_i):
+	def find_closest_vert(self, left_v, tip_v, right_v):
 		vrt = self.vertices
 		num_verts = len(vrt)
 		indices = range(num_verts)
-
-		prev_i = minus_wrap(spike_i, num_verts)
-		next_i = plus_wrap(spike_i, num_verts)
 
 		closest_ind = None
 		closest_dst = None
 
 		for cur_i in range(num_verts):
-			if cur_i != spike_i:
-				if self._inside_anticone(vrt[cur_i], vrt[prev_i], vrt[spike_i], vrt[next_i]):
-					dst = Vector2.distance(vrt[cur_i], vrt[spike_i])
+			cur_v = vrt[cur_i]
+
+			if cur_v != tip_v:
+
+				if self._inside_cone(vrt[cur_i], left_v, tip_v, right_v):
+					dst = Vector2.distance(vrt[cur_i], tip_v)
 					if closest_dst is None or dst < closest_dst:
 						closest_dst = dst
 						closest_ind = cur_i
@@ -290,11 +310,12 @@ class Polygon2d:
 
 
 
+	def _inside_cone(self, vert, left_v, tip_v, right_v):
+		return Vector2.are_points_ccw(tip_v, right_v, vert) and not \
+			Vector2.are_points_ccw(tip_v, left_v, vert)
 
 
-
-
-	def find_closest_edge(self, spike_i):
+	def find_closest_edge(self, spike_i, threshold=0.0):
 		vrt = self.vertices
 		num_verts = len(vrt)
 		indices = range(num_verts)
@@ -402,6 +423,53 @@ class Polygon2d:
 	def _inside_anticone(self, vert, prev_v, spike_v, next_v):
 		return Vector2.are_points_ccw(prev_v, spike_v, vert) and \
 			Vector2.are_points_ccw(spike_v, next_v, vert)
+
+
+
+	def get_anticone(self, spike_ind, threshold=0.0):
+		'''
+		Returns 2 vectors that define the cone rays.
+		The vectors have unit lengths
+		The vector pair is right-hand
+		'''
+		vrt = self.vertices
+		num_vrt = len(self.vertices)
+		next_ind = plus_wrap(spike_ind, num_vrt)
+		prev_ind = minus_wrap(spike_ind, num_vrt)
+
+		spike_v = vrt[spike_ind]
+		prev_v = vrt[prev_ind]
+		next_v = vrt[next_ind]
+
+
+		vec1 = spike_v - prev_v
+		vec2 = spike_v - next_v
+		vec1 /= vec1.length()
+		vec2 /= vec2.length()
+
+		anticone_angle = math.acos(vec1.dot_product(vec2))
+		
+		# degrees to radian
+		clearance = math.pi * threshold / 180.0
+		anticone_angle_plus = anticone_angle + clearance
+
+		
+
+		# limit anticone opening to 180 degrees:
+		anticone_angle_plus = anticone_angle_plus if anticone_angle_plus < math.pi else math.pi
+
+		clearance = anticone_angle_plus - anticone_angle
+
+		clearance = clearance / 2.0
+
+		cosine = math.cos(clearance)
+		sine = math.sin(clearance)
+		mtx = [cosine, sine, -sine, cosine]
+		vec1_new = Vector2.mul_mtx(mtx, vec1)
+		mtx = [cosine, -sine, sine, cosine]
+		vec2_new = Vector2.mul_mtx(mtx, vec2)
+
+		return vec1_new, vec2_new
 
 
 
