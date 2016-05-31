@@ -91,7 +91,7 @@ class Application(tk.Frame):
 				sz = self.dot_size
 				self.canvas.create_oval(sp_v.x - sz, sp_v.y - sz, sp_v.x + sz, sp_v.y + sz, fill='red')
 
-				antic1, antic2 = new_poly.get_anticone(spike, 30.0)
+				antic1, antic2 = new_poly.get_anticone(spike, threshold)
 				ant_v1 = sp_v + antic1*20.0
 				ant_v2 = sp_v + antic2*20.0
 				self.canvas.create_line(ant_v1.x, ant_v1.y, sp_v.x, sp_v.y, ant_v2.x, ant_v2.y, fill='magenta')

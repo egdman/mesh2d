@@ -173,8 +173,6 @@ class Polygon2d:
 
 
 
-
-
 	def get_portals(self, threshold = 0.0, canvas=None):
 
 		"""
@@ -189,32 +187,23 @@ class Polygon2d:
 		for spike_i in spikes:
 
 			conevec1, conevec2 = self.get_anticone(spike_i, threshold)
-			tip_v = self.vertices[spike_i]
-			left_v = tip_v + conevec2
-			right_v = tip_v + conevec1
+			tip = self.vertices[spike_i]
+			left = tip + conevec2
+			right = tip + conevec1
 
 			(closest_seg_i1, closest_seg_i2), closest_seg_point, closest_seg_dst = \
-				self.find_closest_edge(spike_i)
+				self.find_closest_edge(left, tip, right)
 
-			closest_vert_i, closest_vert_dst = self.find_closest_vert(left_v, tip_v, right_v)
 
-			if canvas is not None and closest_vert_i is not None:
-				vrt = self.vertices[closest_vert_i]
-				canvas.create_oval(vrt.x - sz, vrt.y - sz, vrt.x + sz, vrt.y + sz, fill='cyan')
+			closest_vert_i, closest_vert_dst = self.find_closest_vert(left, tip, right)
+
+			# if canvas is not None and closest_vert_i is not None:
+			# 	vrt = self.vertices[closest_vert_i]
+			# 	canvas.create_oval(vrt.x - sz, vrt.y - sz, vrt.x + sz, vrt.y + sz, fill='cyan')
 
 			closest_portal, closest_portal_point, closest_portal_dst = \
-				self.find_closest_portal(spike_i, portals)
+				self.find_closest_portal(left, tip, right, portals)
 
-			if closest_portal is not None:
-				closest_portal_v1 = closest_portal[0]
-				closest_portal_v2 = closest_portal[1]
-				# if canvas is not None:
-				# 	x = closest_portal_point.x
-				# 	y = closest_portal_point.y
-					
-				# 	spike_v = self.vertices[spike_i]
-				# 	canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='cyan')
-				# 	canvas.create_line(x, y, spike_v.x, spike_v.y, fill='cyan')
 
 
 			# closest edge always exist
@@ -233,6 +222,11 @@ class Polygon2d:
 
 			if closest_portal_dst is not None and closest_portal_dst < closest_dst:
 				closest_dst = closest_portal_dst
+
+				portal_v1 = closest_portal[0]
+				portal_v2 = closest_portal[1]
+				
+				
 				# figure out if we want to create one or two portals
 
 				# closest_portal_point can either be one of the endpoints,
@@ -241,43 +235,42 @@ class Polygon2d:
 				# we only want to connect to one or two endpoints,
 				# not to the middle of the portal
 
-				if closest_portal_point == closest_portal_v1:
-					new_portal_endpoint = [closest_portal_v1]
+				if closest_portal_point == portal_v1:
+					new_portal_endpoint = [portal_v1]
 
-				elif closest_portal_point == closest_portal_v2:
-					new_portal_endpoint = [closest_portal_v2]
+				elif closest_portal_point == portal_v2:
+					new_portal_endpoint = [portal_v2]
 
 				else:
-					spike_v = self.vertices[spike_i]
-					prev_v = self.vertices[minus_wrap(spike_i, len(self.vertices))]
-					next_v = self.vertices[plus_wrap(spike_i, len(self.vertices))]
+					# spike_v = self.vertices[spike_i]
+					# prev_v = self.vertices[minus_wrap(spike_i, len(self.vertices))]
+					# next_v = self.vertices[plus_wrap(spike_i, len(self.vertices))]
 
-					v1_inside = self._inside_anticone(closest_portal_v1, prev_v, spike_v, next_v)
-					v2_inside = self._inside_anticone(closest_portal_v2, prev_v, spike_v, next_v)
+
+					v1_inside = self._inside_cone(portal_v1, left, tip, right)
+					v2_inside = self._inside_cone(portal_v2, left, tip, right)
 
 					# if both portal endpoints are inside
 					if v1_inside and v2_inside:
 						# pick the closest one
-						dst1 = Vector2.distance(closest_portal_v1, spike_v)
-						dst2 = Vector2.distance(closest_portal_v2, spike_v)
+						dst1 = Vector2.distance(portal_v1, tip)
+						dst2 = Vector2.distance(portal_v2, tip)
 
-						new_portal_endpoint = [closest_portal_v1] \
-							if dst1 < dst2 else [closest_portal_v2]
+						new_portal_endpoint = [portal_v1] if dst1 < dst2 else [portal_v2]
 
 					# if only one portal endpoint is inside
 					elif v1_inside:
-						new_portal_endpoint = [closest_portal_v1]
-
+						new_portal_endpoint = [portal_v1]
 					elif v2_inside:
-						new_portal_endpoint = [closest_portal_v2]
+						new_portal_endpoint = [portal_v2]
 
 					# if none of the portal endpoints is inside
 					else:
-						new_portal_endpoint = [closest_portal_v1, closest_portal_v2]
+						new_portal_endpoint = [portal_v1, portal_v2]
 
 
 			for portal_endpoint in new_portal_endpoint:
-				portals.append( (self.vertices[spike_i], portal_endpoint) )
+				portals.append( (tip, portal_endpoint) )
 
 		return portals
 
@@ -286,7 +279,7 @@ class Polygon2d:
 
 
 
-	def find_closest_vert(self, left_v, tip_v, right_v):
+	def find_closest_vert(self, left, tip, right):
 		vrt = self.vertices
 		num_verts = len(vrt)
 		indices = range(num_verts)
@@ -297,10 +290,10 @@ class Polygon2d:
 		for cur_i in range(num_verts):
 			cur_v = vrt[cur_i]
 
-			if cur_v != tip_v:
+			if cur_v != tip:
 
-				if self._inside_cone(vrt[cur_i], left_v, tip_v, right_v):
-					dst = Vector2.distance(vrt[cur_i], tip_v)
+				if self._inside_cone(vrt[cur_i], left, tip, right):
+					dst = Vector2.distance(vrt[cur_i], tip)
 					if closest_dst is None or dst < closest_dst:
 						closest_dst = dst
 						closest_ind = cur_i
@@ -309,122 +302,96 @@ class Polygon2d:
 
 
 
-
-	def _inside_cone(self, vert, left_v, tip_v, right_v):
-		return Vector2.are_points_ccw(tip_v, right_v, vert) and not \
-			Vector2.are_points_ccw(tip_v, left_v, vert)
-
-
-	def find_closest_edge(self, spike_i, threshold=0.0):
+	def find_closest_edge(self, left, tip, right):
 		vrt = self.vertices
 		num_verts = len(vrt)
-		indices = range(num_verts)
 
-		prev_i = minus_wrap(spike_i, num_verts)
-		next_i = plus_wrap(spike_i, num_verts)
-
-		spike_v = vrt[spike_i]
-		prev_v = vrt[prev_i]
-		next_v = vrt[next_i]
-
-		closest_seg = None
-		closest_dst = None
-		closest_point = None
+		closest_pt = None
+		closest_dist = None
+		closest_edge = None
 
 		for ind in range(num_verts):
+			# here we assume that indices go counter-clockwise,
+			# and seg2 comes after seg1
 			seg_i1 = ind
 			seg_i2 = plus_wrap(ind, num_verts)
+			seg1 = vrt[seg_i1]
+			seg2 = vrt[seg_i2]
 
-			# skip edges that belong to the spike:
-			if seg_i2 == spike_i:
+			# skip edges adjacent to the tip of the cone:
+			if seg2 == tip:
 				continue
-			if seg_i2 == next_i:
+			if seg1 == tip:
 				continue
 
+			
+			if self._segment_inside_cone(seg1, seg2, left, tip, right):
 
-			seg_v1 = vrt[seg_i1]
-			seg_v2 = vrt[seg_i2]
+				candid_pt, candid_dist = self.segment_closest_point_inside_cone(seg1, seg2, left, tip, right)
 
-			if self._segment_inside_anticone(seg_v1, seg_v2, prev_v, spike_v, next_v):
+				if closest_dist is None or candid_dist < closest_dist:
+					closest_dist = candid_dist
+					closest_pt = candid_pt
+					closest_edge = (seg_i1, seg_i2)
 
-				candidate_point, dst = \
-				self.segment_closest_point_inside_anticone(seg_v1, seg_v2, prev_v, spike_v, next_v)
-
-				if closest_dst is None or dst < closest_dst:
-					closest_dst = dst
-					closest_seg = (seg_i1, seg_i2)
-					closest_point = candidate_point
-
-		return closest_seg, closest_point, closest_dst
+		return closest_edge, closest_pt, closest_dist
 
 
 
 
-
-	def find_closest_portal(self, spike_i, portals):
-
-		num_verts = len(self.vertices)
-		prev_i = minus_wrap(spike_i, num_verts)
-		next_i = plus_wrap(spike_i, num_verts)
-
-		spike_v = self.vertices[spike_i]
-		prev_v = self.vertices[prev_i]
-		next_v = self.vertices[next_i]
+	def find_closest_portal(self, left, tip, right, portals):
+		vrt = self.vertices
+		num_verts = len(vrt)
 
 		closest_portal = None
-		closest_dst = None
-		closest_point = None
+		closest_dist = None
+		closest_pt = None
 
 		for portal in portals:
 
 			port1 = portal[0]
 			port2 = portal[1]
 
-			candidate_point = None
-			dst = None
-
-			if self._segment_inside_anticone(port1, port2, prev_v, spike_v, next_v):
-
-				candidate_point, dst = \
-				self.segment_closest_point_inside_anticone(port1, port2, prev_v, spike_v, next_v)
-
-			else:
+			if port1 == tip or port2 == tip:
 				continue
 
+			if self._segment_inside_cone(port1, port2, left, tip, right):
 
-			if closest_dst is None or dst < closest_dst:
-				closest_dst = dst
-				closest_point = candidate_point
-				closest_portal = portal
+				candid_pt, candid_dist = self.segment_closest_point_inside_cone(port1, port2, left, tip, right)
 
-		return closest_portal, closest_point, closest_dst
+				if closest_dist is None or candid_dist < closest_dist:
+					closest_dist = candid_dist
+					closest_pt = candid_pt
+					closest_portal = portal
+
+		return closest_portal, closest_pt, closest_dist 
 
 
 
 
+	def _inside_cone(self, vert, left_v, tip_v, right_v):
+			return Vector2.are_points_ccw(tip_v, right_v, vert) and not \
+				Vector2.are_points_ccw(tip_v, left_v, vert)
 
-	def _segment_inside_anticone(self, seg_v1, seg_v2, prev_v, spike_v, next_v):
-		v1_inside = self._inside_anticone(seg_v1, prev_v, spike_v, next_v)
-		v2_inside = self._inside_anticone(seg_v2, prev_v, spike_v, next_v)
 
+
+	def _segment_inside_cone(self, seg1, seg2, left, tip, right):
+		v1_inside = self._inside_cone(seg1, left, tip, right)
+		v2_inside = self._inside_cone(seg2, left, tip, right)
 		# if at least one vertex is inside the cone:
 		if v1_inside or v2_inside:
 			return True
 		# if none of the endpoints is inside cone, the middle of the segment might still be:
 		else:
-			if Vector2.segment_crosses_ray(seg_v1, seg_v2, prev_v, spike_v) and \
-			Vector2.segment_crosses_ray(seg_v1, seg_v2, next_v, spike_v):
+			if Vector2.segment_crosses_ray(seg1, seg2, tip, left) and \
+			Vector2.segment_crosses_ray(seg1, seg2, tip, right):
 				return True
 			else:
 				return False
 
 
 
-	def _inside_anticone(self, vert, prev_v, spike_v, next_v):
-		return Vector2.are_points_ccw(prev_v, spike_v, vert) and \
-			Vector2.are_points_ccw(spike_v, next_v, vert)
-
-
+	
 
 	def get_anticone(self, spike_ind, threshold=0.0):
 		'''
@@ -473,44 +440,35 @@ class Polygon2d:
 
 
 
+	def segment_closest_point_inside_cone(self, seg1, seg2, left, tip, right):
+		proj = Vector2.project_to_line(tip, seg1, seg2)
 
-	def segment_closest_point_inside_anticone(self, seg1, seg2, prev, spike, next):
-		proj_vert = Vector2.project_to_line(spike, seg1, seg2)
-
+		dist = None
+		closest_pt = None
 		# if projected point is inside anticone:
-		if self._inside_anticone(proj_vert, prev, spike, next):
+		if self._inside_cone(proj, left, tip, right):
 
 			# 1st case: projected point is inside anticone and inside segment:
-			if Vector2.point_between(proj_vert, seg1, seg2):
-
-				dst = Vector2.distance(proj_vert, spike)
-				closest_point = proj_vert
+			if Vector2.point_between(proj, seg1, seg2):
+				dist = Vector2.distance(tip, proj)
+				closest_pt = proj
 
 			# 2nd case: projected point is inside anticone and outside segment:
 			else:
-
-				# choose the closest endpoint of the segment:
-				dist1 = Vector2.distance(seg1, spike)
-				dist2 = Vector2.distance(seg2, spike)
-				dst = min(dist1, dist2)
-				closest_point = seg1 if dist1 < dist2 else seg2
+				dist1 = Vector2.distance(seg1, tip)
+				dist2 = Vector2.distance(seg2, tip)
+				dist = min(dist1, dist2)
+				closest_pt = seg1 if dist1 < dist2 else seg2
 
 		# 3rd case: projected point is outside anticone:
 		else:
-			new_v1 = Vector2.where_segment_crosses_ray(seg1, seg2, prev, spike)
-			new_v2 = Vector2.where_segment_crosses_ray(seg1, seg2, next, spike)
+			inters_left = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
+			inters_right = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
 
-			# sometimes segment and ray intersect at the starting point of the ray:
-			# we treat these cases as non-intersections:
-			if new_v1 is not None and new_v1 == prev:
-				new_v1 = None
+			dist_left = Vector2.distance(tip, inters_left) if inters_left is not None else 9999999.0
+			dist_right = Vector2.distance(tip, inters_right) if inters_right is not None else 9999999.0
 
-			if new_v2 is not None and new_v2 == next:
-				new_v2 = None
+			dist = min(dist_left, dist_right)
+			closest_pt = inters_left if dist_left < dist_right else inters_right
 
-			dist1 = Vector2.distance(spike, new_v1) if new_v1 is not None else 9999999.0
-			dist2 = Vector2.distance(spike, new_v2) if new_v2 is not None else 9999999.0
-			dst = min(dist1, dist2)
-			closest_point = new_v1 if dist1 < dist2 else new_v2
-
-		return closest_point, dst
+		return closest_pt, dist

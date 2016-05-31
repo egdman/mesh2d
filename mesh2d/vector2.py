@@ -76,8 +76,8 @@ class Vector2:
 
 	@staticmethod
 	def project_to_line(vert, line1, line2):
-		if line1 == line2:
-			raise ZeroSegmentError("Line is defined by coincident points", [line1, line2])
+		# if line1 == line2:
+		# 	raise ZeroSegmentError("Line is defined by coincident points", [line1, line2])
 
 		line_span = line2 - line1
 		coef = (vert - line1).dot_product(line_span) / (line_span.dot_product(line_span))
