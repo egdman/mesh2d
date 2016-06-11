@@ -53,8 +53,8 @@ class Polygon2d:
 			if indices[pos] == e1_i or indices[pos] == e2_i:
 				e_end_pos = pos
 				break
-		print 'edge start pos = {0}'.format(e_start_pos)
-		print 'edge end   pos = {0}'.format(e_end_pos)
+		# print 'edge start pos = {0}'.format(e_start_pos)
+		# print 'edge end   pos = {0}'.format(e_end_pos)
 
 		new_vert_index = len(self.vertices)
 		self.vertices.append(vertex)
@@ -81,7 +81,7 @@ class Polygon2d:
 		return buffers[0], buffers[1]
 
 
-	def _break_in_two(self, parts, portals):
+	def _break_in_two(self, parts, portals, canvas):
 		
 		poly1 = None
 		poly2 = None
@@ -111,6 +111,10 @@ class Polygon2d:
 					op_edge = intersection[1]
 				
 					end_i = self.add_vertex_to_edge(new_vrt, op_edge)
+					if canvas is not None:
+						sz = 4
+						new_vrt = self.vertices[end_i]
+						canvas.create_oval(new_vrt.x - sz, new_vrt.y - sz, new_vrt.x + sz, new_vrt.y + sz, fill='green')
 					portal['end_index'] = end_i
 
 
@@ -118,15 +122,15 @@ class Polygon2d:
 			start_pos = None
 			end_pos = None
 
-			print 'portal starts at {0}'.format(start_i)
-			print 'portal ends   at {0}'.format(end_i)
-			print "indices : {0}".format(self.indices)
+			# print 'portal starts at {0}'.format(start_i)
+			# print 'portal ends   at {0}'.format(end_i)
+			# print "indices : {0}".format(self.indices)
 			
 			# split index buffer of the polygon using the portal
 			piece1, piece2 = self._split_index_buffer(start_i, end_i)
 
-			print "piece 1: {0}".format(piece1)
-			print "piece 2: {0}\n\n".format(piece2)
+			# print "piece 1: {0}".format(piece1)
+			# print "piece 2: {0}\n\n".format(piece2)
 
 			# if this portal is actually an edge, skip it
 			if len(piece1) < 3 or len(piece2) < 3:
@@ -137,8 +141,8 @@ class Polygon2d:
 			poly2 = Polygon2d(self.vertices, piece2)
 
 			# break them recursively
-			poly1._break_in_two(parts, portals)
-			poly2._break_in_two(parts, portals)
+			poly1._break_in_two(parts, portals, canvas)
+			poly2._break_in_two(parts, portals, canvas)
 			return
 
 		# if we did not find any portals, this polygon must be convex
@@ -147,11 +151,19 @@ class Polygon2d:
 		return
 
 
-	def break_into_convex(self, polys, threshold = 0.0):
+	def break_into_convex(self, polys, threshold = 0.0, canvas=None):
 		portals = self.get_portals(threshold=threshold)
+		print "num portals = {0}".format(len(portals))
+
+		if canvas is not None:
+			for portal in portals:
+				v1 = self.vertices[portal['start_index']]
+				v2 = portal['end_point']
+
+				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=4)
 
 		# break polygons by portals recursively
-		self._break_in_two(polys, portals)
+		self._break_in_two(polys, portals, canvas)
 
 
 
