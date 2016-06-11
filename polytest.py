@@ -1,5 +1,5 @@
 from mesh2d import *
-
+import random
 
 import Tkinter as tk
 
@@ -50,7 +50,7 @@ class Application(tk.Frame):
 
 	def _add_polygon(self, event):
 		threshold = 10.0 # degrees
-		new_poly = Polygon2d(self._new_vertices)
+		new_poly = Polygon2d(self._new_vertices, range(len(self._new_vertices)))
 		del self._new_vertices[:]
 
 		# for triangle in new_poly.triangles:
@@ -60,40 +60,57 @@ class Application(tk.Frame):
 
 		# draw outline:
 		crds = []
-		for ind in range(len(new_poly.vertices)):
+		for ind in new_poly.indices:
 			vrt1 = new_poly.vertices[ind]
 			crds.append(vrt1.x)
 			crds.append(vrt1.y)
 		crds.append(new_poly.vertices[0].x)
 		crds.append(new_poly.vertices[0].y)
 
-		self.canvas.create_line(crds, fill='#FFFFFF')
+		self.canvas.create_line(crds, fill='#FFFFFF', width=3)
+
+		polys = []
+		new_poly.break_into_convex(polys, threshold)
+
+		print "number of convex parts = {0}".format(len(polys))
+		for poly in polys:
+
+			rnd = lambda: random.randint(0,255)
+			color = '#%02X%02X%02X' % (rnd(),rnd(),rnd())
+
+			coords = poly.outline_coordinates()
+
+			# self.canvas.create_line(coords, fill='green')
+			self.canvas.create_polygon(coords[:-2], activefill=color, outline=color)
+		# self.canvas.create_line(poly2.outline_coordinates(), fill='red')
+		
 
 
 		self._polygons.append(new_poly)
 
-		for d_id in self._dots_ids:
-			self.canvas.delete(d_id)
+		# for d_id in self._dots_ids:
+		# 	self.canvas.delete(d_id)
 
 
 		try:
 
-			portals = new_poly.get_portals(threshold, self.canvas)
-		
+			portals = new_poly.get_portals(threshold, canvas=self.canvas)
+
 			for portal in portals:
-				p1 = portal[0]
-				p2 = portal[1]
-				self.canvas.create_line([p1.x, p1.y, p2.x, p2.y], fill='yellow')
+				p1 = new_poly.vertices[portal['start_index']]
+				p2 = portal['end_point']
+
+				# self.canvas.create_line([p1.x, p1.y, p2.x, p2.y], fill='yellow')
 
 			spikes = new_poly.find_spikes(threshold)
 			for spike in spikes:
-				sp_v = new_poly.vertices[spike]
+				sp_v = new_poly.vertices[spike[1]]
 				sz = self.dot_size
 				self.canvas.create_oval(sp_v.x - sz, sp_v.y - sz, sp_v.x + sz, sp_v.y + sz, fill='red')
 
-				antic1, antic2 = new_poly.get_anticone(spike, threshold)
-				ant_v1 = sp_v + antic1*20.0
-				ant_v2 = sp_v + antic2*20.0
+				antic1, antic2 = new_poly.get_anticone(spike[0], spike[1], spike[2], threshold)
+				ant_v1 = sp_v + antic1*5.0
+				ant_v2 = sp_v + antic2*5.0
 				self.canvas.create_line(ant_v1.x, ant_v1.y, sp_v.x, sp_v.y, ant_v2.x, ant_v2.y, fill='magenta')
 
 

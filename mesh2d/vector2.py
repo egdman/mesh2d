@@ -16,6 +16,8 @@ class Vector2:
 	def __iter__(self):
 		return iter([self.x, self.y])
 
+	def __str__(self):
+		return "{0},{1}".format(self.x, self.y)
 
 	def __add__(self, right_operand):
 		return Vector2(self.x + right_operand.x, self.y + right_operand.y)
@@ -37,6 +39,11 @@ class Vector2:
 
 	def length(self):
 		return math.sqrt(self.dot_product(self))
+
+
+	def snap_to(self, other):
+		self.x = other.x
+		self.y = other.y
 
 
 	@staticmethod
