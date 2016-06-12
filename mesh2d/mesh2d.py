@@ -1,4 +1,6 @@
 import math
+import random
+
 from .vector2 import Vector2, ZeroSegmentError
 
 
@@ -15,6 +17,32 @@ class Mash2d:
 		self.vertices = vertex_buffer
 
 
+class Bbox:
+	def __init__(self, vertices, indices):
+		vrt = vertices
+		ind = indices
+		self.xmin = self.xmax = vrt[ind[0]].x
+		self.ymin = self.ymax = vrt[ind[0]].y
+
+		for i in ind:
+			v = vrt[i]
+			if v.x < self.xmin:
+				self.xmin = v.x
+			elif v.x > self.xmax:
+				self.xmax = v.x
+
+			if v.y < self.ymin:
+				self.ymin = v.y
+			elif v.y > self.ymax:
+				self.ymax = v.y
+
+
+		def point_inside(self, point):
+			return point.x < self.xmax and point.x > self.xmin and \
+				point.y < self.ymax and point.y > self.ymin
+
+
+
 
 
 class Polygon2d:
@@ -25,6 +53,8 @@ class Polygon2d:
 			self.indices = list(reversed(indices))
 
 		self.vertices = vertices[:]
+		self.bbox = Bbox(vertices, indices)
+
 
 	def outline_coordinates(self):
 		crds = []
@@ -81,10 +111,26 @@ class Polygon2d:
 		return buffers[0], buffers[1]
 
 
-	def _break_in_two(self, parts, portals, canvas):
+	def draw_self(self, canvas, displacement):
+		coords = []
+		for i in self.indices:
+			vrt = self.vertices[i] + displacement
+			coords.append(vrt.x)
+			coords.append(vrt.y)
+
+		rnd = lambda: random.randint(0,255)
+		color = '#%02X%02X%02X' % (rnd(),rnd(),rnd())
+		canvas.create_polygon(coords, fill=color)
+
+
+	def _break_in_two(self, parts, portals, canvas, level, ysize):
 		
 		poly1 = None
 		poly2 = None
+
+		disp = Vector2(0, ysize * level)
+
+		self.draw_self(canvas, disp)
 
 		# iterate over portals trying to find the first portal that belongs to this polygon
 		for portal in portals:
@@ -141,8 +187,8 @@ class Polygon2d:
 			poly2 = Polygon2d(self.vertices, piece2)
 
 			# break them recursively
-			poly1._break_in_two(parts, portals, canvas)
-			poly2._break_in_two(parts, portals, canvas)
+			poly1._break_in_two(parts, portals, canvas, level+1, ysize)
+			poly2._break_in_two(parts, portals, canvas, level+1, ysize)
 			return
 
 		# if we did not find any portals, this polygon must be convex
@@ -163,7 +209,9 @@ class Polygon2d:
 				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=4)
 
 		# break polygons by portals recursively
-		self._break_in_two(polys, portals, canvas)
+
+		ysize = self.bbox.ymax - self.bbox.ymin
+		self._break_in_two(polys, portals, canvas, 1, ysize)
 
 
 

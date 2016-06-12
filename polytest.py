@@ -5,7 +5,6 @@ import Tkinter as tk
 
 
 
-
 class Application(tk.Frame):
 	def __init__(self, master=None):
 		tk.Frame.__init__(self, master)
@@ -19,21 +18,51 @@ class Application(tk.Frame):
 
 
 	def createWidgets(self):
-		self.canvas = tk.Canvas(self, background='#000000', width=1200, height=600)
+		self.canvas = tk.Canvas(self, background='#000000', width=1200, height=600,
+			scrollregion=(0, 0, 3000, 30000))
+
+		# horiz scrollbar
+		self.hbar = tk.Scrollbar(self, orient = tk.HORIZONTAL)
+		self.hbar.config(command = self.canvas.xview)
+
+		# vert scrollbar
+		self.vbar = tk.Scrollbar(self, orient = tk.VERTICAL)
+		self.vbar.config(command = self.canvas.yview)
+
+		self.canvas.config(xscrollcommand = self.hbar.set, yscrollcommand=self.vbar.set)
+
 		self.canvas.bind('<Button-1>', self._add_vertex)
 		self.canvas.bind('<Button-3>', self._add_polygon)
-		self.canvas.grid()
+
+		# self.canvas.grid()
+		# self.hbar.grid()
+		# self.vbar.grid()
+
+		self.canvas.bind('<Button-4>', self._mousewheel_up)
+		self.canvas.bind('<Button-5>', self._mousewheel_down)
+
+		self.hbar.pack(side = tk.BOTTOM, fill = tk.X)
+		self.vbar.pack(side = tk.RIGHT, fill = tk.Y)
+		self.canvas.pack(side = tk.LEFT, expand = True, fill = tk.BOTH)
+
 		self.quitButton = tk.Button(self, text='Quit', command=self.quit)
-		self.quitButton.grid()
+		self.quitButton.pack()
 
 		# vertices = [(50, 50), (70, 70), (10, 100)]
 		# self.canvas.create_line(vertices, fill='#FFFFFF')
 
 
+	def _mousewheel_up(self, event):
+		self.canvas.yview_scroll(-1, "units")
+
+	def _mousewheel_down(self, event):
+		self.canvas.yview_scroll(1, "units")
+
+
 	def _add_vertex(self, event):
 		# reflect y to transform into right-hand coordinates
-		x = float(event.x)
-		y = float(event.y)
+		x = float( self.canvas.canvasx(event.x) )
+		y = float( self.canvas.canvasy(event.y) )
 
 		new_vert = Vector2(x, y)
 		self._new_vertices.append(Vector2(x, y))
