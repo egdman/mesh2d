@@ -1,9 +1,12 @@
+import os
 from mesh2d import *
 import random
 
 import Tkinter as tk
 
-
+pkg_dir = os.path.dirname(os.path.abspath(__file__))
+resource_dir = os.path.join(pkg_dir, 'resources')
+button_dir = os.path.join(resource_dir, 'buttons')
 
 class Application(tk.Frame):
 	def __init__(self, master=None):
@@ -47,6 +50,18 @@ class Application(tk.Frame):
 
 		self.quitButton = tk.Button(self, text='Quit', command=self.quit)
 		self.quitButton.pack()
+
+		
+
+		self.selectToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'select.gif'))
+
+		self.selectToolBtn = tk.Button(
+			self,
+			image=self.selectToolIcon,
+			height=31,
+			width=31)
+
+		self.selectToolBtn.pack()
 
 		# vertices = [(50, 50), (70, 70), (10, 100)]
 		# self.canvas.create_line(vertices, fill='#FFFFFF')
@@ -151,7 +166,21 @@ class Application(tk.Frame):
 
 
 
+class ProvideException(object):
+    def __init__(self, func):
+        self._func = func
 
+    def __call__(self, *args):
+
+        try:
+            return self._func(*args)
+
+        except Exception, e:
+            print 'Exception was thrown', str(e)
+            # Optionally raise your own exceptions, popups etc
+
+
+@ProvideException
 def main():
 	app = Application()
 	app.master.title('Triangulation test')
