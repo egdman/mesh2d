@@ -170,7 +170,7 @@ class Application(tk.Frame):
 
 	def _add_polygon(self, event):
 		threshold = 10.0 # degrees
-		new_poly = Polygon2d(self._new_vertices, range(len(self._new_vertices)))
+		new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
 		del self._new_vertices[:]
 
 		# for triangle in new_poly.triangles:

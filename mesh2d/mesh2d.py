@@ -53,7 +53,9 @@ class Polygon2d:
 		else:
 			self.indices = list(reversed(indices))
 
-		self.vertices = vertices[:]
+		# self.vertices = vertices[:]
+		self.vertices = vertices
+
 		self.bbox = Bbox(vertices, indices)
 
 
@@ -137,7 +139,7 @@ class Polygon2d:
 	def _split_index_buffer(self, index_1, index_2):
 		buffers = ([], [])
 		switch = 0
-		
+
 		for index in self.indices:
 			if index == index_1:
 				buffers[switch].append(index_1)
@@ -242,11 +244,14 @@ class Polygon2d:
 			vert1 = vertices[ind1]
 			vert2 = vertices[ind2]
 
+			print(vert1.x - vert2.x) * (vert1.y + vert2.y)
 			area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
+
 		# wrap for last segment:
 		vert1 = vertices[indices[-1]]
 		vert2 = vertices[indices[0]]
 
+		print(vert1.x - vert2.x) * (vert1.y + vert2.y)
 		area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
 		return area / 2.0
 
