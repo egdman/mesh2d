@@ -1,5 +1,6 @@
 import math
 import random
+import yaml
 
 from .vector2 import Vector2, ZeroSegmentError
 
@@ -10,7 +11,7 @@ def plus_wrap(pos, num):
 def minus_wrap(pos, num):
 	return num - 1 if pos == 0 else pos - 1
 
-class Mash2d:
+class Mesh2d:
 
 	def __init__(self, index_buffers, vertex_buffer):
 		self.polygons = index_buffers
@@ -67,29 +68,34 @@ class Polygon2d:
 		return crds
 
 
+
 	def add_vertex_to_edge(self, vertex, edge):
 		e1_i = edge[0]
 		e2_i = edge[1]
-		indices = self.indices
-		num_indices = len(indices)
-		e_start_pos = None
-		e_end_pos = None
 
-		for pos in range(num_indices):
-			if indices[pos] == e1_i or indices[pos] == e2_i:
-				e_start_pos = pos
-				break
-		for pos in range(e_start_pos + 1, num_indices):
-			if indices[pos] == e1_i or indices[pos] == e2_i:
-				e_end_pos = pos
-				break
-		# print 'edge start pos = {0}'.format(e_start_pos)
-		# print 'edge end   pos = {0}'.format(e_end_pos)
+		e1_pos = self.indices.index(e1_i)
+		e2_pos = self.indices.index(e2_i)
+
+		
+
+		# e1_pos and e2_pos can either differ by 1
+		# or loop around the index buffer
+		if e1_pos > e2_pos: e1_pos, e2_pos = e2_pos, e1_pos
+
+		if e1_pos == e2_pos: raise ValueError("Adding vertex to edge: invalid edge")
+
+		if e2_pos - e1_pos > 1:
+			if e1_pos != 0: raise ValueError("Adding vertex to edge: invalid edge")
+			insert_at = e2_pos + 1
+
+		else:
+			insert_at = e2_pos
 
 		new_vert_index = len(self.vertices)
 		self.vertices.append(vertex)
-		indices.insert(e_end_pos, new_vert_index)
+		self.indices.insert(insert_at, new_vert_index)
 		return new_vert_index
+
 	
 
 
@@ -206,7 +212,7 @@ class Polygon2d:
 				v1 = self.vertices[portal['start_index']]
 				v2 = portal['end_point']
 
-				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=4)
+				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=2)
 
 		# break polygons by portals recursively
 

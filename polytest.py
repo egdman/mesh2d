@@ -8,6 +8,41 @@ pkg_dir = os.path.dirname(os.path.abspath(__file__))
 resource_dir = os.path.join(pkg_dir, 'resources')
 button_dir = os.path.join(resource_dir, 'buttons')
 
+
+
+class Tool(object):
+
+	def __init__(self, parent):
+		self.parent = parent
+
+	def right_click(self, event):
+		raise NotImplementedError()
+
+	def left_click(self, event):
+		raise NotImplementedError()
+
+
+class Create(Tool):
+
+	def right_click(self, event):
+		self.parent._add_polygon(event)
+
+	def left_click(self, event):
+		self.parent._add_vertex(event)
+
+
+class Select(Tool):
+
+	def right_click(self, event):
+		print("SELECT: right click")
+		# self.parent._add_polygon(event)
+
+	def left_click(self, event):
+		print("SELECT: left click")
+		# self.parent._add_vertex(event) 
+
+
+
 class Application(tk.Frame):
 	def __init__(self, master=None):
 		tk.Frame.__init__(self, master)
@@ -17,7 +52,15 @@ class Application(tk.Frame):
 		self._new_vertices = []
 		self._polygons = []
 		self._dots_ids = []
-		self.dot_size = 6
+		self.dot_size = 3
+
+		self.select_tool = Select(self)
+		self.create_tool = Create(self)
+		# ......
+		#.......
+		
+		self.active_tool = self.select_tool
+
 
 
 	def createWidgets(self):
@@ -34,8 +77,8 @@ class Application(tk.Frame):
 
 		self.canvas.config(xscrollcommand = self.hbar.set, yscrollcommand=self.vbar.set)
 
-		self.canvas.bind('<Button-1>', self._add_vertex)
-		self.canvas.bind('<Button-3>', self._add_polygon)
+		self.canvas.bind('<Button-1>', self._left_click)
+		self.canvas.bind('<Button-3>', self._right_click)
 
 		# self.canvas.grid()
 		# self.hbar.grid()
@@ -54,17 +97,45 @@ class Application(tk.Frame):
 		
 
 		self.selectToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'select.gif'))
-
 		self.selectToolBtn = tk.Button(
 			self,
 			image=self.selectToolIcon,
 			height=31,
-			width=31)
-
+			width=31,
+			command = self._select_cb)
 		self.selectToolBtn.pack()
+
+
+		self.createToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'create.gif'))
+		self.createToolBtn = tk.Button(
+			self,
+			image=self.createToolIcon,
+			height=31,
+			width=31,
+			command = self._create_cb)
+		self.createToolBtn.pack()
 
 		# vertices = [(50, 50), (70, 70), (10, 100)]
 		# self.canvas.create_line(vertices, fill='#FFFFFF')
+
+
+	def _select_cb(self):
+		self.active_tool = self.select_tool
+
+	def _create_cb(self):
+		self.active_tool = self.create_tool		
+
+
+
+	def _left_click(self, event):
+		self.active_tool.left_click(event)
+
+
+	def _right_click(self, event):
+		self.active_tool.right_click(event)
+
+
+
 
 
 	def _mousewheel_up(self, event):
@@ -79,7 +150,6 @@ class Application(tk.Frame):
 		x = float( self.canvas.canvasx(event.x) )
 		y = float( self.canvas.canvasy(event.y) )
 
-		new_vert = Vector2(x, y)
 		self._new_vertices.append(Vector2(x, y))
 		sz = self.dot_size
 		
@@ -111,7 +181,7 @@ class Application(tk.Frame):
 		crds.append(new_poly.vertices[0].x)
 		crds.append(new_poly.vertices[0].y)
 
-		self.canvas.create_line(crds, fill='#FFFFFF', width=3)
+		self.canvas.create_line(crds, fill='#FFFFFF', width=1)
 
 		polys = []
 		new_poly.break_into_convex(polys, threshold, self.canvas)
@@ -129,6 +199,8 @@ class Application(tk.Frame):
 		# self.canvas.create_line(poly2.outline_coordinates(), fill='red')
 		
 		self._polygons.append(new_poly)
+
+		self.active_tool = self.select_tool
 
 		# for d_id in self._dots_ids:
 		# 	self.canvas.delete(d_id)
