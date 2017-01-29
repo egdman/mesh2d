@@ -57,6 +57,11 @@ class Polygon2d:
 		self.bbox = Bbox(vertices, indices)
 
 
+	# def point_inside(self, point):
+	# 	if not self.bbox.point_inside(point): return False
+
+
+
 	def outline_coordinates(self):
 		crds = []
 
@@ -66,6 +71,36 @@ class Polygon2d:
 		crds.append(self.vertices[self.indices[0]].x)
 		crds.append(self.vertices[self.indices[0]].y)
 		return crds
+
+
+	def break_into_convex(self, polys, threshold = 0.0, canvas=None):
+		portals = self.get_portals(threshold=threshold)
+		print "num portals = {0}".format(len(portals))
+
+		# draw portals
+		if canvas is not None:
+			for portal in portals:
+				v1 = self.vertices[portal['start_index']]
+				v2 = portal['end_point']
+
+				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=2)
+
+		# break polygons by portals recursively
+		ysize = self.bbox.ymax - self.bbox.ymin
+		self._break_in_two(polys, portals, canvas, 1, ysize)
+
+
+
+	def draw_self(self, canvas, displacement):
+		coords = []
+		for i in self.indices:
+			vrt = self.vertices[i] + displacement
+			coords.append(vrt.x)
+			coords.append(vrt.y)
+
+		rnd = lambda: random.randint(0,255)
+		color = '#%02X%02X%02X' % (rnd(),rnd(),rnd())
+		canvas.create_polygon(coords, fill=color)
 
 
 
@@ -100,8 +135,9 @@ class Polygon2d:
 
 
 	def _split_index_buffer(self, index_1, index_2):
-		buffers = [[], []]
+		buffers = ([], [])
 		switch = 0
+		
 		for index in self.indices:
 			if index == index_1:
 				buffers[switch].append(index_1)
@@ -114,19 +150,9 @@ class Polygon2d:
 			else:
 				buffers[switch].append(index)
 
-		return buffers[0], buffers[1]
+		return buffers
 
 
-	def draw_self(self, canvas, displacement):
-		coords = []
-		for i in self.indices:
-			vrt = self.vertices[i] + displacement
-			coords.append(vrt.x)
-			coords.append(vrt.y)
-
-		rnd = lambda: random.randint(0,255)
-		color = '#%02X%02X%02X' % (rnd(),rnd(),rnd())
-		canvas.create_polygon(coords, fill=color)
 
 
 	def _break_in_two(self, parts, portals, canvas, level, ysize):
@@ -164,7 +190,7 @@ class Polygon2d:
 				
 					end_i = self.add_vertex_to_edge(new_vrt, op_edge)
 					if canvas is not None:
-						sz = 4
+						sz = 3
 						new_vrt = self.vertices[end_i]
 						canvas.create_oval(new_vrt.x - sz, new_vrt.y - sz, new_vrt.x + sz, new_vrt.y + sz, fill='green')
 					portal['end_index'] = end_i
@@ -203,21 +229,6 @@ class Polygon2d:
 		return
 
 
-	def break_into_convex(self, polys, threshold = 0.0, canvas=None):
-		portals = self.get_portals(threshold=threshold)
-		print "num portals = {0}".format(len(portals))
-
-		if canvas is not None:
-			for portal in portals:
-				v1 = self.vertices[portal['start_index']]
-				v2 = portal['end_point']
-
-				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=2)
-
-		# break polygons by portals recursively
-
-		ysize = self.bbox.ymax - self.bbox.ymin
-		self._break_in_two(polys, portals, canvas, 1, ysize)
 
 
 

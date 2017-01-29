@@ -35,11 +35,17 @@ class Select(Tool):
 
 	def right_click(self, event):
 		print("SELECT: right click")
-		# self.parent._add_polygon(event)
+
 
 	def left_click(self, event):
 		print("SELECT: left click")
-		# self.parent._add_vertex(event) 
+
+		# x = float( self.canvas.canvasx(event.x) )
+		# y = float( self.canvas.canvasy(event.y) )
+		# pointer = Vector2(x, y)
+
+		# for poly in parent._polygons:
+		# 	if poly.point_inside(pointer): 
 
 
 
@@ -58,8 +64,8 @@ class Application(tk.Frame):
 		self.create_tool = Create(self)
 		# ......
 		#.......
-		
-		self.active_tool = self.select_tool
+
+		self.active_tool = self.create_tool
 
 
 
@@ -171,18 +177,11 @@ class Application(tk.Frame):
 		# 	coords = new_poly.get_triangle_coords(triangle)
 		# 	tri_id = self.canvas.create_line(coords , fill='#FFFFFF')
 
+		# draw whole polygon:
+		coords = new_poly.outline_coordinates()
+		self.canvas.create_polygon(coords[:-2], fill='#1A1A1A', outline='')
 
-		# draw outline:
-		crds = []
-		for ind in new_poly.indices:
-			vrt1 = new_poly.vertices[ind]
-			crds.append(vrt1.x)
-			crds.append(vrt1.y)
-		crds.append(new_poly.vertices[0].x)
-		crds.append(new_poly.vertices[0].y)
-
-		self.canvas.create_line(crds, fill='#FFFFFF', width=1)
-
+		# break into convex parts:
 		polys = []
 		new_poly.break_into_convex(polys, threshold, self.canvas)
 
@@ -194,10 +193,14 @@ class Application(tk.Frame):
 
 			coords = poly.outline_coordinates()
 
-			# self.canvas.create_line(coords, fill='green')
 			self.canvas.create_polygon(coords[:-2], activefill=color, outline='', fill='')
-		# self.canvas.create_line(poly2.outline_coordinates(), fill='red')
 		
+		
+		# draw outline:
+		coords = new_poly.outline_coordinates()
+		self.canvas.create_line(coords, fill='#FFFFFF', width=1)
+
+
 		self._polygons.append(new_poly)
 
 		self.active_tool = self.select_tool
