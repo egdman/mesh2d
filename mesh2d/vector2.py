@@ -148,6 +148,11 @@ class Vector2:
 		'''
 		Returns True if ray [ray1, ray2> intersects segment [seg1, seg2]
 		'''
+
+		# first check some edge cases
+		if seg1 == ray1 or seg2 == ray1:
+			return True
+
 		s1_left = Vector2.are_points_ccw(ray1, ray2, seg1)
 		s2_left = Vector2.are_points_ccw(ray1, ray2, seg2)
 		# if s1 and s2 are on different sides of the ray:
