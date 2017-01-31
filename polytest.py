@@ -1,6 +1,7 @@
 import os
 from mesh2d import *
 import random
+import yaml
 
 import Tkinter as tk
 
@@ -171,6 +172,10 @@ class Application(tk.Frame):
 	def _add_polygon(self, event):
 		threshold = 10.0 # degrees
 		new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
+
+		# to save in case of failure
+		reference_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
+
 		del self._new_vertices[:]
 
 		# for triangle in new_poly.triangles:
@@ -179,13 +184,32 @@ class Application(tk.Frame):
 
 		# draw whole polygon:
 		coords = new_poly.outline_coordinates()
-		self.canvas.create_polygon(coords[:-2], fill='#1A1A1A', outline='')
+		self.canvas.create_polygon(coords[:-2], fill='#1A1A1A', outline='', activefill='#1A1A9A')
 
 		# break into convex parts:
-		polys = []
-		new_poly.break_into_convex(polys, threshold, self.canvas)
+		# new_poly.break_into_convex(polys, threshold, self.canvas)
 
-		print "number of convex parts = {0}".format(len(polys))
+		def error_dump(poly):
+			with open("debug_dump.yaml", 'w') as debf:
+				yaml.dump(poly, debf)			
+
+		try:
+			portals = new_poly.break_into_convex(threshold, self.canvas)
+			polys = new_poly.get_pieces_as_meshes()
+
+			print ("number of portals      = {0}".format(len(portals)))
+			print ("number of convex parts = {0}".format(len(polys)))
+
+			if len(polys) != len(portals) + 1:
+				print ("Error!")
+				error_dump(reference_poly)
+	
+		except ValueError as ve:
+			error_dump(reference_poly)
+			raise ve
+ 
+
+		
 		for poly in polys:
 
 			rnd = lambda: random.randint(0,255)
@@ -205,8 +229,8 @@ class Application(tk.Frame):
 
 		self.active_tool = self.select_tool
 
-		# for d_id in self._dots_ids:
-		# 	self.canvas.delete(d_id)
+		for d_id in self._dots_ids:
+			self.canvas.delete(d_id)
 
 
 		# try:

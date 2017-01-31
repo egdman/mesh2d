@@ -43,12 +43,12 @@ print("////////////////////////////////////////////////////////////////////\n\n"
 
 
 poly = Polygon2d(vertices[:], range(len(vertices)))
-poly.add_vertex_to_edge(i1, (0,1))
+poly.add_vertex_to_outline(i1, (0,1))
 print(poly_repr(poly))
 print("----------------------------------")
 
 poly = Polygon2d(vertices[:], range(len(vertices)))
-poly.add_vertex_to_edge(i1, (1,0))
+poly.add_vertex_to_outline(i1, (1,0))
 print(poly_repr(poly))
 print("==================================\n")
 
@@ -56,12 +56,12 @@ print("==================================\n")
 
 
 poly = Polygon2d(vertices[:], range(len(vertices)))
-poly.add_vertex_to_edge(i2, (1,2))
+poly.add_vertex_to_outline(i2, (1,2))
 print(poly_repr(poly))
 print("----------------------------------")
 
 poly = Polygon2d(vertices[:], range(len(vertices)))
-poly.add_vertex_to_edge(i2, (2,1))
+poly.add_vertex_to_outline(i2, (2,1))
 print(poly_repr(poly))
 print("==================================\n")
 
@@ -69,12 +69,12 @@ print("==================================\n")
 
 
 poly = Polygon2d(vertices[:], range(len(vertices)))
-poly.add_vertex_to_edge(i3, (2,3))
+poly.add_vertex_to_outline(i3, (2,3))
 print(poly_repr(poly))
 print("----------------------------------")
 
 poly = Polygon2d(vertices[:], range(len(vertices)))
-poly.add_vertex_to_edge(i3, (3,2))
+poly.add_vertex_to_outline(i3, (3,2))
 print(poly_repr(poly))
 print("==================================\n")
 
@@ -82,12 +82,12 @@ print("==================================\n")
 
 
 poly = Polygon2d(vertices[:], range(len(vertices)))
-poly.add_vertex_to_edge(i4, (3,0))
+poly.add_vertex_to_outline(i4, (3,0))
 print(poly_repr(poly))
 print("----------------------------------")
 
 poly = Polygon2d(vertices[:], range(len(vertices)))
-poly.add_vertex_to_edge(i4, (0,3))
+poly.add_vertex_to_outline(i4, (0,3))
 print(poly_repr(poly))
 print("==================================\n")
 
@@ -106,3 +106,44 @@ print(poly_repr(poly))
 print ("Area = {}".format(Polygon2d.signed_area(poly.vertices, poly.indices)))
 
 
+
+# TESTING split index buffer
+print("TESTING split index buffer")
+ib = [8, 10, 5, 1, 15, 19, 6]
+
+
+try:
+	p1, p2 = Polygon2d._split_index_buffer(ib, 5, 19)
+	print(p1)
+	print(p2)
+	print("-----------------")
+
+except ValueError as ve:
+	print (ve)
+
+
+try:
+	p1, p2 = Polygon2d._split_index_buffer(ib, 8, 10)
+	print(p1)
+	print(p2)
+	print("-----------------")
+except ValueError as ve:
+	print (ve)
+
+
+try:
+	p1, p2 = Polygon2d._split_index_buffer(ib, 5, 5)
+	print(p1)
+	print(p2)
+	print("-----------------")
+except ValueError as ve:
+	print (ve)
+
+
+try:
+	p1, p2 = Polygon2d._split_index_buffer(ib, 5, 100)
+	print(p1)
+	print(p2)
+	print("-----------------")
+except ValueError as ve:
+	print (ve)

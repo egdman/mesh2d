@@ -1,6 +1,6 @@
 import math
 import random
-import yaml
+from collections import deque
 
 from .vector2 import Vector2, ZeroSegmentError
 
@@ -51,16 +51,24 @@ class Polygon2d:
 		if self.check_ccw(vertices, indices):
 			self.indices = indices[:]
 		else:
-			self.indices = list(reversed(indices))
+			self.indices = indices[::-1]
 
-		# self.vertices = vertices[:]
-		self.vertices = vertices
+		self.vertices = vertices[:]
 
 		self.bbox = Bbox(vertices, indices)
 
+		self.pieces = []
 
-	# def point_inside(self, point):
-	# 	if not self.bbox.point_inside(point): return False
+
+	def dump(self):
+		return self.__dict__
+
+
+	def get_pieces_as_meshes(self):
+		meshes = []
+		for piece in self.pieces:
+			meshes.append(Polygon2d(self.vertices, piece))
+		return meshes
 
 
 
@@ -75,9 +83,10 @@ class Polygon2d:
 		return crds
 
 
-	def break_into_convex(self, polys, threshold = 0.0, canvas=None):
+
+
+	def break_into_convex(self, threshold = 0.0, canvas = None):
 		portals = self.get_portals(threshold=threshold)
-		print "num portals = {0}".format(len(portals))
 
 		# draw portals
 		if canvas is not None:
@@ -87,9 +96,86 @@ class Polygon2d:
 
 				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=2)
 
-		# break polygons by portals recursively
-		ysize = self.bbox.ymax - self.bbox.ymin
-		self._break_in_two(polys, portals, canvas, 1, ysize)
+
+		# for all the portals that require creating new vertices,
+		# create new vertices
+		for portal in portals:
+
+			if portal['end_index'] is None:
+
+				new_vrt = portal['end_point']
+				start_i = portal['start_index']
+				intersection = self.trace_ray(self.vertices[start_i], new_vrt)
+
+				if intersection is None:
+					continue
+
+				else:
+					op_edge = intersection[1]
+				
+					end_i = self.add_vertex_to_outline(new_vrt, op_edge)
+
+					# do some drawing
+					if canvas is not None:
+						sz = 3
+						new_vrt = self.vertices[end_i]
+						canvas.create_oval(
+							new_vrt.x - sz, new_vrt.y - sz,
+							new_vrt.x + sz, new_vrt.y + sz,
+							fill='green')
+
+					portal['end_index'] = end_i
+
+
+		# queue of pieces
+		piece_q = deque()
+
+		# append a copy of the entire outline
+		piece_q.append(self.indices[:])
+
+		while len(piece_q) > 0:
+			piece = piece_q.popleft()
+			piece1, piece2 = Polygon2d._break_in_two(piece, portals)
+
+			# if could not split this piece, finalize it
+			if piece1 is None:
+				self.pieces.append(piece)
+
+			# otherwise add new pieces to the queue
+			else:
+				piece_q.append(piece1)
+				piece_q.append(piece2)
+
+		return portals
+
+
+
+	@staticmethod
+	def _break_in_two(indices, portals):
+		# iterate over portals trying to find the first portal that belongs to this polygon
+		for portal in portals:
+
+			piece1 = []
+			piece2 = []
+
+			start_i = portal['start_index']
+			end_i = portal['end_index']
+
+			# if this portal starts outside of this polygon, skip it
+			if start_i not in indices or end_i not in indices:
+				continue
+
+			# split index buffer of the outline of this piece using the portal
+			piece1, piece2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
+
+			# if this portal is actually an edge, skip it
+			if len(piece1) < 3 or len(piece2) < 3:
+				continue
+
+			return piece1, piece2
+
+		# if we did not find any portals to split, this piece must be convex
+		return None, None
 
 
 
@@ -106,23 +192,21 @@ class Polygon2d:
 
 
 
-	def add_vertex_to_edge(self, vertex, edge):
+	def add_vertex_to_outline(self, vertex, edge):
 		e1_i = edge[0]
 		e2_i = edge[1]
 
 		e1_pos = self.indices.index(e1_i)
 		e2_pos = self.indices.index(e2_i)
 
-		
-
 		# e1_pos and e2_pos can either differ by 1
 		# or loop around the index buffer
 		if e1_pos > e2_pos: e1_pos, e2_pos = e2_pos, e1_pos
 
-		if e1_pos == e2_pos: raise ValueError("Adding vertex to edge: invalid edge")
+		if e1_pos == e2_pos: raise ValueError("Adding vertex to outline: invalid edge")
 
 		if e2_pos - e1_pos > 1:
-			if e1_pos != 0: raise ValueError("Adding vertex to edge: invalid edge")
+			if e1_pos != 0: raise ValueError("Adding vertex to outline: invalid edge")
 			insert_at = e2_pos + 1
 
 		else:
@@ -136,11 +220,18 @@ class Polygon2d:
 	
 
 
-	def _split_index_buffer(self, index_1, index_2):
+	@staticmethod
+	def _split_index_buffer(indices, index_1, index_2):
+		if index_1 == index_2:
+			raise ValueError("split indices must not be equal to each other")
+
+		if index_1 not in indices or index_2 not in indices:
+			raise ValueError("split indices must both be present in the index buffer")
+
 		buffers = ([], [])
 		switch = 0
 
-		for index in self.indices:
+		for index in indices:
 			if index == index_1:
 				buffers[switch].append(index_1)
 				buffers[switch].append(index_2)
@@ -153,83 +244,6 @@ class Polygon2d:
 				buffers[switch].append(index)
 
 		return buffers
-
-
-
-
-	def _break_in_two(self, parts, portals, canvas, level, ysize):
-		
-		poly1 = None
-		poly2 = None
-
-		disp = Vector2(0, ysize * level)
-
-		self.draw_self(canvas, disp)
-
-		# iterate over portals trying to find the first portal that belongs to this polygon
-		for portal in portals:
-
-			piece1 = []
-			piece2 = []
-
-			start_i = portal['start_index']
-			end_i = portal['end_index'] # may be None
-
-			# if this portal starts outside this polygon
-			if not start_i in self.indices:
-				continue
-
-			# if portal ends in a new vertex, add this vertex to the polygon
-			if end_i is None:
-				new_vrt = portal['end_point']
-				intersection = self.trace_ray(self.vertices[start_i], new_vrt)
-
-				if intersection is None:
-					continue
-
-				else:
-					op_edge = intersection[1]
-				
-					end_i = self.add_vertex_to_edge(new_vrt, op_edge)
-					if canvas is not None:
-						sz = 3
-						new_vrt = self.vertices[end_i]
-						canvas.create_oval(new_vrt.x - sz, new_vrt.y - sz, new_vrt.x + sz, new_vrt.y + sz, fill='green')
-					portal['end_index'] = end_i
-
-
-			# find positions of starting and ending vertices of the portal
-			start_pos = None
-			end_pos = None
-
-			# print 'portal starts at {0}'.format(start_i)
-			# print 'portal ends   at {0}'.format(end_i)
-			# print "indices : {0}".format(self.indices)
-			
-			# split index buffer of the polygon using the portal
-			piece1, piece2 = self._split_index_buffer(start_i, end_i)
-
-			# print "piece 1: {0}".format(piece1)
-			# print "piece 2: {0}\n\n".format(piece2)
-
-			# if this portal is actually an edge, skip it
-			if len(piece1) < 3 or len(piece2) < 3:
-				continue
-
-			# create 2 new polygons
-			poly1 = Polygon2d(self.vertices, piece1)
-			poly2 = Polygon2d(self.vertices, piece2)
-
-			# break them recursively
-			poly1._break_in_two(parts, portals, canvas, level+1, ysize)
-			poly2._break_in_two(parts, portals, canvas, level+1, ysize)
-			return
-
-		# if we did not find any portals, this polygon must be convex
-		# append it to the list
-		parts.append(self)
-		return
-
 
 
 
@@ -444,7 +458,12 @@ class Polygon2d:
 			# closest portal - not always (there might be no portals inside the anticone
 			# or no portals at all)
 
-			portal = {}
+			portal = {
+				'start_index': None,
+				'end_index': None,
+				'end_point': None
+			}
+
 			new_portals = [portal]
 
 			portal['start_index'] = spike_i
