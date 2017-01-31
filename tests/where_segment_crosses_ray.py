@@ -156,6 +156,24 @@ seg2 = Vector2(0.3, 0.3)
 )
 
 
+test_case(
+"check what happens when intersection point hits the ray tip exactly, but does not coincide with seg1 or seg2:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.2, 0.8),
+seg2 = Vector2(0.9, 0.1)
+)
+
+
+test_case(
+"check what happens when intersection point hits the ray tip almost exactly:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.2, 0.8),
+seg2 = Vector2(0.9, 0.099999999999999929224)
+)
+
+
 
 
 
