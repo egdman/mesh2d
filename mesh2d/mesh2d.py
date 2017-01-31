@@ -244,14 +244,12 @@ class Polygon2d:
 			vert1 = vertices[ind1]
 			vert2 = vertices[ind2]
 
-			print(vert1.x - vert2.x) * (vert1.y + vert2.y)
 			area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
 
 		# wrap for last segment:
 		vert1 = vertices[indices[-1]]
 		vert2 = vertices[indices[0]]
 
-		print(vert1.x - vert2.x) * (vert1.y + vert2.y)
 		area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
 		return area / 2.0
 
