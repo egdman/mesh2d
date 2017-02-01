@@ -25,17 +25,31 @@ class Vector2:
 	def __sub__(self, right_operand):
 		return Vector2(self.x - right_operand.x, self.y - right_operand.y)
 
-	def __mul__(self, right_operand):
-		return Vector2(self.x * right_operand, self.y * right_operand)
 
+	# scalar mul with scalar on the right
+	def __mul__(self, right_scalar):
+		return Vector2(self.x * right_scalar, self.y * right_scalar)
+
+
+	# scalar division
 	def __div__(self, right_operand):
 		return Vector2(self.x / right_operand, self.y / right_operand)
 
-	def __rmul__(self, left_operand):
-		return Vector2(self.x * left_operand, self.y * left_operand)
 
+	# scalar mul with scalar on the left
+	def __rmul__(self, left_scalar):
+		return Vector2(self.x * left_scalar, self.y * left_scalar)
+
+
+	# equality
 	def __eq__(self, right_operand):
 		return self.x == right_operand.x and self.y == right_operand.y
+
+
+	# inequality
+	def __ne__(self, right_operand):
+		return self.x != right_operand.x or self.y != right_operand.y
+
 
 	def length(self):
 		return math.sqrt(self.dot_product(self))
@@ -150,8 +164,8 @@ class Vector2:
 		'''
 
 		# first check some edge cases
-		if seg1 == ray1 or seg2 == ray1:
-			return True
+		# if seg1 == ray1 or seg2 == ray1:
+		# 	return True
 
 		s1_left = Vector2.are_points_ccw(ray1, ray2, seg1)
 		s2_left = Vector2.are_points_ccw(ray1, ray2, seg2)
