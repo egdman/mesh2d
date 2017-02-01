@@ -104,93 +104,93 @@ def test_case(msg, seg1, seg2, ray1, ray2, crosses, cross_point):
 # print(Vector2.where_segment_crosses_ray(seg1, seg2, tip, right))
 
 
-# test_case(
-# "check what happens when segment lies on the ray behind the tip:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.15, 0.15),
-# seg2 = Vector2(0.45, 0.45),
+test_case(
+"check what happens when segment lies on the ray behind the tip:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.15, 0.15),
+seg2 = Vector2(0.45, 0.45),
 
-# crosses = False,
-# cross_point = None
-# )
-
-
-# test_case(
-# "check what happens when segment lies on the ray behind the tip (seg flipped):",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.45, 0.45),
-# seg2 = Vector2(0.15, 0.15),
-
-# crosses = False,
-# cross_point = None
-# )
+crosses = False,
+cross_point = None
+)
 
 
-# test_case(
-# "check what happens when segment lies on the ray in front of the tip:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.55, 0.55),
-# seg2 = Vector2(0.75, 0.75),
+test_case(
+"check what happens when segment lies on the ray behind the tip (seg flipped):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.45, 0.45),
+seg2 = Vector2(0.15, 0.15),
 
-# crosses = False,
-# cross_point = None
-# )
-
-
-# test_case(
-# "check what happens when segment lies on the ray in front of the tip (seg flipped):",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.75, 0.75),
-# seg2 = Vector2(0.55, 0.55),
-
-# crosses = False,
-# cross_point = None
-# )
+crosses = False,
+cross_point = None
+)
 
 
+test_case(
+"check what happens when segment lies on the ray in front of the tip:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.55, 0.55),
+seg2 = Vector2(0.75, 0.75),
 
-# test_case(
-# "check what happens when segment lies on the ray and hits the ray tip exactly:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.5, 0.5),
-# seg2 = Vector2(0.75, 0.75),
-
-# crosses = False,
-# cross_point = None
-# )
+crosses = False,
+cross_point = None
+)
 
 
-# test_case(
-# "check what happens when segment lies on the ray and hits the ray target exactly:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.55, 0.55),
-# seg2 = Vector2(1.5, 1.5),
+test_case(
+"check what happens when segment lies on the ray in front of the tip (seg flipped):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.75, 0.75),
+seg2 = Vector2(0.55, 0.55),
 
-# crosses = False,
-# cross_point = None
-# )
+crosses = False,
+cross_point = None
+)
 
 
 
-# test_case(
-# "check what happens when segment lies on the ray and hits both the ray tip and target exactly:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.5, 0.5),
-# seg2 = Vector2(1.5, 1.5),
+test_case(
+"check what happens when segment lies on the ray and hits the ray tip exactly:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.5, 0.5),
+seg2 = Vector2(0.75, 0.75),
 
-# crosses = False,
-# cross_point = None
-# )
+crosses = False,
+cross_point = None
+)
 
 
-########################## ########################## ##########################
+test_case(
+"check what happens when segment lies on the ray and hits the ray target exactly:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.55, 0.55),
+seg2 = Vector2(1.5, 1.5),
+
+crosses = False,
+cross_point = None
+)
+
+
+
+test_case(
+"check what happens when segment lies on the ray and hits both the ray tip and target exactly:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.5, 0.5),
+seg2 = Vector2(1.5, 1.5),
+
+crosses = False,
+cross_point = None
+)
+
+
+print("########################## ########################## ##########################")
 
 test_case(
 "check what happens when segment does not lie on the ray and hits the ray tip exactly \
@@ -313,7 +313,75 @@ cross_point = Vector2(0.5, 0.5)
 
 
 
-########################## ########################## ##########################
+print("########################## ########################## ##########################")
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the left, sloped forward):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1.25, 1.5),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the left, vertical):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1., 1.5),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the right, vertical):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1., 0.),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the right, sloped backwards):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1.5, 0.),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the right, sloped forward):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1.5, 1.25),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+print("########################## ########################## ##########################")
 
 
 test_case(
@@ -328,53 +396,53 @@ cross_point = None
 )
 
 
-# test_case(
-# "check what happens when intersection point hits the ray tip exactly, but does not coincide with seg1 or seg2:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.2, 0.8),
-# seg2 = Vector2(0.9, 0.1),
+test_case(
+"check what happens when intersection point hits the ray tip exactly, but does not coincide with seg1 or seg2:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.2, 0.8),
+seg2 = Vector2(0.9, 0.1),
 
-# crosses = True,
-# cross_point = Vector2(0.5, 0.5)
-# )
-
-
-
-# test_case(
-# "check what happens when the continuation of the segment intersects the ray exactly at the tip:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(1.5, 1.5), # target
-# seg1 = Vector2(0.2, 0.8),
-# seg2 = Vector2(0.3, 0.7),
-
-# crosses = False,
-# cross_point = None
-# )
+crosses = True,
+cross_point = Vector2(0.5, 0.5)
+)
 
 
-# test_case(
-# "check what happens when segment and ray are both vertical and they do not coincide:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(0.5, 1.5), # target
-# seg1 = Vector2(0.6, 0.0),
-# seg2 = Vector2(0.6, 1.0),
 
-# crosses = False,
-# cross_point = None
-# )
+test_case(
+"check what happens when the continuation of the segment intersects the ray exactly at the tip:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(1.5, 1.5), # target
+seg1 = Vector2(0.2, 0.8),
+seg2 = Vector2(0.3, 0.7),
+
+crosses = False,
+cross_point = None
+)
 
 
-# test_case(
-# "check what happens when segment and ray are both vertical and they coincide:",
-# ray1 = Vector2(0.5, 0.5), # tip
-# ray2 = Vector2(0.5, 1.5), # target
-# seg1 = Vector2(0.5, 0.0),
-# seg2 = Vector2(0.5, 1.0),
+test_case(
+"check what happens when segment and ray are both vertical and they do not coincide:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(0.5, 1.5), # target
+seg1 = Vector2(0.6, 0.0),
+seg2 = Vector2(0.6, 1.0),
 
-# crosses = False,
-# cross_point = None
-# )
+crosses = False,
+cross_point = None
+)
+
+
+test_case(
+"check what happens when segment and ray are both vertical and they coincide:",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(0.5, 1.5), # target
+seg1 = Vector2(0.5, 0.0),
+seg2 = Vector2(0.5, 1.0),
+
+crosses = False,
+cross_point = None
+)
 
 
 
