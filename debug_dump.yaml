@@ -1,19 +1,20 @@
 !!python/object:mesh2d.mesh2d.Polygon2d
-bbox: !!python/object:mesh2d.mesh2d.Bbox {xmax: 1177.0, xmin: 663.0, ymax: 545.0,
-  ymin: 32.0}
-indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+bbox: !!python/object:mesh2d.mesh2d.Bbox {xmax: 357.0, xmin: 34.0, ymax: 569.0, ymin: 58.0}
+indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 pieces: []
 vertices:
-- !!python/object:mesh2d.vector2.Vector2 {x: 1092.0, y: 545.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 1095.0, y: 493.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 1090.0, y: 444.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 1074.0, y: 368.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 1034.0, y: 290.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 970.0, y: 214.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 885.0, y: 149.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 782.0, y: 110.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 669.0, y: 90.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 663.0, y: 32.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 1015.0, y: 59.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 1177.0, y: 201.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 1168.0, y: 411.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 357.0, y: 130.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 287.0, y: 144.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 232.0, y: 158.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 202.0, y: 174.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 183.0, y: 207.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 166.0, y: 259.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 160.0, y: 322.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 178.0, y: 405.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 209.0, y: 449.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 270.0, y: 507.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 302.0, y: 501.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 315.0, y: 544.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 174.0, y: 569.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 34.0, y: 307.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 166.0, y: 58.0}

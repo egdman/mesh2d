@@ -237,7 +237,7 @@ class Application(tk.Frame):
 
 			coords = poly.outline_coordinates()
 
-			self.canvas.create_polygon(coords[:-2], activefill=color, outline='', fill='')
+			self.canvas.create_polygon(coords[:-2], activefill='#111111', outline='', fill=color)
 		
 		
 		# draw outline:
@@ -252,36 +252,6 @@ class Application(tk.Frame):
 		for d_id in self._dots_ids:
 			self.canvas.delete(d_id)
 
-
-		# try:
-
-			# portals = new_poly.get_portals(threshold, canvas=self.canvas)
-
-			# for portal in portals:
-			# 	p1 = new_poly.vertices[portal['start_index']]
-			# 	p2 = portal['end_point']
-
-				# self.canvas.create_line([p1.x, p1.y, p2.x, p2.y], fill='yellow')
-
-			# spikes = new_poly.find_spikes(threshold)
-			# for spike in spikes:
-			# 	sp_v = new_poly.vertices[spike[1]]
-			# 	sz = self.dot_size
-			# 	self.canvas.create_oval(sp_v.x - sz, sp_v.y - sz, sp_v.x + sz, sp_v.y + sz, fill='red')
-
-			# 	antic1, antic2 = new_poly.get_anticone(spike[0], spike[1], spike[2], threshold)
-			# 	ant_v1 = sp_v + antic1*5.0
-			# 	ant_v2 = sp_v + antic2*5.0
-			# 	self.canvas.create_line(ant_v1.x, ant_v1.y, sp_v.x, sp_v.y, ant_v2.x, ant_v2.y, fill='magenta')
-
-
-
-		# except ZeroSegmentError as ex:
-		# 	print ex.message()
-		# 	p1 = ex.segment()[0]
-		# 	p2 = ex.segment()[1]
-		# 	print "{0}, {1}\n{2}, {3}".format(p1.x, p1.y, p2.x, p2.y)
-		# 	self.canvas.create_oval([p1.x - 3, p1.y - 3, p1.x + 3, p1.y + 3], fill='red')
 
 
 

@@ -88,20 +88,20 @@ class Polygon2d:
 	def break_into_convex(self, threshold = 0.0, canvas = None):
 		portals = self.get_portals(threshold=threshold)
 
-		# draw portals
-		if canvas is not None:
-			for portal in portals:
-				v1 = self.vertices[portal['start_index']]
-				v2 = portal['end_point']
+		# # draw portals
+		# if canvas is not None:
+		# 	for portal in portals:
+		# 		v1 = self.vertices[portal['start_index']]
+		# 		v2 = portal['end_point']
 
-				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=2)
+		# 		canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=2)
 
 
 		# for all the portals that require creating new vertices,
 		# create new vertices
 		for portal in portals:
 
-			if portal['end_index'] is None:
+			if portal['end_index'] is None and 'parent_portal' not in portal:
 
 				new_vrt = portal['end_point']
 				start_i = portal['start_index']
@@ -115,16 +115,22 @@ class Polygon2d:
 				
 					end_i = self.add_vertex_to_outline(new_vrt, op_edge)
 
-					# do some drawing
-					if canvas is not None:
-						sz = 3
-						new_vrt = self.vertices[end_i]
-						canvas.create_oval(
-							new_vrt.x - sz, new_vrt.y - sz,
-							new_vrt.x + sz, new_vrt.y + sz,
-							fill='green')
+					# # do some drawing
+					# if canvas is not None:
+					# 	sz = 3
+					# 	new_vrt = self.vertices[end_i]
+					# 	canvas.create_oval(
+					# 		new_vrt.x - sz, new_vrt.y - sz,
+					# 		new_vrt.x + sz, new_vrt.y + sz,
+					# 		fill='green')
 
 					portal['end_index'] = end_i
+
+		# now go through portals again to set child portals' end indexes
+		for portal in portals:
+			if portal['end_index'] is None and 'parent_portal' in portal:
+				parent_portal = portal['parent_portal']
+				portal['end_index'] = parent_portal['end_index']
 
 
 		# queue of pieces
@@ -281,72 +287,6 @@ class Polygon2d:
 		return [v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v1.x, v1.y]
 
 
-	# @staticmethod
-	# def triangulate(vertices):
-
-	# 	# make index array:
-	# 	indices = range(len(vertices))
-	# 	triangles = []
-	# 	diagonals = []
-	# 	while len(indices) > 2:
-	# 		ear = Polygon2d.find_ear(indices, vertices)
-	# 		triangles.append([ear[0], ear[1], ear[2]])
-
-	# 		diagonals.append([(ear[0], ear[2])])
-
-	# 		# chop off ear:
-	# 		indices.remove(ear[1])
-
-	# 	return triangles, diagonals
-
-
-				
-	# @staticmethod
-	# def find_ear(indices, vertices):
-
-	# 	vrt = vertices
-	# 	num_indices = len(indices)
-					
-	# 	cur_pos = 0
-
-	# 	ear_found = False
-	# 	while not ear_found:
-	# 		next_pos = plus_wrap(cur_pos, num_indices)
-	# 		prev_pos = minus_wrap(cur_pos, num_indices)
-
-	# 		cur_ind = indices[cur_pos]
-	# 		next_ind = indices[next_pos]
-	# 		prev_ind = indices[prev_pos]
-
-	# 		if Vector2.are_points_ccw(vrt[prev_ind], vrt[cur_ind], vrt[next_ind]):
-	# 			# corner is convex
-	# 			# check if any vertices are inside the corner
-	# 			ear_found = True
-
-	# 			for diag_pos in range(num_indices):
-
-	# 				diag_ind = indices[diag_pos]
-
-	# 				if diag_ind != cur_ind and diag_ind != next_ind and diag_ind != prev_ind:
-						
-	# 					if Vector2.point_inside(
-	# 						vrt[diag_ind],
-	# 						vrt[prev_ind],
-	# 						vrt[cur_ind],
-	# 						vrt[next_ind]):
-
-	# 						ear_found = False
-	# 						# ear has a vertex inside, continue search
-	# 						cur_pos = plus_wrap(cur_pos, num_indices)
-	# 						break
-			
-	# 		else:
-	# 			# corner is concave, continue search
-	# 			cur_pos = plus_wrap(cur_pos, num_indices)
-	# 	return [prev_ind, cur_ind, next_ind]
-
-
-
 
 	@staticmethod
 	def check_convex(indices, vertices):
@@ -363,7 +303,7 @@ class Polygon2d:
 			cur_ind = indices[cur_pos]
 			next_ind = indices[next_pos]
 			nnext_ind = indices[nnext_pos]
-			if not Vector2.are_points_ccw(vrt[cur_ind], vrt[next_ind], vrt[nnext_ind]):
+			if Vector2.double_signed_area(vrt[cur_ind], vrt[next_ind], vrt[nnext_ind]) < 0:
 				is_convex = False
 				break
 
@@ -515,6 +455,8 @@ class Polygon2d:
 					portal['end_index'] = portal_end_i # this might be None
 					portal['end_point'] = portal_end_p
 
+					# if portal_end_i is None: portal['parent_portal'] = closest_portal
+
 				else:
 				
 					start_inside = self._inside_cone(portal_start_p, left, tip, right)
@@ -555,19 +497,15 @@ class Polygon2d:
 						second_portal['end_index'] = portal_end_i
 						second_portal['end_point'] = portal_end_p
 
+						# save reference to the portal that we are snapping to
+						second_portal['parent_portal'] = closest_portal
 						new_portals.append(second_portal)
 
+
+				# save reference to the portal that we are snapping to
+				portal['parent_portal'] = closest_portal
+
 			for new_portal in new_portals:
-
-				if portal['start_index'] is None:
-					print('start_index is None')
-
-				if portal['end_index'] is None:
-					print('end_index is None (it\'s ok)')
-
-				if portal['end_point'] is None:
-					print('end_point is None')
-
 
 				if not new_portal['end_point'] == tip:
 					portals.append(new_portal)
