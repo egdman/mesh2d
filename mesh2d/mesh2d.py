@@ -560,13 +560,13 @@ class Polygon2d:
 			for new_portal in new_portals:
 
 				if portal['start_index'] is None:
-					print 'start_index is None'
+					print('start_index is None')
 
 				if portal['end_index'] is None:
-					print 'end_index is None (it\'s ok)'
+					print('end_index is None (it\'s ok)')
 
 				if portal['end_point'] is None:
-					print 'end_point is None'
+					print('end_point is None')
 
 
 				if not new_portal['end_point'] == tip:

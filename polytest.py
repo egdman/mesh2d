@@ -68,6 +68,8 @@ class Application(tk.Frame):
 
 		self.active_tool = self.create_tool
 
+		self.last_created_poly = None
+
 
 
 	def createWidgets(self):
@@ -122,8 +124,24 @@ class Application(tk.Frame):
 			command = self._create_cb)
 		self.createToolBtn.pack()
 
+
+		self.saveToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'save.gif'))
+		self.saveToolBtn = tk.Button(
+			self,
+			image=self.saveToolIcon,
+			height=31,
+			width=31,
+			command = self._save_last)
+		self.saveToolBtn.pack()
+
 		# vertices = [(50, 50), (70, 70), (10, 100)]
 		# self.canvas.create_line(vertices, fill='#FFFFFF')
+
+
+	def _save_last(self):
+		with open("saved_poly.yaml", 'w') as savef:
+			yaml.dump(self.last_created_poly, savef)
+
 
 
 	def _select_cb(self):
@@ -175,6 +193,8 @@ class Application(tk.Frame):
 
 		# to save in case of failure
 		reference_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
+
+		self.last_created_poly = reference_poly
 
 		del self._new_vertices[:]
 

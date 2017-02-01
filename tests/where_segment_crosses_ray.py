@@ -380,6 +380,75 @@ crosses = True,
 cross_point = Vector2(1., 1.)
 )
 
+## NOW THE SAME WITH SHORTER RAY
+print("########################## ########################## ##########################")
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the left, sloped forward) (shorter ray):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(0.6, 0.6), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1.25, 1.5),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the left, vertical) (shorter ray):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(0.6, 0.6), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1., 1.5),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the right, vertical) (shorter ray):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(0.6, 0.6), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1., 0.),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the right, sloped backwards) (shorter ray):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(0.6, 0.6), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1.5, 0.),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
+
+test_case(
+"check what happens when one of segment endpoints lies on the ray\
+(segment to the right, sloped forward) (shorter ray):",
+ray1 = Vector2(0.5, 0.5), # tip
+ray2 = Vector2(0.6, 0.6), # target
+seg1 = Vector2(1., 1.),
+seg2 = Vector2(1.5, 1.25),
+
+crosses = True,
+cross_point = Vector2(1., 1.)
+)
+
 
 print("########################## ########################## ##########################")
 

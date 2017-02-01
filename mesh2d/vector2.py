@@ -1,5 +1,12 @@
 import math
 
+
+class LineRelation(object):
+    def __init__(self, intersection, identical):
+        self.intersection = intersection
+        self.identical = identical
+
+
 class Vector2:
     def __init__(self, x, y):
         self.x = x
@@ -17,6 +24,7 @@ class Vector2:
             return self.y
         else:
             return 0.0
+
 
     def __iter__(self):
         return iter([self.x, self.y])
@@ -65,22 +73,28 @@ class Vector2:
         self.y = other.y
 
 
+    def dot_product(self, other):
+        return self.x * other.x + self.y * other.y
+
+
+
+
+
     @staticmethod
     def cross(v1, v2):
         return v1.x * v2.y - v2.x * v1.y
+
+
 
     @staticmethod
     def double_signed_area(v1, v2, v3):
         return Vector2.cross(v2 - v1, v3 - v1)
 
 
+
     @staticmethod
     def are_points_ccw(v1, v2, v3):
         return Vector2.double_signed_area(v1, v2, v3) > 0
-
-
-    def dot_product(self, other):
-        return self.x * other.x + self.y * other.y
 
 
     @staticmethod
@@ -93,11 +107,14 @@ class Vector2:
                (Vector2.are_points_ccw(v0, v2, v3) == triangle_ccw) and \
                (Vector2.are_points_ccw(v0, v3, v1) == triangle_ccw)
 
+
+
     @staticmethod
     def distance(v0, v1):
         dx = v0.x - v1.x
         dy = v0.y - v1.y
         return math.sqrt(dx*dx + dy*dy)
+
 
 
     @staticmethod
@@ -109,10 +126,13 @@ class Vector2:
         coef = (vert - line1).dot_product(line_span) / (line_span.dot_product(line_span))
         return line1 + (line_span * coef)
 
+
+
     @staticmethod
     def vertex_to_line_dist(vert, line1, line2):
         proj = Vector2.project_to_line(vert, line1, line2)
         return Vector2.distance(proj, vert)
+
 
 
     @staticmethod
@@ -122,13 +142,15 @@ class Vector2:
         return math.acos(cos_angle)
 
 
+
     @staticmethod
     def mul_mtx(matrix, vector):
         if len(matrix) != 4:
-            raise RuntimeError("Matrix must be 2x2")
+            raise ValueError("Matrix must be 2x2")
         x = matrix[0]*vector.x + matrix[1]*vector.y
         y = matrix[2]*vector.x + matrix[3]*vector.y
         return Vector2(x, y)
+
 
 
     @staticmethod
@@ -289,55 +311,100 @@ class Vector2:
 
 
 
+    @staticmethod
+    def lines_intersect(l11, l12, l21, l22):
+
+        # starting points
+        s1 = l11
+        s2 = l21
+
+        # direction vectors
+        r1 = l12 - l11
+        r2 = l22 - l21
+
+        '''
+        Need to find coef b.
+        Solve w.r.t. b:
+        b|r1 x r2| = |r1 x s1| - |r1 x s2|
+
+        Where intersection = s2 + b*r2
+        '''
+
+        r1r2 = Vector2.cross(r1, r2)
+
+        r1s1 = Vector2.cross(r1, s1)
+        r1s2 = Vector2.cross(r1, s2)
+
+        # this means that lines are parallel
+        if r1r2 == 0:
+
+            # this means that s2 lies on l1
+            if r1s1 == r1s2:
+                # the lines are identical (they overlap)
+                return LineRelation(intersection=None, identical=True)
+            else:
+                # the lines are parallel
+                return LineRelation(intersection=None, identical=False)
+
+        # if lines are not parallel
+        else:
+            b = (r1s1 - r1s2) / r1r2
+            return LineRelation(intersection=s2 + b*r2, identical=False)
+
+
+
+
+
 
     @staticmethod
     def where_segment_crosses_ray(seg1, seg2, ray1, ray2):
-        if not Vector2.segment_crosses_ray(seg1, seg2, ray1, ray2):
-            return None
-        # now we can assume they intersect:
+        line_rel = Vector2.lines_intersect(seg1, seg2, ray1, ray2)
 
-        # check for zero length segment
-        if seg1 == seg2: return seg1.copy()
+        line_x = line_rel.intersection
+        lines_overlap =  line_rel.identical
 
+        # if lines intersect
+        if line_x is not None:
+            # first check if X is inside the segment
+            if Vector2.point_between_inclusive(line_x, seg1, seg2):
 
-        # if ray is vertical:
-        if ray1.x == ray2.x:
+                # then check if X is on the ray
+                if Vector2._vertex_on_ray(line_x, ray1, ray2):
+                    return line_x
+                else:
+                    return None
 
-            # if segment is also vertical
-            if seg1.x == seg2.x:
+            # if the X is outside the segment
+            else:
+                return None
 
-                # the only way this could happen is if they touch at the tip
-                return ray1.copy()
-
-            # if only ray is vertical
-            seg_slope = (seg2.y - seg1.y) / (seg2.x - seg1.x)
-            int_x = ray1.x
-            int_y = seg1.y + (int_x - seg1.x) * seg_slope
-            return Vector2(int_x, int_y)
-
-
-        # if only segment is vertical:
-        elif seg2.x == seg1.x:
-            ray_slope = (ray2.y - ray1.y) / (ray2.x - ray1.x)
-            int_x = seg1.x
-            int_y = ray1.y + (int_x - ray1.x) * ray_slope
-            return Vector2(int_x, int_y)
-
-
-        # if none of them are vertical:
+        # if no intersection
         else:
-            ray_slope = (ray2.y - ray1.y) / (ray2.x - ray1.x)
-            seg_slope = (seg2.y - seg1.y) / (seg2.x - seg1.x)
+            # if lines overlap (are identical)
+            if lines_overlap:
 
-            # if slopes are equal and they intersect,
-            # the intersection point can only be the tip
-            if ray_slope == seg_slope:
-                return ray1.copy()
+                '''
+                There is only one case in which single-point intersection happens:
+                when they overlap exactly at the tip and nowhere else.
+                '''
+                if seg1 == ray1 and \
+                    Vector2.point_between_inclusive(ray1, seg2, ray2):
+                    return ray1.copy()
 
-            int_x = (ray1.y - seg1.y + seg1.x * seg_slope - ray1.x * ray_slope) / (seg_slope - ray_slope)
-            int_y = ray1.y + (int_x - ray1.x) * ray_slope
+                if seg2 == ray1 and \
+                    Vector.point_between_inclusive(ray1, seg1, ray2):
+                    return ray1.copy()
 
-            return Vector2(int_x, int_y)
+
+                # In all other cases they either overlap too much or not at all
+                return None
+
+            # if lines are parallel
+            else:
+                return None
+
+
+
 
 
 
@@ -348,24 +415,43 @@ class Vector2:
     #         return None
     #     # now we can assume they intersect:
 
+    #     # check for zero length segment
+    #     if seg1 == seg2: return seg1.copy()
+
+
     #     # if ray is vertical:
-    #     if ray2.x - ray1.x == 0:
+    #     if ray1.x == ray2.x:
+
+    #         # if segment is also vertical
+    #         if seg1.x == seg2.x:
+
+    #             # the only way this could happen is if they touch at the tip
+    #             return ray1.copy()
+
+    #         # if only ray is vertical
     #         seg_slope = (seg2.y - seg1.y) / (seg2.x - seg1.x)
     #         int_x = ray1.x
     #         int_y = seg1.y + (int_x - seg1.x) * seg_slope
     #         return Vector2(int_x, int_y)
 
-    #     # if segment is vertical:
+
+    #     # if only segment is vertical:
     #     elif seg2.x == seg1.x:
     #         ray_slope = (ray2.y - ray1.y) / (ray2.x - ray1.x)
     #         int_x = seg1.x
     #         int_y = ray1.y + (int_x - ray1.x) * ray_slope
     #         return Vector2(int_x, int_y)
 
-    #     # if none of them is vertical:
+
+    #     # if none of them are vertical:
     #     else:
     #         ray_slope = (ray2.y - ray1.y) / (ray2.x - ray1.x)
     #         seg_slope = (seg2.y - seg1.y) / (seg2.x - seg1.x)
+
+    #         # if slopes are equal and they intersect,
+    #         # the intersection point can only be the tip
+    #         if ray_slope == seg_slope:
+    #             return ray1.copy()
 
     #         int_x = (ray1.y - seg1.y + seg1.x * seg_slope - ray1.x * ray_slope) / (seg_slope - ray_slope)
     #         int_y = ray1.y + (int_x - ray1.x) * ray_slope
@@ -374,7 +460,9 @@ class Vector2:
 
 
 
-class ZeroSegmentError(Exception):
+
+
+class ZeroSegmentError(StandardError):
     def __init__(self, message, segment):
         self._mes = message
         self._seg = segment

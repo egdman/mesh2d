@@ -15,5 +15,7 @@ with open("../debug_dump.yaml", 'r') as debf:
 
 
 
-polygon.break_into_convex(10.0)
-print("num pieces = {}".format(len(polygon.pieces)))
+portals = polygon.break_into_convex(10.0)
+
+print("num portals = {}".format(len(portals)))
+print("num pieces  = {}".format(len(polygon.pieces)))
