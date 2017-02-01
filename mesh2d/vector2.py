@@ -119,9 +119,7 @@ class Vector2:
 
     @staticmethod
     def project_to_line(vert, line1, line2):
-        # if line1 == line2:
-        #   raise ZeroSegmentError("Line is defined by coincident points", [line1, line2])
-
+        
         line_span = line2 - line1
         coef = (vert - line1).dot_product(line_span) / (line_span.dot_product(line_span))
         return line1 + (line_span * coef)
@@ -211,104 +209,6 @@ class Vector2:
         return Vector2.point_between_inclusive(vert, ray_tip, ray_target) or \
         Vector2.point_between_inclusive(ray_target, ray_tip, vert)
 
-                
-
-    @staticmethod
-    def segment_crosses_ray(seg1, seg2, ray1, ray2):
-        '''
-        Returns True if ray [ray1, ray2> intersects segment [seg1, seg2].
-        Intersection at segment endpoints counts.
-        Intersection at the tip of the ray counts.
-        If segment and ray overlap in more than one point, returns False.
-        '''
-
-        # check if ray is undefined
-        if ray1 == ray2:
-            raise ValueError("Ray points cannot be the same")
-
-        sarea_s1 = Vector2.double_signed_area(ray1, ray2, seg1)
-        sarea_s2 = Vector2.double_signed_area(ray1, ray2, seg2)
-
-
-        # seg1 on ray axis
-        if sarea_s1 == 0:
-            # seg2 also on ray axis
-            if sarea_s2 == 0:
-
-                '''
-                There is only 2 cases that count as intersection.
-
-                First True case is when they overlap in
-                exactly one point - the tip of the ray
-                '''
-                if seg1 == ray1 and \
-                    Vector2.point_between_inclusive(ray1, seg2, ray2):
-                    return True
-
-                if seg2 == ray1 and \
-                    Vector.point_between_inclusive(ray1, seg1, ray2):
-                    return True
-
-                '''
-                Second True case is when the segment is zero length and lies on the ray.
-                In all other cases they either overlap too much or not at all.
-                '''
-                return seg1 == seg2 and Vector2._vertex_on_ray(seg1, ray1, ray2)
-
-
-            # seg1 on ray axis, seg2 is not
-            else:
-                return Vector2._vertex_on_ray(seg1, ray1, ray2)
-
-
-        # seg1 not on ray axis    
-        else:
-            # if seg2 on ray axis
-            if sarea_s2 == 0:
-                return Vector2._vertex_on_ray(seg2, ray1, ray2)
-
-            # if neither seg1 nor seg2 are on ray axis
-            else:
-                s1_ccw = sarea_s1 > 0.
-                s2_ccw = sarea_s2 > 0.
-
-                # if seg1 and seg2 are on different sides of the ray:
-                if s1_ccw != s2_ccw:
-                    sarea_r1 = Vector2.double_signed_area(seg1, seg2, ray1)
-                    sarea_r2 = Vector2.double_signed_area(seg1, seg2, ray2)
-
-
-                    # if ray tip lies on the segment axis
-                    if sarea_r1 == 0.:
-                        # if ray tip lies on the segment, intersection is true,
-                        # else false
-                        return Vector2.point_between_inclusive(ray1, seg1, seg2)
-
-                    # if ray tagret lies on segment axis:
-                    if sarea_r2 == 0.:
-                        # if ray target lies on the segment, intersection is true,
-                        # else false
-                        return Vector2.point_between_inclusive(ray2, seg1, seg2)
-
-
-                    # now we ruled out all edge cases
-                    r1_ccw = sarea_r1 > 0.
-                    r2_ccw = sarea_r2 > 0.
-
-                    # if r1 and r2 are on different sides of segment:
-                    if r1_ccw != r2_ccw:
-                        return True
-                    # if r1 and r2 are on the same side of segment:
-                    else:
-                        ray1_dst = Vector2.vertex_to_line_dist(ray1, seg1, seg2)
-                        ray2_dst = Vector2.vertex_to_line_dist(ray2, seg1, seg2)
-                        # if r1 is further than r2, intersection is true
-                        return ray1_dst >= ray2_dst
-
-                # seg1 and seg2 are on the same side of the ray:
-                else:
-                    return False
-
 
 
     @staticmethod
@@ -323,11 +223,10 @@ class Vector2:
         r2 = l22 - l21
 
         '''
-        Need to find coef b.
+        Need to find coef b where intersection = s2 + b*r2
+
         Solve w.r.t. b:
         b|r1 x r2| = |r1 x s1| - |r1 x s2|
-
-        Where intersection = s2 + b*r2
         '''
 
         r1r2 = Vector2.cross(r1, r2)
@@ -350,8 +249,6 @@ class Vector2:
         else:
             b = (r1s1 - r1s2) / r1r2
             return LineRelation(intersection=s2 + b*r2, identical=False)
-
-
 
 
 
@@ -392,7 +289,7 @@ class Vector2:
                     return ray1.copy()
 
                 if seg2 == ray1 and \
-                    Vector.point_between_inclusive(ray1, seg1, ray2):
+                    Vector2.point_between_inclusive(ray1, seg1, ray2):
                     return ray1.copy()
 
 
@@ -402,62 +299,6 @@ class Vector2:
             # if lines are parallel
             else:
                 return None
-
-
-
-
-
-
-
-    # @staticmethod
-    # def where_segment_crosses_ray(seg1, seg2, ray1, ray2):
-    #     if not Vector2.segment_crosses_ray(seg1, seg2, ray1, ray2):
-    #         return None
-    #     # now we can assume they intersect:
-
-    #     # check for zero length segment
-    #     if seg1 == seg2: return seg1.copy()
-
-
-    #     # if ray is vertical:
-    #     if ray1.x == ray2.x:
-
-    #         # if segment is also vertical
-    #         if seg1.x == seg2.x:
-
-    #             # the only way this could happen is if they touch at the tip
-    #             return ray1.copy()
-
-    #         # if only ray is vertical
-    #         seg_slope = (seg2.y - seg1.y) / (seg2.x - seg1.x)
-    #         int_x = ray1.x
-    #         int_y = seg1.y + (int_x - seg1.x) * seg_slope
-    #         return Vector2(int_x, int_y)
-
-
-    #     # if only segment is vertical:
-    #     elif seg2.x == seg1.x:
-    #         ray_slope = (ray2.y - ray1.y) / (ray2.x - ray1.x)
-    #         int_x = seg1.x
-    #         int_y = ray1.y + (int_x - ray1.x) * ray_slope
-    #         return Vector2(int_x, int_y)
-
-
-    #     # if none of them are vertical:
-    #     else:
-    #         ray_slope = (ray2.y - ray1.y) / (ray2.x - ray1.x)
-    #         seg_slope = (seg2.y - seg1.y) / (seg2.x - seg1.x)
-
-    #         # if slopes are equal and they intersect,
-    #         # the intersection point can only be the tip
-    #         if ray_slope == seg_slope:
-    #             return ray1.copy()
-
-    #         int_x = (ray1.y - seg1.y + seg1.x * seg_slope - ray1.x * ray_slope) / (seg_slope - ray_slope)
-    #         int_y = ray1.y + (int_x - ray1.x) * ray_slope
-
-    #         return Vector2(int_x, int_y)
-
 
 
 

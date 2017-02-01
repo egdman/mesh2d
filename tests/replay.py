@@ -10,7 +10,7 @@ sys.path.append(module_root)
 from mesh2d import Polygon2d, Vector2
 
 
-with open("../debug_dump.yaml", 'r') as debf:
+with open(os.path.join(module_root, "debug_dump.yaml"), 'r') as debf:
 	polygon = yaml.load(debf)
 
 

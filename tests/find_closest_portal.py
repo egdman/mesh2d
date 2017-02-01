@@ -1,7 +1,6 @@
 import sys
 import os
 
-# import pudb; pu.db
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -87,7 +86,6 @@ portal4r = {
 }
 
 
-
 tip = vertices[1]
 left = tip + Vector2(-1., 1.)
 right = tip + Vector2(1., 1.)
@@ -143,6 +141,7 @@ print(closest_portal)
 print(closest_portal_point)
 print(closest_portal_dst)
 
+# import pudb; pu.db
 
 print("\n============================================================")
 print("portal 3")

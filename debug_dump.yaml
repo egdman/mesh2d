@@ -1,19 +1,19 @@
 !!python/object:mesh2d.mesh2d.Polygon2d
-bbox: !!python/object:mesh2d.mesh2d.Bbox {xmax: 489.0, xmin: 179.0, ymax: 558.0, ymin: 80.0}
-indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+bbox: !!python/object:mesh2d.mesh2d.Bbox {xmax: 1177.0, xmin: 663.0, ymax: 545.0,
+  ymin: 32.0}
+indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 pieces: []
 vertices:
-- !!python/object:mesh2d.vector2.Vector2 {x: 434.0, y: 108.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 393.0, y: 132.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 359.0, y: 152.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 334.0, y: 197.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 324.0, y: 233.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 328.0, y: 288.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 354.0, y: 349.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 395.0, y: 395.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 449.0, y: 441.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 489.0, y: 494.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 469.0, y: 556.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 213.0, y: 558.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 179.0, y: 364.0}
-- !!python/object:mesh2d.vector2.Vector2 {x: 213.0, y: 80.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1092.0, y: 545.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1095.0, y: 493.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1090.0, y: 444.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1074.0, y: 368.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1034.0, y: 290.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 970.0, y: 214.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 885.0, y: 149.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 782.0, y: 110.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 669.0, y: 90.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 663.0, y: 32.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1015.0, y: 59.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1177.0, y: 201.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1168.0, y: 411.0}

@@ -577,8 +577,6 @@ class Polygon2d:
 
 
 
-
-
 	def find_closest_vert(self, left, tip, right):
 		vrt = self.vertices
 
@@ -663,14 +661,16 @@ class Polygon2d:
 					closest_pt = candid_pt
 					closest_portal = portal
 
-		return closest_portal, closest_pt, closest_dist 
+		return closest_portal, closest_pt, closest_dist
 
 
 
 
 	def _inside_cone(self, vert, left_v, tip_v, right_v):
-			return Vector2.are_points_ccw(tip_v, right_v, vert) and not \
-				Vector2.are_points_ccw(tip_v, left_v, vert)
+		right_area = Vector2.double_signed_area(tip_v, right_v, vert)
+		left_area = Vector2.double_signed_area(tip_v, left_v, vert)
+		if right_area == 0 or left_area == 0: return False
+		return right_area > 0 and left_area < 0
 
 
 
@@ -682,15 +682,17 @@ class Polygon2d:
 			return True
 		# if none of the endpoints is inside cone, the middle of the segment might still be:
 		else:
-			if Vector2.segment_crosses_ray(seg1, seg2, tip, left) and \
-			Vector2.segment_crosses_ray(seg1, seg2, tip, right):
+			left_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
+			right_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
+
+			if left_x is not None and right_x is not None:
+				if left_x == tip and right_x == tip: return False
 				return True
 			else:
 				return False
 
 
 
-	
 
 	def get_anticone(self, prev_ind, spike_ind, next_ind, threshold=0.0):
 		'''

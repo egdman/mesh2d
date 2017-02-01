@@ -37,19 +37,19 @@ def test_case(msg, seg1, seg2, ray1, ray2, crosses, cross_point):
 
 
 
-	report_results += "      segment_crosses_ray: "
-	try:
-		crosses_result = Vector2.segment_crosses_ray(seg1, seg2, ray1, ray2)
-		report_results += str(crosses_result) + "\n"
+	# report_results += "      segment_crosses_ray: "
+	# try:
+	# 	crosses_result = Vector2.segment_crosses_ray(seg1, seg2, ray1, ray2)
+	# 	report_results += str(crosses_result) + "\n"
 
-		if crosses_result != crosses:
-			passed = False
-			report_results = report_results[:-1] + " (must be {})\n".format(crosses)
+	# 	if crosses_result != crosses:
+	# 		passed = False
+	# 		report_results = report_results[:-1] + " (must be {})\n".format(crosses)
 
 
-	except StandardError as er:
-		report_results += "ERROR: {}".format(er) + "\n"
-		passed = False
+	# except StandardError as er:
+	# 	report_results += "ERROR: {}".format(er) + "\n"
+	# 	passed = False
 
 
 
@@ -83,11 +83,11 @@ def test_case(msg, seg1, seg2, ray1, ray2, crosses, cross_point):
 
 		report += "FAIL\n"
 		report += error_out() + "\n"
-		report += report_results
 
 	else:
 		report += "OK\n"
 
+	report += report_results
 	report += "------------------------------------------------------------------------------\n\n"
 
 	print report
