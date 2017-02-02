@@ -189,12 +189,10 @@ class Application(tk.Frame):
 
 	def _add_polygon(self, event):
 		threshold = 10.0 # degrees
-		new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
+		new_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
 
 		# to save in case of failure
-		reference_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
-
-		self.last_created_poly = reference_poly
+		self.last_created_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
 
 		del self._new_vertices[:]
 
@@ -222,10 +220,10 @@ class Application(tk.Frame):
 
 			if len(polys) != len(portals) + 1:
 				print ("Error!")
-				error_dump(reference_poly)
+				error_dump(self.last_created_poly)
 	
 		except ValueError as ve:
-			error_dump(reference_poly)
+			error_dump(self.last_created_poly)
 			raise ve
  
 
@@ -237,7 +235,7 @@ class Application(tk.Frame):
 
 			coords = poly.outline_coordinates()
 
-			self.canvas.create_polygon(coords[:-2], activefill='#111111', outline='', fill=color)
+			self.canvas.create_polygon(coords[:-2], activefill='#111111', outline='', fill='')
 		
 		
 		# draw outline:

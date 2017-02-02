@@ -6,7 +6,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 module_root = os.path.join(here, "..")
 sys.path.append(module_root)
 
-from mesh2d import Polygon2d, Vector2
+from mesh2d import Mesh2d, Vector2
 
 
 def poly_repr(poly):
@@ -34,7 +34,7 @@ i4 = Vector2(0.25, 0.5)
 
 vertices = [a, b, c, d]
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 
 print(poly_repr(poly))
 print("////////////////////////////////////////////////////////////////////\n\n")
@@ -42,12 +42,12 @@ print("////////////////////////////////////////////////////////////////////\n\n"
 
 
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 poly.add_vertex_to_outline(i1, (0,1))
 print(poly_repr(poly))
 print("----------------------------------")
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 poly.add_vertex_to_outline(i1, (1,0))
 print(poly_repr(poly))
 print("==================================\n")
@@ -55,12 +55,12 @@ print("==================================\n")
 
 
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 poly.add_vertex_to_outline(i2, (1,2))
 print(poly_repr(poly))
 print("----------------------------------")
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 poly.add_vertex_to_outline(i2, (2,1))
 print(poly_repr(poly))
 print("==================================\n")
@@ -68,12 +68,12 @@ print("==================================\n")
 
 
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 poly.add_vertex_to_outline(i3, (2,3))
 print(poly_repr(poly))
 print("----------------------------------")
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 poly.add_vertex_to_outline(i3, (3,2))
 print(poly_repr(poly))
 print("==================================\n")
@@ -81,12 +81,12 @@ print("==================================\n")
 
 
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 poly.add_vertex_to_outline(i4, (3,0))
 print(poly_repr(poly))
 print("----------------------------------")
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 poly.add_vertex_to_outline(i4, (0,3))
 print(poly_repr(poly))
 print("==================================\n")
@@ -101,9 +101,9 @@ c = Vector2(55., 155.)
 d = Vector2(54., 155.)
 vertices = [a, b, c, d]
 
-poly = Polygon2d(vertices[:], range(len(vertices)))
+poly = Mesh2d(vertices[:], range(len(vertices)))
 print(poly_repr(poly))
-print ("Area = {}".format(Polygon2d.signed_area(poly.vertices, poly.indices)))
+print ("Area = {}".format(Mesh2d.signed_area(poly.vertices, poly.indices)))
 
 
 
@@ -113,7 +113,7 @@ ib = [8, 10, 5, 1, 15, 19, 6]
 
 
 try:
-	p1, p2 = Polygon2d._split_index_buffer(ib, 5, 19)
+	p1, p2 = Mesh2d._split_index_buffer(ib, 5, 19)
 	print(p1)
 	print(p2)
 	print("-----------------")
@@ -123,7 +123,7 @@ except ValueError as ve:
 
 
 try:
-	p1, p2 = Polygon2d._split_index_buffer(ib, 8, 10)
+	p1, p2 = Mesh2d._split_index_buffer(ib, 8, 10)
 	print(p1)
 	print(p2)
 	print("-----------------")
@@ -132,7 +132,7 @@ except ValueError as ve:
 
 
 try:
-	p1, p2 = Polygon2d._split_index_buffer(ib, 5, 5)
+	p1, p2 = Mesh2d._split_index_buffer(ib, 5, 5)
 	print(p1)
 	print(p2)
 	print("-----------------")
@@ -141,7 +141,7 @@ except ValueError as ve:
 
 
 try:
-	p1, p2 = Polygon2d._split_index_buffer(ib, 5, 100)
+	p1, p2 = Mesh2d._split_index_buffer(ib, 5, 100)
 	print(p1)
 	print(p2)
 	print("-----------------")

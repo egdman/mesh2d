@@ -7,7 +7,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 module_root = os.path.join(here, "..")
 sys.path.append(module_root)
 
-from mesh2d import Polygon2d, Vector2
+from mesh2d import Mesh2d, Vector2
 
 
 indices = [0, 1, 2, 5, 6, 3, 7, 4]
@@ -23,7 +23,7 @@ vertices = [
 	Vector2(0.75, 1.),
 ]
 
-poly = Polygon2d(vertices, indices)
+poly = Mesh2d(vertices, indices)
 
 
 # should be outside

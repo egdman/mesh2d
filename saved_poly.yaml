@@ -1,0 +1,25 @@
+!!python/object:mesh2d.mesh2d.Mesh2d
+bbox: !!python/object:mesh2d.mesh2d.Bbox {xmax: 1083.0, xmin: 243.0, ymax: 590.0,
+  ymin: 71.0}
+indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+pieces: []
+vertices:
+- !!python/object:mesh2d.vector2.Vector2 {x: 419.0, y: 116.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 629.0, y: 115.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 623.0, y: 240.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 717.0, y: 240.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 879.0, y: 205.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 827.0, y: 112.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 944.0, y: 71.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1083.0, y: 84.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 1051.0, y: 318.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 784.0, y: 323.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 766.0, y: 452.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 811.0, y: 541.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 908.0, y: 566.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 718.0, y: 590.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 534.0, y: 491.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 665.0, y: 417.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 558.0, y: 339.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 367.0, y: 409.0}
+- !!python/object:mesh2d.vector2.Vector2 {x: 243.0, y: 287.0}

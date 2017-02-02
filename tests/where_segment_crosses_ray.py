@@ -8,7 +8,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 module_root = os.path.join(here, "..")
 sys.path.append(module_root)
 
-from mesh2d import Polygon2d, Vector2
+from mesh2d import Vector2
 
 
 num_fails = 0

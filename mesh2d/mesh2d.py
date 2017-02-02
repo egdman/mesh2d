@@ -11,12 +11,6 @@ def plus_wrap(pos, num):
 def minus_wrap(pos, num):
 	return num - 1 if pos == 0 else pos - 1
 
-class Mesh2d:
-
-	def __init__(self, index_buffers, vertex_buffer):
-		self.polygons = index_buffers
-		self.vertices = vertex_buffer
-
 
 class Bbox:
 	def __init__(self, vertices, indices):
@@ -46,7 +40,7 @@ class Bbox:
 
 
 
-class Polygon2d:
+class Mesh2d:
 	def __init__(self, vertices, indices):
 		if self.check_ccw(vertices, indices):
 			self.indices = indices[:]
@@ -67,7 +61,7 @@ class Polygon2d:
 	def get_pieces_as_meshes(self):
 		meshes = []
 		for piece in self.pieces:
-			meshes.append(Polygon2d(self.vertices, piece))
+			meshes.append(Mesh2d(self.vertices, piece))
 		return meshes
 
 
@@ -88,18 +82,33 @@ class Polygon2d:
 	def break_into_convex(self, threshold = 0.0, canvas = None):
 		portals = self.get_portals(threshold=threshold)
 
-		# # draw portals
-		# if canvas is not None:
-		# 	for portal in portals:
-		# 		v1 = self.vertices[portal['start_index']]
-		# 		v2 = portal['end_point']
+		# draw portals
+		if canvas is not None:
+			for portal in portals:
+				v1 = self.vertices[portal['start_index']]
+				v2 = portal['end_point']
 
-		# 		canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=2)
+				canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=1)
 
+		'''
+		For all the portals that require creating new vertices, create new vertices.
+		Multiple portals may have the same endpoint. If we have 5 portals that converge
+		to the same endpoint, we only want to create the endpoint once.
+		This is why some portals have a 'parent_portal' attribute - we create the endpoint
+		for the parent portal only, and all the other portals use its index.
+		'''
 
-		# for all the portals that require creating new vertices,
-		# create new vertices
-		for portal in portals:
+ 		for portal in portals:
+
+			# draw portal endpoints
+			if canvas is not None:
+				sz = 3
+				new_vrt = portal['end_point']
+				canvas.create_oval(
+					new_vrt.x - sz, new_vrt.y - sz,
+					new_vrt.x + sz, new_vrt.y + sz,
+					fill='green')
+
 
 			if portal['end_index'] is None and 'parent_portal' not in portal:
 
@@ -115,23 +124,15 @@ class Polygon2d:
 				
 					end_i = self.add_vertex_to_outline(new_vrt, op_edge)
 
-					# # do some drawing
-					# if canvas is not None:
-					# 	sz = 3
-					# 	new_vrt = self.vertices[end_i]
-					# 	canvas.create_oval(
-					# 		new_vrt.x - sz, new_vrt.y - sz,
-					# 		new_vrt.x + sz, new_vrt.y + sz,
-					# 		fill='green')
-
 					portal['end_index'] = end_i
 
 		# now go through portals again to set child portals' end indexes
 		for portal in portals:
 			if portal['end_index'] is None and 'parent_portal' in portal:
-				parent_portal = portal['parent_portal']
-				portal['end_index'] = parent_portal['end_index']
+				portal['end_index'] = portal['parent_portal']['end_index']
 
+
+		# Now break the mesh outline into convex pieces
 
 		# queue of pieces
 		piece_q = deque()
@@ -141,7 +142,7 @@ class Polygon2d:
 
 		while len(piece_q) > 0:
 			piece = piece_q.popleft()
-			piece1, piece2 = Polygon2d._break_in_two(piece, portals)
+			piece1, piece2 = Mesh2d._break_in_two(piece, portals)
 
 			# if could not split this piece, finalize it
 			if piece1 is None:
@@ -172,7 +173,7 @@ class Polygon2d:
 				continue
 
 			# split index buffer of the outline of this piece using the portal
-			piece1, piece2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
+			piece1, piece2 = Mesh2d._split_index_buffer(indices, start_i, end_i)
 
 			# if this portal is actually an edge, skip it
 			if len(piece1) < 3 or len(piece2) < 3:
@@ -276,7 +277,7 @@ class Polygon2d:
 
 	@staticmethod
 	def check_ccw(vertices, indices):
-		return Polygon2d.signed_area(vertices, indices) > 0
+		return Mesh2d.signed_area(vertices, indices) > 0
 
 
 	def get_triangle_coords(self, triangle):
@@ -354,8 +355,9 @@ class Polygon2d:
 		This is work in progress
 		The endpoints of portals can be new vertices,
 		but they are guaranteed to lie on the polygon boundary (not inside the polygon)
+
+		TODO This function is ridiculously complex right now
 		"""
-		sz = 5
 		spikes = self.find_spikes(threshold)
 		portals = []
 
@@ -510,6 +512,25 @@ class Polygon2d:
 				if not new_portal['end_point'] == tip:
 					portals.append(new_portal)
 
+
+				# ############################################
+				# else:
+				# 	print("NEW PORTAL ENDPOINT == TIP ({} , {})".format(
+				# 		new_portal['end_point'],
+				# 		self.vertices[new_portal['start_index']])
+				# 	)
+
+				# 	sz = 3
+				# 	strange_vrt = new_portal['end_point']
+				# 	canvas.create_oval(
+				# 		strange_vrt.x - sz, strange_vrt.y - sz,
+				# 		strange_vrt.x + sz, strange_vrt.y + sz,
+				# 		fill='blue')
+
+				# ############################################
+
+
+
 		return portals
 
 
@@ -605,6 +626,10 @@ class Polygon2d:
 
 
 	def _inside_cone(self, vert, left_v, tip_v, right_v):
+		'''
+		Check if vert is inside cone defined by left_v, tip_v, right_v.
+		If vert is on the border of the cone, method returns False.
+		'''
 		right_area = Vector2.double_signed_area(tip_v, right_v, vert)
 		left_area = Vector2.double_signed_area(tip_v, left_v, vert)
 		if right_area == 0 or left_area == 0: return False
