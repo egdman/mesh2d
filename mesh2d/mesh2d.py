@@ -52,6 +52,7 @@ class Mesh2d:
         self.bbox = Bbox(vertices, indices)
 
         self.pieces = []
+        self.portals = []
 
 
     def dump(self):
@@ -142,7 +143,7 @@ class Mesh2d:
 
         while len(piece_q) > 0:
             piece = piece_q.popleft()
-            piece1, piece2 = Mesh2d._break_in_two(piece, portals)
+            piece1, piece2, new_portal = Mesh2d._break_in_two(piece, portals)
 
             # if could not split this piece, finalize it
             if piece1 is None:
@@ -152,6 +153,7 @@ class Mesh2d:
             else:
                 piece_q.append(piece1)
                 piece_q.append(piece2)
+                self.portals.append(new_portal)
 
         return portals
 
@@ -161,6 +163,9 @@ class Mesh2d:
     def _break_in_two(indices, portals):
         # iterate over portals trying to find the first portal that belongs to this polygon
         for portal in portals:
+
+            # if this portal has already been created, skip it
+            if 'created' in portal: continue
 
             piece1 = []
             piece2 = []
@@ -179,10 +184,13 @@ class Mesh2d:
             if len(piece1) < 3 or len(piece2) < 3:
                 continue
 
-            return piece1, piece2
+            # mark this portal as created
+            portal['created'] = True
+
+            return piece1, piece2, (start_i, end_i)
 
         # if we did not find any portals to split, this piece must be convex
-        return None, None
+        return None, None, None
 
 
 

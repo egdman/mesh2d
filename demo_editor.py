@@ -17,10 +17,10 @@ class Tool(object):
 		self.parent = parent
 
 	def right_click(self, event):
-		raise NotImplementedError()
+		pass
 
 	def left_click(self, event):
-		raise NotImplementedError()
+		pass
 
 
 class Create(Tool):
@@ -39,7 +39,10 @@ class Select(Tool):
 
 
 	def left_click(self, event):
-		print("SELECT: left click")
+		# print("SELECT: left click")
+		obj_ids = self.parent.canvas.find_overlapping(event.x, event.y, event.x, event.y)
+		print (obj_ids)
+		print ("mouse at {}, {}".format(event.x, event.y))
 
 		# x = float( self.canvas.canvasx(event.x) )
 		# y = float( self.canvas.canvasy(event.y) )
@@ -79,6 +82,8 @@ class Application(tk.Frame):
 	def createWidgets(self):
 		self.canvas = tk.Canvas(self, background='#000000', width=1000, height=900,
 			scrollregion=(0, 0, 90000, 90000))
+
+		self.canvas_center = Vector2(float(self.canvas['width']) / 2., float(self.canvas['height']) / 2.)
 
 		# horiz scrollbar
 		self.hbar = tk.Scrollbar(self, orient = tk.HORIZONTAL)
@@ -146,6 +151,7 @@ class Application(tk.Frame):
 			command = self._save_last)
 		self.saveToolBtn.pack()
 
+
 		# vertices = [(50, 50), (70, 70), (10, 100)]
 		# self.canvas.create_line(vertices, fill='#FFFFFF')
 
@@ -202,6 +208,7 @@ class Application(tk.Frame):
 		self.rotate_mode = True
 
 
+
 	def _mouse_moved(self, event):
 		delta_x = event.x - self.last_x
 		delta_y = event.y - self.last_y
@@ -210,6 +217,9 @@ class Application(tk.Frame):
 		if self.pan_mode:
 			self.canvas.xview_scroll(-delta_x, 'units')
 			self.canvas.yview_scroll(-delta_y, 'units')
+		if self.rotate_mode:
+
+			print("rotate {}, {}".format(delta_x, delta_y))
 
 
 
