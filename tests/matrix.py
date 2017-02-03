@@ -152,3 +152,6 @@ print(scale_mtx.multiply(Matrix((3,1), [5., 5., 1.])))
 
 print("Matrix-Vector2:")
 print(scale_mtx.multiply(Vector2(5., 5.)))
+
+print("Matrix-Vector2 and cut off 3rd component:")
+print(scale_mtx.multiply(Vector2(5., 5.))[:-1])

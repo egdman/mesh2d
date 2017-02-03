@@ -67,14 +67,15 @@ class Mesh2d:
 
 
 
-    def outline_coordinates(self):
+    def outline_coordinates(self, indices=None):
+        if indices is None: indices = self.indices
         crds = []
 
-        for ind in self.indices:
+        for ind in indices:
             crds.append(self.vertices[ind].x)
             crds.append(self.vertices[ind].y)
-        crds.append(self.vertices[self.indices[0]].x)
-        crds.append(self.vertices[self.indices[0]].y)
+        crds.append(self.vertices[indices[0]].x)
+        crds.append(self.vertices[indices[0]].y)
         return crds
 
 
@@ -192,18 +193,6 @@ class Mesh2d:
         # if we did not find any portals to split, this piece must be convex
         return None, None, None
 
-
-
-    def draw_self(self, canvas, displacement):
-        coords = []
-        for i in self.indices:
-            vrt = self.vertices[i] + displacement
-            coords.append(vrt.x)
-            coords.append(vrt.y)
-
-        rnd = lambda: random.randint(0,255)
-        color = '#%02X%02X%02X' % (rnd(),rnd(),rnd())
-        canvas.create_polygon(coords, fill=color)
 
 
 

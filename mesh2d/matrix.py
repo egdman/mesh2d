@@ -38,6 +38,9 @@ class Matrix(object):
 		return self.values
 
 
+	def __getitem__(self, key):
+		return self.values[key]
+
 
 	def __str__(self):
 		st = ""
