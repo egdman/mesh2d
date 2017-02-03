@@ -11,6 +11,7 @@ class Vector2:
     def __init__(self, x, y):
         self.x = float(x)
         self.y = float(y)
+        self.shape = (2, 1)
 
 
     def copy(self):
@@ -23,7 +24,7 @@ class Vector2:
         if key == 1:
             return self.y
         else:
-            return 0.0
+            raise ValueError("Vector2 instance only has 0th and 1st elements")
 
 
     def __iter__(self):
@@ -62,6 +63,7 @@ class Vector2:
     # inequality
     def __ne__(self, right_operand):
         return self.x != right_operand.x or self.y != right_operand.y
+
 
 
     def length(self):

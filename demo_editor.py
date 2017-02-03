@@ -210,16 +210,23 @@ class Application(tk.Frame):
 
 
 	def _mouse_moved(self, event):
-		delta_x = event.x - self.last_x
-		delta_y = event.y - self.last_y
-		self.last_x = event.x
-		self.last_y = event.y
+
 		if self.pan_mode:
+			delta_x = event.x - self.last_x
+			delta_y = event.y - self.last_y
 			self.canvas.xview_scroll(-delta_x, 'units')
 			self.canvas.yview_scroll(-delta_y, 'units')
-		if self.rotate_mode:
 
-			print("rotate {}, {}".format(delta_x, delta_y))
+		if self.rotate_mode:
+			angle = Vector2.angle(
+				Vector2(event.x, event.y) - self.canvas_center,
+				Vector2(self.last_x, self.last_y) - self.canvas_center
+			)
+			print("rotate {}".format(angle))
+
+
+		self.last_x = event.x
+		self.last_y = event.y
 
 
 
