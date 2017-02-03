@@ -69,12 +69,16 @@ class Application(tk.Frame):
 		self.active_tool = self.create_tool
 
 		self.last_created_poly = None
+		self.pan_mode = False
+		self.rotate_mode = False
+		self.last_x = 0
+		self.last_y = 0
 
 
 
 	def createWidgets(self):
-		self.canvas = tk.Canvas(self, background='#000000', width=1200, height=600,
-			scrollregion=(0, 0, 3000, 30000))
+		self.canvas = tk.Canvas(self, background='#000000', width=1000, height=900,
+			scrollregion=(0, 0, 90000, 90000))
 
 		# horiz scrollbar
 		self.hbar = tk.Scrollbar(self, orient = tk.HORIZONTAL)
@@ -84,10 +88,18 @@ class Application(tk.Frame):
 		self.vbar = tk.Scrollbar(self, orient = tk.VERTICAL)
 		self.vbar.config(command = self.canvas.yview)
 
-		self.canvas.config(xscrollcommand = self.hbar.set, yscrollcommand=self.vbar.set)
+		self.canvas.config(
+			xscrollcommand = self.hbar.set, yscrollcommand=self.vbar.set,
+			xscrollincrement=1, yscrollincrement=1)
 
-		self.canvas.bind('<Button-1>', self._left_click)
-		self.canvas.bind('<Button-3>', self._right_click)
+		self.canvas.bind('<ButtonRelease-1>', self._left_up)
+		self.canvas.bind('<ButtonRelease-3>', self._right_up)
+
+
+		# camera controls
+		self.canvas.bind('<Control-Button-1>', self._ctrl_left_down)
+		self.canvas.bind('<Control-Button-3>', self._ctrl_right_down)
+		self.canvas.bind('<Motion>', self._mouse_moved)
 
 		# self.canvas.grid()
 		# self.hbar.grid()
@@ -104,7 +116,7 @@ class Application(tk.Frame):
 		self.quitButton.pack()
 
 		
-
+		# butens
 		self.selectToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'select.gif'))
 		self.selectToolBtn = tk.Button(
 			self,
@@ -151,15 +163,53 @@ class Application(tk.Frame):
 		self.active_tool = self.create_tool		
 
 
+	def _get_event_modifiers(self, event):
+		state = {
+			'ctrl': event.state & 0x0004 != 0,
+			'ralt': event.state & 0x0080 != 0,
+			'lalt': event.state & 0x0008 != 0,
+			'shift': event.state & 0x0001 != 0,
+		}
+		return set(modname for modname in state if state[modname])
 
-	def _left_click(self, event):
-		self.active_tool.left_click(event)
+
+	def _left_up(self, event):
+		self.pan_mode = False
+		
+		mods = self._get_event_modifiers(event)
+
+		# do something only if no modifiers
+		if len(mods) == 0:
+			self.active_tool.left_click(event)
 
 
-	def _right_click(self, event):
-		self.active_tool.right_click(event)
+	def _right_up(self, event):
+		self.rotate_mode = False
+
+		mods = self._get_event_modifiers(event)
+
+		# do something only if no modifiers
+		if len(mods) == 0:
+			self.active_tool.right_click(event)
 
 
+
+	def _ctrl_left_down(self, event):
+		self.pan_mode = True
+
+
+	def _ctrl_right_down(self, event):
+		self.rotate_mode = True
+
+
+	def _mouse_moved(self, event):
+		delta_x = event.x - self.last_x
+		delta_y = event.y - self.last_y
+		self.last_x = event.x
+		self.last_y = event.y
+		if self.pan_mode:
+			self.canvas.xview_scroll(-delta_x, 'units')
+			self.canvas.yview_scroll(-delta_y, 'units')
 
 
 
@@ -188,6 +238,8 @@ class Application(tk.Frame):
 
 
 	def _add_polygon(self, event):
+		if len(self._new_vertices) < 3: return
+
 		threshold = 10.0 # degrees
 		new_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
 

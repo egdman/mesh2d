@@ -88,7 +88,7 @@ class Vector2:
 
     @staticmethod
     def double_signed_area(v1, v2, v3):
-        return Vector2.cross(v2 - v1, v3 - v1)
+        return Vector2.cross(v2 - v1, v3 - v1) / 2.0
 
 
 
@@ -139,7 +139,6 @@ class Vector2:
 
     @staticmethod
     def project_to_line(vert, line1, line2):
-        
         line_span = line2 - line1
         coef = (vert - line1).dot_product(line_span) / (line_span.dot_product(line_span))
         return line1 + (line_span * coef)
@@ -155,7 +154,7 @@ class Vector2:
 
     @staticmethod
     def angle(vect1, vect2):
-        double_area = Vector2.double_signed_area(Vector2(0, 0), vect1, vect2)
+        # double_area = Vector2.double_signed_area(Vector2(0, 0), vect1, vect2)
         cos_angle = vect1.dot_product(vect2) / (vect1.length() * vect2.length())
         return math.acos(cos_angle)
 
@@ -225,7 +224,7 @@ class Vector2:
 
 
     @staticmethod
-    def _vertex_on_ray(vert, ray_tip, ray_target):
+    def vertex_on_ray(vert, ray_tip, ray_target):
         return Vector2.point_between_inclusive(vert, ray_tip, ray_target) or \
         Vector2.point_between_inclusive(ray_target, ray_tip, vert)
 
@@ -286,7 +285,7 @@ class Vector2:
             if Vector2.point_between_inclusive(line_x, seg1, seg2):
 
                 # then check if X is on the ray
-                if Vector2._vertex_on_ray(line_x, ray1, ray2):
+                if Vector2.vertex_on_ray(line_x, ray1, ray2):
                     return line_x
                 else:
                     return None
