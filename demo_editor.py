@@ -218,11 +218,29 @@ class Application(tk.Frame):
 			self.canvas.yview_scroll(-delta_y, 'units')
 
 		if self.rotate_mode:
-			angle = Vector2.angle(
+
+			sangle = -Vector2.signed_angle(
 				Vector2(event.x, event.y) - self.canvas_center,
 				Vector2(self.last_x, self.last_y) - self.canvas_center
 			)
-			print("rotate {}".format(angle))
+
+			for dot_id in self._dots_ids:
+				crds = self.canvas.coords(dot_id)
+
+				if len(crds) < 4: continue
+
+				old_pos = Vector2((crds[0] + crds[2])/2., (crds[1] + crds[3])/2.)
+
+				new_pos = Matrix.rotate2d(
+					rotation_center = self.canvas_center,
+					angle = sangle).multiply(old_pos)
+				
+					# Matrix((3,1), (old_pos.x, old_pos.y, 1.0)))
+
+				new_pos = Vector2(new_pos.values[0], new_pos.values[1])
+
+				dif = new_pos - old_pos
+				self.canvas.move(dot_id, dif.x, dif.y)
 
 
 		self.last_x = event.x
@@ -250,8 +268,8 @@ class Application(tk.Frame):
 			prev_y = self._new_vertices[-2].y
 			self.canvas.create_line(x, y, prev_x, prev_y, fill='#A0A0A0')
 
-		id = self.canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='#FFFFFF')
-		self._dots_ids.append(id)
+		dot_id = self.canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='#FFFFFF')
+		self._dots_ids.append(dot_id)
 
 
 	def _add_polygon(self, event):

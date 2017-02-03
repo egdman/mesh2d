@@ -8,7 +8,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 module_root = os.path.join(here, "..")
 sys.path.append(module_root)
 
-from mesh2d import Matrix
+from mesh2d import Matrix, Vector2
 
 # check equality and inequality operations
 
@@ -37,7 +37,41 @@ print("row(2) = {}".format(mtx1.row(2)))
 print("row(3) = {}".format(mtx1.row(3)))
 print("row(4) = {}".format(mtx1.row(4)))
 
+print("")
 
+try:
+	mtx1.column(4)
+except ValueError as ve:
+	print(ve)
+
+
+try:
+	mtx1.row(5)
+except ValueError as ve:
+	print(ve)
+
+
+print("\ntesting column and row methods for Vector2")
+vct = Vector2(16, -12)
+
+
+print("Vector2 row(0) = {}".format(vct.row(0)))
+print("Vector2 row(1) = {}".format(vct.row(1)))
+print("Vector2 row(2) = {}".format(vct.row(2)))
+print("")
+print("Vector2 col(0) = {}".format(vct.column(0)))
+
+try:
+	vct.row(3)
+except ValueError as ve:
+	print(ve)
+
+try:
+	vct.column(1)
+except ValueError as ve:
+	print(ve)
+
+print("")
 
 print("\nidentity:")
 imtx= Matrix.identity(4)
@@ -95,6 +129,26 @@ print("\ntheir multiplication:")
 print(sqmtx.multiply(invmtx))
 
 
+import math
+print("\n2d translation (4, -32):")
+print(Matrix.transform2d([4, -32], 0))
+
+print("\n2d translation + rotation:")
+print(Matrix.transform2d([4, -32], 45*math.pi / 180.0))
+
+print("\n2d scaling x5:")
+print(Matrix.scale2d((0., 0.), (5., 5.)))
 
 
+print("\n2d scaling x5 from center (15, 15):")
+print(Matrix.scale2d((15., 15.), (5., 5.)))
 
+
+print("\ncheck that matrix-vector multiplication works")
+scale_mtx = Matrix.scale2d((10., 20.), (3., -8.))
+
+print("Matrix-Matrix:")
+print(scale_mtx.multiply(Matrix((3,1), [5., 5., 1.])))
+
+print("Matrix-Vector2:")
+print(scale_mtx.multiply(Vector2(5., 5.)))

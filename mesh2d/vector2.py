@@ -11,7 +11,7 @@ class Vector2:
     def __init__(self, x, y):
         self.x = float(x)
         self.y = float(y)
-        self.shape = (2, 1)
+        self.shape = (3, 1)
 
 
     def copy(self):
@@ -23,8 +23,23 @@ class Vector2:
             return self.x
         if key == 1:
             return self.y
+        if key == 2:
+            return 1.0
         else:
-            raise ValueError("Vector2 instance only has 0th and 1st elements")
+            raise KeyError(key)
+
+
+    # Matrix interface
+    def row(self, row_num):
+        if row_num > 2:
+            raise ValueError("Vector2: cannot get row {}".format(row_num))
+        return (self[row_num],)
+
+    def column(self, col_num):
+        if col_num != 0:
+            raise ValueError("Vector2: cannot get column {}".format(col_num))
+        return (self.x, self.y, 1.0)
+
 
 
     def __iter__(self):
@@ -156,9 +171,15 @@ class Vector2:
 
     @staticmethod
     def angle(vect1, vect2):
-        # double_area = Vector2.double_signed_area(Vector2(0, 0), vect1, vect2)
         cos_angle = vect1.dot_product(vect2) / (vect1.length() * vect2.length())
         return math.acos(cos_angle)
+
+
+    @staticmethod
+    def signed_angle(vect1, vect2):
+        signed_area = Vector2.cross(vect1, vect2)
+        sin_angle = signed_area / (vect1.length() * vect2.length())
+        return math.asin(sin_angle)
 
 
 
