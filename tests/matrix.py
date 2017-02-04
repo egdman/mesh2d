@@ -8,7 +8,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 module_root = os.path.join(here, "..")
 sys.path.append(module_root)
 
-from mesh2d import Matrix, Vector2
+from mesh2d import Matrix, Vector2, add_rotation_to_mtx
 
 # check equality and inequality operations
 
@@ -130,11 +130,6 @@ print(sqmtx.multiply(invmtx))
 
 
 import math
-print("\n2d translation (4, -32):")
-print(Matrix.transform2d([4, -32], 0))
-
-print("\n2d translation + rotation:")
-print(Matrix.transform2d([4, -32], 45*math.pi / 180.0))
 
 print("\n2d scaling x5:")
 print(Matrix.scale2d((0., 0.), (5., 5.)))
@@ -147,11 +142,95 @@ print(Matrix.scale2d((15., 15.), (5., 5.)))
 print("\ncheck that matrix-vector multiplication works")
 scale_mtx = Matrix.scale2d((10., 20.), (3., -8.))
 
-print("Matrix-Matrix:")
+print("Matrix*Matrix:")
 print(scale_mtx.multiply(Matrix((3,1), [5., 5., 1.])))
 
-print("Matrix-Vector2:")
+print("Matrix*Vector2:")
 print(scale_mtx.multiply(Vector2(5., 5.)))
 
-print("Matrix-Vector2 and cut off 3rd component:")
-print(scale_mtx.multiply(Vector2(5., 5.))[:-1])
+print("Matrix*Vector2 and cut off 3rd component:")
+print(scale_mtx.multiply(Vector2(5., 5.)).values[:-1])
+
+
+print("\ntest matrix indexing (getting)")
+mtx = Matrix((3,3),
+	[
+		100, 101, 102,
+		110, 111, 112,
+		120, 121, 122
+	])
+
+print(mtx)
+print("[0, 0]:")
+print mtx.loc[(0,0)]
+print("[0, 1]:")
+print mtx.loc[(0,1)]
+print("[0, 2]:")
+print mtx.loc[(0,2)]
+print("[1, 0]:")
+
+print mtx.loc[(1,0)]
+print("[1, 1]:")
+print mtx.loc[(1,1)]
+print("[1, 2]:")
+print mtx.loc[(1,2)]
+
+print("[2, 0]:")
+print mtx.loc[(2,0)]
+print("[2, 1]:")
+print mtx.loc[(2,1)]
+print("[2, 2]:")
+print mtx.loc[(2,2)]
+
+try:
+	print("[3, 2]:")
+	print mtx.loc[(3,2)]
+except IndexError as er:
+	print (er)
+
+try:
+	print("[0, 5]:")
+	print mtx.loc[(0,5)]
+except IndexError as er:
+	print (er)
+
+
+
+
+print("\ntest matrix indexing (setting)")
+
+
+mtx.loc[(0,0)] = 900
+mtx.loc[(0,1)] = 901
+mtx.loc[(0,2)] = 902
+
+mtx.loc[(1,0)] = 910
+mtx.loc[(1,1)] = 911
+mtx.loc[(1,2)] = 912
+
+mtx.loc[(2,0)] = 920
+mtx.loc[(2,1)] = 921
+mtx.loc[(2,2)] = 922
+
+print(mtx)
+
+try:
+	mtx.loc[(2,3)] = 922
+except IndexError as er:
+	print (er)
+
+
+try:
+	mtx.loc[(3,1)] = 922
+except IndexError as er:
+	print (er)
+
+
+print("\ntest adding angle to rotation mtx:")
+rotmtx = Matrix.rotate2d((0, 0), 0.5*math.pi)
+print("before:")
+print(rotmtx)
+
+add_rotation_to_mtx(rotmtx, 0.25*math.pi)
+print("after:")
+print(rotmtx)

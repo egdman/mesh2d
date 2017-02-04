@@ -42,7 +42,13 @@ class Select(Tool):
         # print("SELECT: left click")
         obj_ids = self.parent.canvas.find_overlapping(event.x, event.y, event.x, event.y)
         print (obj_ids)
-        print ("mouse at {}, {}".format(event.x, event.y))
+        print ("mouse at {}, {} on screen".format(event.x, event.y))
+
+        world_c = self.parent.get_world_crds(event.x, event.y)
+        screen_c = self.parent.get_screen_crds(world_c.x, world_c.y)
+
+        print ("mouse at {} in world".format(world_c))
+        print ("mouse at {} on screen again".format(screen_c))
 
         # x = float( self.canvas.canvasx(event.x) )
         # y = float( self.canvas.canvasy(event.y) )
@@ -53,6 +59,17 @@ class Select(Tool):
 
 
 class ObjectView(object):
+    root_tag = 'view'
+
+    @staticmethod
+    def get_open_crds(vertices, indices):
+        crds = []
+
+        for ind in indices:
+            crds.append(vertices[ind][0])
+            crds.append(vertices[ind][1])
+        return crds
+
 
     @staticmethod
     def get_closed_crds(vertices, indices):
@@ -68,7 +85,22 @@ class ObjectView(object):
 
     @staticmethod
     def apply_transform(transform, vertices):
-        return (transform.multiply(vert)[:-1] for vert in vertices)
+        return (transform.multiply(vert).values[:-1] for vert in vertices)
+
+
+
+class OriginView(ObjectView):
+    def __init__(self, size):
+        self.size = size
+
+    def draw_self(self, camera_transform, canvas):
+        sz = self.size
+        vrt = [Vector2(0, -sz),Vector2(0, sz),Vector2(-sz, 0),Vector2(sz, 0),]
+        trans_vrt = list(self.apply_transform(camera_transform, vrt))
+        crds = self.get_open_crds(trans_vrt, (0, 1))
+        canvas.create_line(crds, tags=ObjectView.root_tag, fill='#2f2f2f', width=1)
+        crds = self.get_open_crds(trans_vrt, (2, 3))
+        canvas.create_line(crds, tags=ObjectView.root_tag, fill='#2f2f2f', width=1)
 
 
 
@@ -88,17 +120,17 @@ class NavMeshView(ObjectView):
 
         # draw pieces
         for piece in self.navmesh.pieces:
-            piece_crds = self.get_closed_crds(trans_vertices, piece)
-            canvas.create_polygon(piece_crds, fill='#1A1A1A', activefill='#111111')
+            piece_crds = self.get_open_crds(trans_vertices, piece)
+            canvas.create_polygon(piece_crds, tags=ObjectView.root_tag, fill='#1A1A1A', activefill='#111111')
 
         # draw portals
         for portal in self.navmesh.portals:
-            portal_crds = self.get_closed_crds(trans_vertices, portal)
-            canvas.create_line(portal_crds, fill='red', width=1)
+            portal_crds = self.get_open_crds(trans_vertices, portal)
+            canvas.create_line(portal_crds, tags=ObjectView.root_tag, fill='red', width=1)
 
         # draw outline
         outline_crds = self.get_closed_crds(trans_vertices, self.navmesh.indices)
-        canvas.create_line(outline_crds, fill='#FFFFFF', width=1)
+        canvas.create_line(outline_crds, tags=ObjectView.root_tag, fill='#FFFFFF', width=1)
 
 
 
@@ -129,13 +161,21 @@ class Application(tk.Frame):
 
         self.object_views = []
 
+        self.camera_pos = Vector2(0,0)
+        self.camera_rot = 0.
+
+        self.object_views.append(OriginView(250))
+
+        self.draw_all()
+
 
 
     def createWidgets(self):
         self.canvas = tk.Canvas(self, background='#000000', width=1000, height=900,
-            scrollregion=(0, 0, 90000, 90000))
+            scrollregion=(0, 0, 1000, 900))
 
         self.canvas_center = Vector2(float(self.canvas['width']) / 2., float(self.canvas['height']) / 2.)
+
 
         # horiz scrollbar
         self.hbar = tk.Scrollbar(self, orient = tk.HORIZONTAL)
@@ -204,8 +244,6 @@ class Application(tk.Frame):
         self.saveToolBtn.pack()
 
 
-        # vertices = [(50, 50), (70, 70), (10, 100)]
-        # self.canvas.create_line(vertices, fill='#FFFFFF')
 
 
     def _save_last(self):
@@ -262,38 +300,26 @@ class Application(tk.Frame):
 
 
     def _mouse_moved(self, event):
-
+        world_pos = self.get_world_crds(event.x, event.y)
+        
         if self.pan_mode:
             delta_x = event.x - self.last_x
             delta_y = event.y - self.last_y
-            self.canvas.xview_scroll(-delta_x, 'units')
-            self.canvas.yview_scroll(-delta_y, 'units')
+
+            self.camera_pos += Vector2(delta_x, delta_y)
+
+            self.draw_all()
+
 
         if self.rotate_mode:
 
-            sangle = -Vector2.signed_angle(
+            sangle = Vector2.signed_angle(
                 Vector2(event.x, event.y) - self.canvas_center,
                 Vector2(self.last_x, self.last_y) - self.canvas_center
             )
 
-            for dot_id in self._dots_ids:
-                crds = self.canvas.coords(dot_id)
-
-                if len(crds) < 4: continue
-
-                old_pos = Vector2((crds[0] + crds[2])/2., (crds[1] + crds[3])/2.)
-
-                new_pos = Matrix.rotate2d(
-                    rotation_center = self.canvas_center,
-                    angle = sangle).multiply(old_pos)
-
-                    # Matrix((3,1), (old_pos.x, old_pos.y, 1.0)))
-
-                new_pos = Vector2(new_pos.values[0], new_pos.values[1])
-
-                dif = new_pos - old_pos
-                self.canvas.move(dot_id, dif.x, dif.y)
-
+            self.camera_rot -= sangle
+            self.draw_all()
 
         self.last_x = event.x
         self.last_y = event.y
@@ -309,16 +335,23 @@ class Application(tk.Frame):
 
     def _add_vertex(self, event):
         # reflect y to transform into right-hand coordinates
-        x = float( self.canvas.canvasx(event.x) )
-        y = float( self.canvas.canvasy(event.y) )
+        x = event.x
+        y = event.y
+        new_vrt = self.get_world_crds(event.x, event.y)
+        self._new_vertices.append(new_vrt)
 
-        self._new_vertices.append(Vector2(x, y))
         sz = self.dot_size
         
         if len(self._new_vertices) > 1:
             prev_x = self._new_vertices[-2].x
             prev_y = self._new_vertices[-2].y
-            self.canvas.create_line(x, y, prev_x, prev_y, fill='#A0A0A0')
+
+            prev_screen_pos = self.get_screen_crds(prev_x, prev_y)
+
+            prev_x = prev_screen_pos.x
+            prev_y = prev_screen_pos.y
+
+            self.canvas.create_line(x, y, prev_x, prev_y, tags=ObjectView.root_tag, fill='#A0A0A0')
 
         dot_id = self.canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='#FFFFFF')
         self._dots_ids.append(dot_id)
@@ -326,10 +359,52 @@ class Application(tk.Frame):
 
 
 
+    def get_world_crds(self, screen_x, screen_y):
+        screen_crds = Vector2(screen_x, screen_y)
+
+        # center becomes upper left corner
+        screen_crds -= self.canvas_center
+
+        # rotate
+        rmtx = Matrix.rotate2d((0,0), -self.camera_rot)
+        screen_crds = rmtx.multiply(screen_crds).values[:-1]        
+        # translate
+        return Vector2(
+            screen_crds[0] - self.camera_pos[0],
+            screen_crds[1] - self.camera_pos[1]
+        )
+
+
+
+    def get_screen_crds(self, world_x, world_y):
+        world_crds = Vector2(world_x, world_y)
+        camera_trans = (Matrix.rotate2d((0,0), self.camera_rot)
+            .multiply(
+                Matrix.translate2d((self.camera_pos))))
+
+        # move the center of coordinates to the center of the canvas:
+        camera_trans.loc[(0,2)] += self.canvas_center[0]
+        camera_trans.loc[(1,2)] += self.canvas_center[1]
+
+        screen_crds = camera_trans.multiply(world_crds).values
+        return Vector2(screen_crds[0], screen_crds[1])
+
+
+
 
     def draw_all(self):
+        self.canvas.delete(ObjectView.root_tag)
+
+        camera_trans = (Matrix.rotate2d((0,0), self.camera_rot)
+            .multiply(
+                Matrix.translate2d((self.camera_pos))))
+
+        # move the center of coordinates to the center of the canvas:
+        camera_trans.loc[(0,2)] += self.canvas_center[0]
+        camera_trans.loc[(1,2)] += self.canvas_center[1]
+
         for v in self.object_views:
-            v.draw_self(Matrix.identity(3), self.canvas)
+            v.draw_self(camera_trans, self.canvas)
 
 
 
@@ -391,14 +466,14 @@ class ProvideException(object):
             return self._func(*args)
 
         except Exception, e:
-            print 'Exception was thrown', str(e)
+            print('Exception was thrown: {}'.format(e))
             # Optionally raise your own exceptions, popups etc
 
 
 @ProvideException
 def main():
     app = Application()
-    app.master.title('Triangulation test')
+    app.master.title('Map editor')
     app.mainloop() 
 
 
