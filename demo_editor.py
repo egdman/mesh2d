@@ -300,13 +300,16 @@ class Application(tk.Frame):
 
 
     def _mouse_moved(self, event):
-        world_pos = self.get_world_crds(event.x, event.y)
         
         if self.pan_mode:
             delta_x = event.x - self.last_x
             delta_y = event.y - self.last_y
 
-            self.camera_pos += Vector2(delta_x, delta_y)
+            # rotate delta:
+            delta = Matrix.rotate2d((0,0), -self.camera_rot).multiply(
+                Vector2(delta_x, delta_y)).values
+
+            self.camera_pos += Vector2(delta[0], delta[1])
 
             self.draw_all()
 
