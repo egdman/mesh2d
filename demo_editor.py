@@ -42,13 +42,12 @@ class Select(Tool):
         # print("SELECT: left click")
         obj_ids = self.parent.canvas.find_overlapping(event.x, event.y, event.x, event.y)
         print (obj_ids)
-        print ("mouse at {}, {} on screen".format(event.x, event.y))
 
         world_c = self.parent.get_world_crds(event.x, event.y)
         screen_c = self.parent.get_screen_crds(world_c.x, world_c.y)
 
         print ("mouse at {} in world".format(world_c))
-        print ("mouse at {} on screen again".format(screen_c))
+        print ("mouse at {} on screen".format(screen_c))
 
         # x = float( self.canvas.canvasx(event.x) )
         # y = float( self.canvas.canvasy(event.y) )
@@ -59,7 +58,63 @@ class Select(Tool):
 
 
 class ObjectView(object):
-    root_tag = 'view'
+    def __init__(self, tags=None):
+        self.crd_buf = []
+        self.element_ids = []
+
+        if tags is not None:
+            self.tags = tags
+        else:
+            self.tags = []
+
+
+
+    def draw_self(self, camera_transform, canvas):
+        if len(self.crd_buf) == 0:
+            self.first_time_draw(canvas)
+
+            # remember coordinate buffer
+            for eid in self.element_ids:
+                self.crd_buf.extend(canvas.coords(eid))
+
+            print("new object with {} coordinates created".format(len(self.crd_buf)))
+
+        self.redraw(camera_transform, canvas)
+
+
+
+    def first_time_draw(self, canvas):
+        '''
+        first time draw (add elements to canvas)
+        '''
+        raise NotImplementedError("Implement method 'first_time_draw' in your subclass")
+
+
+
+    def redraw(self, camera_transform, canvas):
+        obj_view = camera_transform
+            
+        obj_vertices = []
+        for idx in range(len(self.crd_buf)/2):
+            x = self.crd_buf[2*idx]
+            y = self.crd_buf[2*idx+1]
+            obj_vertices.append(Vector2(x, y))
+
+        screen_vertices = list(self.apply_transform(obj_view, obj_vertices))
+
+        screen_vert_buf = []
+        for screen_v in screen_vertices:
+            screen_vert_buf.append(screen_v[0])
+            screen_vert_buf.append(screen_v[1])
+
+        notch = 0
+        for eid in self.element_ids:
+            num_crds = len(canvas.coords(eid))
+            new_crds = screen_vert_buf[notch:notch+num_crds]
+            canvas.coords(eid, *new_crds)
+            notch += num_crds
+
+
 
     @staticmethod
     def get_open_crds(vertices, indices):
@@ -89,50 +144,72 @@ class ObjectView(object):
 
 
 
-class OriginView(ObjectView):
-    def __init__(self, size):
-        self.size = size
 
-    def draw_self(self, camera_transform, canvas):
+
+class OriginView(ObjectView):
+    def __init__(self, size, tags=None, loc=None, color='#2f2f2f'):
+        self.size = size
+        self.color = color
+        self.loc = loc if loc is not None else Vector2(0, 0)
+
+        self.down = Vector2(0, self.size)
+        self.right = Vector2(self.size, 0)
+
+        super(OriginView, self).__init__(tags)
+
+
+
+
+    def first_time_draw(self, canvas):
+        self.element_ids = []
         sz = self.size
-        vrt = [Vector2(0, -sz),Vector2(0, sz),Vector2(-sz, 0),Vector2(sz, 0),]
-        trans_vrt = list(self.apply_transform(camera_transform, vrt))
-        crds = self.get_open_crds(trans_vrt, (0, 1))
-        canvas.create_line(crds, tags=ObjectView.root_tag, fill='#2f2f2f', width=1)
-        crds = self.get_open_crds(trans_vrt, (2, 3))
-        canvas.create_line(crds, tags=ObjectView.root_tag, fill='#2f2f2f', width=1)
+
+        vrt = [self.loc - self.down, self.loc + self.down, self.loc - self.right, self.loc + self.right]
+        # vrt = [Vector2(0, -sz),Vector2(0, sz),Vector2(-sz, 0),Vector2(sz, 0),]
+        # trans_vrt = list(self.apply_transform(camera_transform, vrt))
+        crds = self.get_open_crds(vrt, (0, 1))
+        id1 = canvas.create_line(crds, tags=self.tags, fill=self.color, width=1)
+        crds = self.get_open_crds(vrt, (2, 3))
+        id2 = canvas.create_line(crds, tags=self.tags, fill=self.color, width=1)
+        self.element_ids.append(id1)
+        self.element_ids.append(id2)
 
 
 
 class NavMeshView(ObjectView):
 
-    def __init__(self, navmesh):
+    def __init__(self, navmesh, tags=None):
         rnd = lambda: random.randint(0,255)
         self.color = '#%02X%02X%02X' % (rnd(),rnd(),rnd())
         self.navmesh = navmesh
         self.obj_trans = Matrix.identity(3)
 
+        super(NavMeshView, self).__init__(tags)
 
-    def draw_self(self, camera_transform, canvas):
-        obj_view = camera_transform.multiply(self.obj_trans)
 
-        trans_vertices = list(self.apply_transform(obj_view, self.navmesh.vertices))
+
+    def first_time_draw(self, canvas):
+
+        trans_vertices = self.navmesh.vertices
 
         # draw pieces
         for piece in self.navmesh.pieces:
             piece_crds = self.get_open_crds(trans_vertices, piece)
-            canvas.create_polygon(piece_crds, tags=ObjectView.root_tag, fill='#1A1A1A', activefill='#111111')
+            Id = canvas.create_polygon(piece_crds, tags=self.tags, fill='#1A1A1A', activefill='#111111')
+            self.element_ids.append(Id)
 
         # draw portals
         for portal in self.navmesh.portals:
             portal_crds = self.get_open_crds(trans_vertices, portal)
-            canvas.create_line(portal_crds, tags=ObjectView.root_tag, fill='red', width=1)
+            Id = canvas.create_line(portal_crds, tags=self.tags, fill='red', width=1)
+            self.element_ids.append(Id)
 
         # draw outline
         outline_crds = self.get_closed_crds(trans_vertices, self.navmesh.indices)
-        canvas.create_line(outline_crds, tags=ObjectView.root_tag, fill='#FFFFFF', width=1)
+        Id = canvas.create_line(outline_crds, tags=self.tags, fill='#FFFFFF', width=1)
+        self.element_ids.append(Id)
 
-
+                
 
 
 class Application(tk.Frame):
@@ -145,6 +222,13 @@ class Application(tk.Frame):
         self._polygons = []
         self._dots_ids = []
         self.dot_size = 3
+
+
+        # canvas object tags
+        self.root_tag = 'root'
+        self.camera_ui_tag = 'camera_ui'
+
+
 
         self.select_tool = Select(self)
         self.create_tool = Create(self)
@@ -164,17 +248,26 @@ class Application(tk.Frame):
         self.last_x = 0
         self.last_y = 0
 
-        # objects that draw themselves on canvas
+        # views that represent content objects
         self.object_views = []
+
+        # views that represent helper objects
+        self.helper_object_views = []
+
+        # views that represent camera UI
+        self.camera_pan_marker = None
+        self.camera_rotate_marker = None
+        self.camera_zoom_marker = None
+
 
         # innfo about camera position
         self.camera_pos = Vector2(0,0)
         self.camera_rot = 0.
         self.camera_target = Vector2(0,0)
+        self.camera_zoom = 1.
 
-        self.object_views.append(OriginView(250))
+        self.helper_object_views.append(OriginView(250, tags=self.root_tag))
 
-        self.camera_ui_tag = 'camera_ui'
 
         self.draw_all()
 
@@ -281,7 +374,8 @@ class Application(tk.Frame):
 
     def _left_up(self, event):
         self.pan_mode = False
-        self.canvas.delete(self.camera_ui_tag)
+        self.camera_pan_marker = None
+        self.canvas.delete('pan_marker')
         
         mods = self._get_event_modifiers(event)
 
@@ -292,7 +386,9 @@ class Application(tk.Frame):
 
     def _right_up(self, event):
         self.rotate_mode = False
-        self.canvas.delete(self.camera_ui_tag)
+
+        self.camera_rotate_marker = None
+        self.canvas.delete('rotate_marker')
 
         mods = self._get_event_modifiers(event)
 
@@ -308,9 +404,29 @@ class Application(tk.Frame):
         self.camera_target = self.get_world_crds(
             self.canvas_center.x, self.canvas_center.y)
 
+        self.camera_pan_marker = (
+            OriginView(15,
+                loc=self.camera_target,
+                tags=(self.root_tag, self.camera_ui_tag, 'pan_marker'),
+                color='yellow'
+            )
+        )
+
+
 
     def _ctrl_right_down(self, event):
         self.rotate_mode = True
+        # remember world crds of the screen center before panning
+        self.camera_target = self.get_world_crds(
+            self.canvas_center.x, self.canvas_center.y)
+
+        self.camera_rotate_marker = (
+            OriginView(15,
+                loc=self.camera_target,
+                tags=(self.root_tag, self.camera_ui_tag, 'rotate_marker'),
+                color='red'
+            )
+        )
 
 
 
@@ -318,19 +434,6 @@ class Application(tk.Frame):
         
         # draw camera UI only when in camera control mode:
         if self.rotate_mode or self.pan_mode or self.zoom_mode:
-            self.canvas.delete(self.camera_ui_tag)
-            cam_target_crds = self.get_screen_crds(
-                self.camera_target.x, self.camera_target.y)
-            sz = 3
-            self.canvas.create_oval(
-                cam_target_crds.x - sz,
-                cam_target_crds.y - sz,
-
-                cam_target_crds.x + sz,
-                cam_target_crds.y + sz,
-                tags = self.camera_ui_tag,
-                fill='yellow')
-
 
             if self.pan_mode:
                 delta_x = event.x - self.last_x
@@ -341,8 +444,6 @@ class Application(tk.Frame):
                     Vector2(delta_x, delta_y)).values
 
                 self.camera_pos += Vector2(delta[0], delta[1])
-
-                self.draw_all()
 
 
             elif self.rotate_mode:
@@ -356,7 +457,6 @@ class Application(tk.Frame):
 
                 self.camera_target = self.get_world_crds(
                     self.canvas_center.x, self.canvas_center.y)
-
 
             self.draw_all()
 
@@ -392,7 +492,7 @@ class Application(tk.Frame):
             prev_x = prev_screen_pos.x
             prev_y = prev_screen_pos.y
 
-            self.canvas.create_line(x, y, prev_x, prev_y, tags=ObjectView.root_tag, fill='#A0A0A0')
+            self.canvas.create_line(x, y, prev_x, prev_y, tags=self.root_tag, fill='#A0A0A0')
 
         dot_id = self.canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='#FFFFFF')
         self._dots_ids.append(dot_id)
@@ -434,7 +534,7 @@ class Application(tk.Frame):
 
 
     def draw_all(self):
-        self.canvas.delete(ObjectView.root_tag)
+        # self.canvas.delete(self.root_tag)
 
         camera_trans = (Matrix.rotate2d((0,0), self.camera_rot)
             .multiply(
@@ -444,9 +544,22 @@ class Application(tk.Frame):
         camera_trans.loc[(0,2)] += self.canvas_center[0]
         camera_trans.loc[(1,2)] += self.canvas_center[1]
 
+
         for v in self.object_views:
             v.draw_self(camera_trans, self.canvas)
 
+        for v in self.helper_object_views:
+            v.draw_self(camera_trans, self.canvas)            
+
+        # for v in self.camera_ui_views:
+        if self.camera_pan_marker is not None:
+            self.camera_pan_marker.draw_self(camera_trans, self.canvas)
+
+        if self.camera_rotate_marker is not None:
+            self.camera_rotate_marker.draw_self(camera_trans, self.canvas)
+
+        if self.camera_zoom_marker is not None:
+            self.camera_zoom_marker.draw_self(camera_trans, self.canvas)
 
 
 
@@ -485,7 +598,7 @@ class Application(tk.Frame):
 
 
         self._polygons.append(new_poly)
-        self.object_views.append(NavMeshView(new_poly))
+        self.object_views.append(NavMeshView(new_poly, tags=self.root_tag))
 
         self.active_tool = self.select_tool
 
