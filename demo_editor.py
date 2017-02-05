@@ -154,17 +154,27 @@ class Application(tk.Frame):
         self.active_tool = self.create_tool
 
         self.last_created_poly = None
+
+        # camera control modes
         self.pan_mode = False
         self.rotate_mode = False
+        self.zoom_mode = False
+
+        # last coordinates of mouse pointer
         self.last_x = 0
         self.last_y = 0
 
+        # objects that draw themselves on canvas
         self.object_views = []
 
+        # innfo about camera position
         self.camera_pos = Vector2(0,0)
         self.camera_rot = 0.
+        self.camera_target = Vector2(0,0)
 
         self.object_views.append(OriginView(250))
+
+        self.camera_ui_tag = 'camera_ui'
 
         self.draw_all()
 
@@ -271,6 +281,7 @@ class Application(tk.Frame):
 
     def _left_up(self, event):
         self.pan_mode = False
+        self.canvas.delete(self.camera_ui_tag)
         
         mods = self._get_event_modifiers(event)
 
@@ -281,6 +292,7 @@ class Application(tk.Frame):
 
     def _right_up(self, event):
         self.rotate_mode = False
+        self.canvas.delete(self.camera_ui_tag)
 
         mods = self._get_event_modifiers(event)
 
@@ -292,6 +304,9 @@ class Application(tk.Frame):
 
     def _ctrl_left_down(self, event):
         self.pan_mode = True
+        # remember world crds of the screen center before panning
+        self.camera_target = self.get_world_crds(
+            self.canvas_center.x, self.canvas_center.y)
 
 
     def _ctrl_right_down(self, event):
@@ -301,31 +316,54 @@ class Application(tk.Frame):
 
     def _mouse_moved(self, event):
         
-        if self.pan_mode:
-            delta_x = event.x - self.last_x
-            delta_y = event.y - self.last_y
+        # draw camera UI only when in camera control mode:
+        if self.rotate_mode or self.pan_mode or self.zoom_mode:
+            self.canvas.delete(self.camera_ui_tag)
+            cam_target_crds = self.get_screen_crds(
+                self.camera_target.x, self.camera_target.y)
+            sz = 3
+            self.canvas.create_oval(
+                cam_target_crds.x - sz,
+                cam_target_crds.y - sz,
 
-            # rotate delta:
-            delta = Matrix.rotate2d((0,0), -self.camera_rot).multiply(
-                Vector2(delta_x, delta_y)).values
+                cam_target_crds.x + sz,
+                cam_target_crds.y + sz,
+                tags = self.camera_ui_tag,
+                fill='yellow')
 
-            self.camera_pos += Vector2(delta[0], delta[1])
+
+            if self.pan_mode:
+                delta_x = event.x - self.last_x
+                delta_y = event.y - self.last_y
+
+                # rotate delta:
+                delta = Matrix.rotate2d((0,0), -self.camera_rot).multiply(
+                    Vector2(delta_x, delta_y)).values
+
+                self.camera_pos += Vector2(delta[0], delta[1])
+
+                self.draw_all()
+
+
+            elif self.rotate_mode:
+                delta_x = event.x - self.last_x
+
+                angle = 0.005*delta_x
+
+                if event.y < self.canvas_center.y: angle*= -1
+
+                self.camera_rot -= angle
+
+                self.camera_target = self.get_world_crds(
+                    self.canvas_center.x, self.canvas_center.y)
+
 
             self.draw_all()
 
-
-        if self.rotate_mode:
-
-            sangle = Vector2.signed_angle(
-                Vector2(event.x, event.y) - self.canvas_center,
-                Vector2(self.last_x, self.last_y) - self.canvas_center
-            )
-
-            self.camera_rot -= sangle
-            self.draw_all()
 
         self.last_x = event.x
         self.last_y = event.y
+
 
 
 
