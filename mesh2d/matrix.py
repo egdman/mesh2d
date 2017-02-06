@@ -30,9 +30,9 @@ class Matrix(object):
     def __init__(self, shape, values):
         self.values = list(float(v) for v in values)
 
-        self.shape = shape
+        self.shape = (shape[0], shape[1])
 
-        num_values = shape[0]*shape[1]
+        num_values = self.shape[0]*self.shape[1]
 
         self.loc = MatrixIndexer(self)
 
@@ -41,6 +41,23 @@ class Matrix(object):
 
         if len(self.values) < num_values:
             raise ValueError("Matrix: too few values for shape {}".format(shape))
+
+
+
+    def __hash__(self):
+        key = ( self.shape, tuple(self.values) )
+        return hash(key)
+
+
+
+    def __eq__(self, right):
+        return self.shape == right.shape and self.values == right.values
+
+
+
+    def __ne__(self, right):
+        return not self.__eq__(right)
+
 
 
     def row(self, row_num):

@@ -80,6 +80,11 @@ class Vector2:
         return self.x != right_operand.x or self.y != right_operand.y
 
 
+    # for hashing support
+    def __hash__(self):
+        return hash((self.x, self.y))
+
+
 
     def length(self):
         return math.sqrt(self.dot_product(self))

@@ -46,6 +46,7 @@ class Select(Tool):
         world_c = self.parent.get_world_crds(event.x, event.y)
         screen_c = self.parent.get_screen_crds(world_c.x, world_c.y)
 
+        print ("mouse at {}, {} from event".format(event.x, event.y))
         print ("mouse at {} in world".format(world_c))
         print ("mouse at {} on screen".format(screen_c))
 
@@ -144,6 +145,63 @@ class ObjectView(object):
 
 
 
+class PointHelperView(ObjectView):
+    def __init__(self, loc, color='#ffffff', tags=None):
+        self.loc = loc
+        self.color = color
+        super(PointHelperView, self).__init__(tags)
+
+
+
+    def first_time_draw(self, canvas):
+        sz = 3
+        Id = canvas.create_polygon(
+            (
+                self.loc[0] - sz,
+                self.loc[1] - sz,
+
+                self.loc[0] + sz,
+                self.loc[1] - sz,
+
+                self.loc[0] + sz,
+                self.loc[1] + sz,
+
+                self.loc[0] - sz,
+                self.loc[1] + sz,
+            ),
+
+            fill = self.color,
+            tags = self.tags
+        )
+        self.element_ids.append(Id)
+
+
+
+class SegmentHelperView(ObjectView):
+    def __init__(self, vert1, vert2, color='#ffffff', width=1, tags=None):
+        self.v1 = vert1
+        self.v2 = vert2
+        self.width = width
+
+        self.color = color
+        super(SegmentHelperView, self).__init__(tags)
+
+
+
+    def first_time_draw(self, canvas):
+        Id = canvas.create_line(
+                (
+                    self.v1[0], self.v1[1],
+                    self.v2[0], self.v2[1]
+                ),
+                fill = self.color,
+                width=self.width,
+                tags = self.tags
+        )
+        self.element_ids.append(Id)
+
+
+
 
 
 class OriginView(ObjectView):
@@ -161,7 +219,6 @@ class OriginView(ObjectView):
 
 
     def first_time_draw(self, canvas):
-        self.element_ids = []
         sz = self.size
 
         vrt = [self.loc - self.down, self.loc + self.down, self.loc - self.right, self.loc + self.right]
@@ -173,6 +230,7 @@ class OriginView(ObjectView):
         id2 = canvas.create_line(crds, tags=self.tags, fill=self.color, width=1)
         self.element_ids.append(id1)
         self.element_ids.append(id2)
+
 
 
 
@@ -227,13 +285,14 @@ class Application(tk.Frame):
         # canvas object tags
         self.root_tag = 'root'
         self.camera_ui_tag = 'camera_ui'
+        self.obj_creation_helper_tag = 'obj_creation_helper'
 
 
 
         self.select_tool = Select(self)
         self.create_tool = Create(self)
         # ......
-        #.......
+        # ......
 
         self.active_tool = self.create_tool
 
@@ -259,8 +318,9 @@ class Application(tk.Frame):
         self.camera_rotate_marker = None
         self.camera_zoom_marker = None
 
+        self.draw_objects = {}
 
-        # innfo about camera position
+        # info about camera position
         self.camera_pos = Vector2(0,0)
         self.camera_rot = 0.
         self.camera_target = Vector2(0,0)
@@ -348,6 +408,10 @@ class Application(tk.Frame):
 
 
 
+    def add_draw_object(self, name, draw_obj):
+        self.draw_objects[name] = draw_obj
+
+
 
     def _save_last(self):
         with open("saved_poly.yaml", 'w') as savef:
@@ -386,7 +450,6 @@ class Application(tk.Frame):
 
     def _right_up(self, event):
         self.rotate_mode = False
-
         self.camera_rotate_marker = None
         self.canvas.delete('rotate_marker')
 
@@ -404,9 +467,12 @@ class Application(tk.Frame):
         self.camera_target = self.get_world_crds(
             self.canvas_center.x, self.canvas_center.y)
 
+        pointer_world_crds = self.get_world_crds(
+            event.x, event.y)
+
         self.camera_pan_marker = (
             OriginView(15,
-                loc=self.camera_target,
+                loc=pointer_world_crds,
                 tags=(self.root_tag, self.camera_ui_tag, 'pan_marker'),
                 color='yellow'
             )
@@ -439,7 +505,7 @@ class Application(tk.Frame):
                 delta_x = event.x - self.last_x
                 delta_y = event.y - self.last_y
 
-                # rotate delta:
+                # rotate delta to get correct pan direction:
                 delta = Matrix.rotate2d((0,0), -self.camera_rot).multiply(
                     Vector2(delta_x, delta_y)).values
 
@@ -449,9 +515,9 @@ class Application(tk.Frame):
             elif self.rotate_mode:
                 delta_x = event.x - self.last_x
 
-                angle = 0.005*delta_x
+                angle = 0.008*delta_x
 
-                if event.y < self.canvas_center.y: angle*= -1
+                # if event.y < self.canvas_center.y: angle*= -1
 
                 self.camera_rot -= angle
 
@@ -468,10 +534,14 @@ class Application(tk.Frame):
 
 
     def _mousewheel_up(self, event):
-        self.canvas.yview_scroll(-1, "units")
+        self.camera_zoom *= 1.04
+        # self.draw_all()
+        # pass
 
     def _mousewheel_down(self, event):
-        self.canvas.yview_scroll(1, "units")
+        self.camera_zoom /= 1.04
+        # self.draw_all()
+        # pass
 
 
     def _add_vertex(self, event):
@@ -481,23 +551,22 @@ class Application(tk.Frame):
         new_vrt = self.get_world_crds(event.x, event.y)
         self._new_vertices.append(new_vrt)
 
-        sz = self.dot_size
+        self.helper_object_views.append(PointHelperView(loc=new_vrt,
+            tags=(self.root_tag, self.obj_creation_helper_tag)))
+
+        # sz = self.dot_size
         
         if len(self._new_vertices) > 1:
-            prev_x = self._new_vertices[-2].x
-            prev_y = self._new_vertices[-2].y
+            prev_v = self._new_vertices[-2]
+            self.helper_object_views.append(
+                SegmentHelperView(
+                        prev_v, new_vrt,
+                        tags=(self.root_tag, self.obj_creation_helper_tag)
+                    )
+                )
 
-            prev_screen_pos = self.get_screen_crds(prev_x, prev_y)
-
-            prev_x = prev_screen_pos.x
-            prev_y = prev_screen_pos.y
-
-            self.canvas.create_line(x, y, prev_x, prev_y, tags=self.root_tag, fill='#A0A0A0')
-
-        dot_id = self.canvas.create_oval(x - sz, y - sz, x + sz, y + sz, fill='#FFFFFF')
-        self._dots_ids.append(dot_id)
-
-
+        self.draw_all()
+       
 
 
     def get_world_crds(self, screen_x, screen_y):
@@ -506,22 +575,32 @@ class Application(tk.Frame):
         # center becomes upper left corner
         screen_crds -= self.canvas_center
 
-        # rotate
+        # zoom TODO
+
+        # then rotate
         rmtx = Matrix.rotate2d((0,0), -self.camera_rot)
-        screen_crds = rmtx.multiply(screen_crds).values[:-1]        
-        # translate
-        return Vector2(
+        screen_crds = rmtx.multiply(screen_crds).values
+        # then translate
+        world_crds = Vector2(
             screen_crds[0] - self.camera_pos[0],
             screen_crds[1] - self.camera_pos[1]
         )
+        
+        return Vector2(world_crds[0], world_crds[1])
 
 
 
     def get_screen_crds(self, world_x, world_y):
         world_crds = Vector2(world_x, world_y)
+
+        # translate then rotate
         camera_trans = (Matrix.rotate2d((0,0), self.camera_rot)
             .multiply(
                 Matrix.translate2d((self.camera_pos))))
+
+        # # then unzoom
+        # camera_trans = (Matrix.scale2d((0, 0), (self.camera_zoom, self.camera_zoom))
+        #     .multiply(camera_trans))
 
         # move the center of coordinates to the center of the canvas:
         camera_trans.loc[(0,2)] += self.canvas_center[0]
@@ -532,7 +611,6 @@ class Application(tk.Frame):
 
 
 
-
     def draw_all(self):
         # self.canvas.delete(self.root_tag)
 
@@ -540,31 +618,41 @@ class Application(tk.Frame):
             .multiply(
                 Matrix.translate2d((self.camera_pos))))
 
+        # camera_trans = (Matrix.scale2d((0, 0), (self.camera_zoom, self.camera_zoom))
+        #     .multiply(camera_trans))
+
         # move the center of coordinates to the center of the canvas:
         camera_trans.loc[(0,2)] += self.canvas_center[0]
         camera_trans.loc[(1,2)] += self.canvas_center[1]
 
+        for obj_name in self.draw_objects:
+            draw_objects[obj_name].draw_self(camera_trans, self.canvas)
 
-        for v in self.object_views:
-            v.draw_self(camera_trans, self.canvas)
 
-        for v in self.helper_object_views:
-            v.draw_self(camera_trans, self.canvas)            
+        # for v in self.object_views:
+        #     v.draw_self(camera_trans, self.canvas)
 
-        # for v in self.camera_ui_views:
-        if self.camera_pan_marker is not None:
-            self.camera_pan_marker.draw_self(camera_trans, self.canvas)
+        # for v in self.helper_object_views:
+        #     v.draw_self(camera_trans, self.canvas)            
 
-        if self.camera_rotate_marker is not None:
-            self.camera_rotate_marker.draw_self(camera_trans, self.canvas)
+        # # for v in self.camera_ui_views:
+        # if self.camera_pan_marker is not None:
+        #     self.camera_pan_marker.draw_self(camera_trans, self.canvas)
 
-        if self.camera_zoom_marker is not None:
-            self.camera_zoom_marker.draw_self(camera_trans, self.canvas)
+        # if self.camera_rotate_marker is not None:
+        #     self.camera_rotate_marker.draw_self(camera_trans, self.canvas)
+
+        # if self.camera_zoom_marker is not None:
+        #     self.camera_zoom_marker.draw_self(camera_trans, self.canvas)
+
 
 
 
     def _add_polygon(self, event):
         if len(self._new_vertices) < 3: return
+
+        # del self.helper_object_views[:]
+        self.canvas.delete(self.obj_creation_helper_tag)
 
         threshold = 10.0 # degrees
         new_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
