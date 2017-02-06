@@ -11,6 +11,7 @@ class Vector2:
     def __init__(self, x, y):
         self.x = float(x)
         self.y = float(y)
+        # this is for multiplication with a Matrix
         self.shape = (3, 1)
 
 
@@ -26,7 +27,7 @@ class Vector2:
         if key == 2:
             return 1.0
         else:
-            raise KeyError(key)
+            raise IndexError(key)
 
 
     # Matrix interface
@@ -43,7 +44,8 @@ class Vector2:
 
 
     def __iter__(self):
-        return iter([self.x, self.y])
+        return iter((self.x, self.y))
+
 
     def __str__(self):
         return "{0},{1}".format(self.x, self.y)
