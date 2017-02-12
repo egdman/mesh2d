@@ -319,8 +319,7 @@ class Application(tk.Frame):
         self.camera_pos = Vector2(0,0)
         self.camera_rot = 0.
         self.camera_size = 1.
-
-        self.camera_target = Vector2(0,0)
+        self.rot_marker_world = Vector2(0, 0)
 
         # draw big cross marker at the world coordinate origin
         self.add_draw_object(
@@ -479,13 +478,8 @@ class Application(tk.Frame):
 
     def _ctrl_left_down(self, event):
         self.pan_mode = True
-        # remember world crds of the screen center before panning
-        self.camera_target = self.get_world_crds(
-            self.canvas_center.x, self.canvas_center.y)
-
         pointer_world_crds = self.get_world_crds(
             event.x, event.y)
-
 
         self.add_draw_object(
             'pan_marker',
@@ -496,14 +490,12 @@ class Application(tk.Frame):
 
     def _ctrl_right_down(self, event):
         self.rotate_mode = True
-        # remember world crds of the screen center before panning
-        self.camera_target = self.get_world_crds(
-            self.canvas_center.x, self.canvas_center.y)
+        # remember world crds of the marker so that we can rotate camera around it
+        self.rot_marker_world = self.get_world_crds(event.x, event.y)
 
-    
         self.add_draw_object(
             'rotate_marker',
-            OriginView(15, loc=self.camera_target, color='red')
+            OriginView(15, loc=self.rot_marker_world, color='red')
         )
 
 
@@ -528,17 +520,16 @@ class Application(tk.Frame):
 
 
             elif self.rotate_mode:
-                # TODO rotate around mouse pointer rather that screen center
                 delta_x = event.x - self.last_x
-
                 angle = 0.008*delta_x
-
-                # if event.y < self.canvas_center.y: angle*= -1
 
                 self.camera_rot += angle
 
-                self.camera_target = self.get_world_crds(
-                    self.canvas_center.x, self.canvas_center.y)
+                # make camera rotate around the marker rather than screen center
+                rot_center_world = Vector2(self.rot_marker_world.x, self.rot_marker_world.y)
+                rot_mtx = Matrix.rotate2d(rot_center_world, angle)
+                camera_new_pos = rot_mtx.multiply(self.camera_pos).values
+                self.camera_pos = Vector2(camera_new_pos[0], camera_new_pos[1])
 
             self.draw_all()
 
