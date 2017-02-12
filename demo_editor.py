@@ -321,6 +321,8 @@ class Application(tk.Frame):
         self.camera_size = 1.
         self.rot_marker_world = Vector2(0, 0)
 
+        self.zoom_rate = 1.04
+
         # draw big cross marker at the world coordinate origin
         self.add_draw_object(
             'origin_marker',
@@ -338,23 +340,18 @@ class Application(tk.Frame):
         self.canvas_center = Vector2(float(self.canvas['width']) / 2., float(self.canvas['height']) / 2.)
 
 
-        # # horiz scrollbar
-        # self.hbar = tk.Scrollbar(self, orient = tk.HORIZONTAL)
-        # self.hbar.config(command = self.canvas.xview)
+        # pack root window into OS window and make it fill the entire window
+        self.pack(side = tk.LEFT, expand = True, fill = tk.BOTH)
 
-        # # vert scrollbar
-        # self.vbar = tk.Scrollbar(self, orient = tk.VERTICAL)
-        # self.vbar.config(command = self.canvas.yview)
+        self.canvas.config(xscrollincrement=1, yscrollincrement=1)
 
-        self.canvas.config(
-            # xscrollcommand = self.hbar.set, yscrollcommand=self.vbar.set,
-            xscrollincrement=1, yscrollincrement=1)
 
+        # bind right and left mouse clicks
         self.canvas.bind('<ButtonRelease-1>', self._left_up)
         self.canvas.bind('<ButtonRelease-3>', self._right_up)
 
 
-        # camera controls
+        # bind camera controls
         self.canvas.bind('<Control-Button-1>', self._ctrl_left_down)
         self.canvas.bind('<Control-Button-3>', self._ctrl_right_down)
         self.canvas.bind('<Motion>', self._mouse_moved)
@@ -365,15 +362,12 @@ class Application(tk.Frame):
         self.canvas.bind('<Button-5>', self._mousewheel_down)
 
 
-        # self.hbar.pack(side = tk.BOTTOM, fill = tk.X)
-        # self.vbar.pack(side = tk.RIGHT, fill = tk.Y)
-        self.canvas.pack(side = tk.LEFT, expand = True, fill = tk.BOTH)
+        self.canvas.pack(side = tk.RIGHT, expand = True, fill = tk.BOTH)
 
 
         # butens
-        self.quitButton = tk.Button(self, text='Quit', command=self.quit)
-        self.quitButton.pack()
-
+        # self.quitButton = tk.Button(self, text='Quit', command=self.quit)
+        # self.quitButton.pack()
 
         self.selectToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'select.gif'))
         self.selectToolBtn = tk.Button(
@@ -539,19 +533,32 @@ class Application(tk.Frame):
 
 
 
-    # TODO scale relative to mouse pointer rather than screen center
     def _mousewheel_up(self, event):
-        self.camera_size /= 1.04
+        rate = 1./self.zoom_rate
+        self.camera_size *= rate
+
+        scale_cntr_world = self.get_world_crds(event.x, event.y)
+        camera_new_pos = (
+            Matrix.scale2d(scale_cntr_world, (rate, rate))
+            .multiply(self.camera_pos).values
+        )
+        self.camera_pos = Vector2(camera_new_pos[0], camera_new_pos[1])
+
         self.draw_all()
-        # pass
 
 
-    # TODO scale relative to mouse pointer rather than screen center
     def _mousewheel_down(self, event):
-        self.camera_size *= 1.04
+        rate = self.zoom_rate
+        self.camera_size *= rate
+
+        scale_cntr_world = self.get_world_crds(event.x, event.y)
+        camera_new_pos = (
+            Matrix.scale2d(scale_cntr_world, (rate, rate))
+            .multiply(self.camera_pos).values
+        )
+        self.camera_pos = Vector2(camera_new_pos[0], camera_new_pos[1])
+
         self.draw_all()
-        # pass
-     
 
 
 
@@ -570,6 +577,7 @@ class Application(tk.Frame):
 
         # un-zoom
         zoom_mtx = Matrix.scale2d((0,0), (1./self.camera_size, 1./self.camera_size))
+        # zoom_mtx = Matrix.identity(3)
 
         offset_mtx = Matrix.translate2d(self.canvas_center)
 
@@ -591,6 +599,7 @@ class Application(tk.Frame):
 
         # zoom
         zoom_mtx = Matrix.scale2d((0,0), (self.camera_size, self.camera_size))
+        # zoom_mtx = Matrix.identity(3)
 
         # rotate
         rot_mtx = Matrix.rotate2d((0,0), self.camera_rot)
@@ -604,7 +613,6 @@ class Application(tk.Frame):
 
 
     def get_world_crds(self, screen_x, screen_y):
-
         screen_crds = Vector2(screen_x, screen_y)
         world_crds = self.get_screen_to_world_mtx().multiply(screen_crds).values
         return Vector2(world_crds[0], world_crds[1])
@@ -612,7 +620,6 @@ class Application(tk.Frame):
 
 
     def get_screen_crds(self, world_x, world_y):
-
         world_crds = Vector2(world_x, world_y)
         screen_crds = self.get_world_to_screen_mtx().multiply(world_crds).values
         return Vector2(screen_crds[0], screen_crds[1])
