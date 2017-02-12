@@ -2,6 +2,7 @@ import os
 from mesh2d import *
 import random
 import yaml
+import fnmatch
 
 import Tkinter as tk
 
@@ -83,12 +84,18 @@ class ObjectView(object):
         self.redraw(camera_transform, canvas)
 
 
-
     def first_time_draw(self, canvas):
         '''
         first time draw (add elements to canvas)
         '''
         raise NotImplementedError("Implement method 'first_time_draw' in your subclass")
+
+
+    def cleanup(self, canvas):
+        print ("cleaning up...")
+        for eid in self.element_ids:
+            canvas.delete(eid)
+
 
 
 
@@ -326,8 +333,11 @@ class Application(tk.Frame):
         self.camera_target = Vector2(0,0)
         self.camera_zoom = 1.
 
-        self.helper_object_views.append(OriginView(250, tags=self.root_tag))
-
+        # self.helper_object_views.append(OriginView(250, tags=self.root_tag))
+        self.add_draw_object(
+            'origin_marker',
+            OriginView(250)
+        )
 
         self.draw_all()
 
@@ -409,7 +419,26 @@ class Application(tk.Frame):
 
 
     def add_draw_object(self, name, draw_obj):
+        print("adding draw object \'{}\'".format(name))
         self.draw_objects[name] = draw_obj
+
+
+
+    def remove_draw_object(self, name):
+        try:
+            self.draw_objects[name].cleanup(self.canvas)
+            del self.draw_objects[name]
+            print("removing draw object \'{}\'".format(name))
+        except KeyError:
+            pass
+
+
+
+    def remove_draw_objects_glob(self, pattern):
+        names = list(self.draw_objects.keys())
+        matched_names = list(name for name in names if fnmatch.fnmatch(name, pattern))
+        for matched_name in matched_names:
+            self.remove_draw_object(matched_name)
 
 
 
@@ -438,8 +467,7 @@ class Application(tk.Frame):
 
     def _left_up(self, event):
         self.pan_mode = False
-        self.camera_pan_marker = None
-        self.canvas.delete('pan_marker')
+        self.remove_draw_object('pan_marker')
         
         mods = self._get_event_modifiers(event)
 
@@ -450,8 +478,7 @@ class Application(tk.Frame):
 
     def _right_up(self, event):
         self.rotate_mode = False
-        self.camera_rotate_marker = None
-        self.canvas.delete('rotate_marker')
+        self.remove_draw_object('rotate_marker')
 
         mods = self._get_event_modifiers(event)
 
@@ -470,12 +497,10 @@ class Application(tk.Frame):
         pointer_world_crds = self.get_world_crds(
             event.x, event.y)
 
-        self.camera_pan_marker = (
-            OriginView(15,
-                loc=pointer_world_crds,
-                tags=(self.root_tag, self.camera_ui_tag, 'pan_marker'),
-                color='yellow'
-            )
+
+        self.add_draw_object(
+            'pan_marker',
+            OriginView(15, loc=pointer_world_crds, color='yellow')
         )
 
 
@@ -486,12 +511,10 @@ class Application(tk.Frame):
         self.camera_target = self.get_world_crds(
             self.canvas_center.x, self.canvas_center.y)
 
-        self.camera_rotate_marker = (
-            OriginView(15,
-                loc=self.camera_target,
-                tags=(self.root_tag, self.camera_ui_tag, 'rotate_marker'),
-                color='red'
-            )
+    
+        self.add_draw_object(
+            'rotate_marker',
+            OriginView(15, loc=self.camera_target, color='red')
         )
 
 
@@ -538,35 +561,12 @@ class Application(tk.Frame):
         # self.draw_all()
         # pass
 
+
     def _mousewheel_down(self, event):
         self.camera_zoom /= 1.04
         # self.draw_all()
         # pass
-
-
-    def _add_vertex(self, event):
-        # reflect y to transform into right-hand coordinates
-        x = event.x
-        y = event.y
-        new_vrt = self.get_world_crds(event.x, event.y)
-        self._new_vertices.append(new_vrt)
-
-        self.helper_object_views.append(PointHelperView(loc=new_vrt,
-            tags=(self.root_tag, self.obj_creation_helper_tag)))
-
-        # sz = self.dot_size
-        
-        if len(self._new_vertices) > 1:
-            prev_v = self._new_vertices[-2]
-            self.helper_object_views.append(
-                SegmentHelperView(
-                        prev_v, new_vrt,
-                        tags=(self.root_tag, self.obj_creation_helper_tag)
-                    )
-                )
-
-        self.draw_all()
-       
+     
 
 
     def get_world_crds(self, screen_x, screen_y):
@@ -611,40 +611,28 @@ class Application(tk.Frame):
 
 
 
-    def draw_all(self):
-        # self.canvas.delete(self.root_tag)
 
-        camera_trans = (Matrix.rotate2d((0,0), self.camera_rot)
-            .multiply(
-                Matrix.translate2d((self.camera_pos))))
+    def _add_vertex(self, event):
+        # reflect y to transform into right-hand coordinates
+        x = event.x
+        y = event.y
+        new_vrt = self.get_world_crds(event.x, event.y)
 
-        # camera_trans = (Matrix.scale2d((0, 0), (self.camera_zoom, self.camera_zoom))
-        #     .multiply(camera_trans))
+        self.add_draw_object(
+            'obj_creation_helpers/point_{}'.format(len(self._new_vertices)),
+            PointHelperView(loc=new_vrt))
+        
+        self._new_vertices.append(new_vrt)
 
-        # move the center of coordinates to the center of the canvas:
-        camera_trans.loc[(0,2)] += self.canvas_center[0]
-        camera_trans.loc[(1,2)] += self.canvas_center[1]
+        if len(self._new_vertices) > 1:
+            prev_vrt = self._new_vertices[-2]
 
-        for obj_name in self.draw_objects:
-            draw_objects[obj_name].draw_self(camera_trans, self.canvas)
+            self.add_draw_object(
+                'obj_creation_helpers/segment_{}'.format(len(self._new_vertices)),
+                SegmentHelperView(prev_vrt, new_vrt)
+            )
 
-
-        # for v in self.object_views:
-        #     v.draw_self(camera_trans, self.canvas)
-
-        # for v in self.helper_object_views:
-        #     v.draw_self(camera_trans, self.canvas)            
-
-        # # for v in self.camera_ui_views:
-        # if self.camera_pan_marker is not None:
-        #     self.camera_pan_marker.draw_self(camera_trans, self.canvas)
-
-        # if self.camera_rotate_marker is not None:
-        #     self.camera_rotate_marker.draw_self(camera_trans, self.canvas)
-
-        # if self.camera_zoom_marker is not None:
-        #     self.camera_zoom_marker.draw_self(camera_trans, self.canvas)
-
+        self.draw_all()
 
 
 
@@ -686,14 +674,43 @@ class Application(tk.Frame):
 
 
         self._polygons.append(new_poly)
-        self.object_views.append(NavMeshView(new_poly, tags=self.root_tag))
+        # self.object_views.append(NavMeshView(new_poly, tags=self.root_tag))
+
+        # add navmesh view
+        self.add_draw_object(
+            'navmesh_{}'.format(len(self._polygons)),
+            NavMeshView(new_poly)
+        )
+
+        # remove helper views
+        self.remove_draw_objects_glob('obj_creation_helpers/*')
+
 
         self.active_tool = self.select_tool
 
-        for d_id in self._dots_ids:
-            self.canvas.delete(d_id)
+        # for d_id in self._dots_ids:
+        #     self.canvas.delete(d_id)
 
         self.draw_all()
+
+
+
+    def draw_all(self):
+        # self.canvas.delete(self.root_tag)
+
+        camera_trans = (Matrix.rotate2d((0,0), self.camera_rot)
+            .multiply(
+                Matrix.translate2d((self.camera_pos))))
+
+        # camera_trans = (Matrix.scale2d((0, 0), (self.camera_zoom, self.camera_zoom))
+        #     .multiply(camera_trans))
+
+        # move the center of coordinates to the center of the canvas:
+        camera_trans.loc[(0,2)] += self.canvas_center[0]
+        camera_trans.loc[(1,2)] += self.canvas_center[1]
+
+        for obj_name in self.draw_objects:
+            self.draw_objects[obj_name].draw_self(camera_trans, self.canvas)
 
 
 
