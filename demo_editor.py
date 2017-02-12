@@ -339,16 +339,16 @@ class Application(tk.Frame):
         self.canvas_center = Vector2(float(self.canvas['width']) / 2., float(self.canvas['height']) / 2.)
 
 
-        # horiz scrollbar
-        self.hbar = tk.Scrollbar(self, orient = tk.HORIZONTAL)
-        self.hbar.config(command = self.canvas.xview)
+        # # horiz scrollbar
+        # self.hbar = tk.Scrollbar(self, orient = tk.HORIZONTAL)
+        # self.hbar.config(command = self.canvas.xview)
 
-        # vert scrollbar
-        self.vbar = tk.Scrollbar(self, orient = tk.VERTICAL)
-        self.vbar.config(command = self.canvas.yview)
+        # # vert scrollbar
+        # self.vbar = tk.Scrollbar(self, orient = tk.VERTICAL)
+        # self.vbar.config(command = self.canvas.yview)
 
         self.canvas.config(
-            xscrollcommand = self.hbar.set, yscrollcommand=self.vbar.set,
+            # xscrollcommand = self.hbar.set, yscrollcommand=self.vbar.set,
             xscrollincrement=1, yscrollincrement=1)
 
         self.canvas.bind('<ButtonRelease-1>', self._left_up)
@@ -366,8 +366,8 @@ class Application(tk.Frame):
         self.canvas.bind('<Button-5>', self._mousewheel_down)
 
 
-        self.hbar.pack(side = tk.BOTTOM, fill = tk.X)
-        self.vbar.pack(side = tk.RIGHT, fill = tk.Y)
+        # self.hbar.pack(side = tk.BOTTOM, fill = tk.X)
+        # self.vbar.pack(side = tk.RIGHT, fill = tk.Y)
         self.canvas.pack(side = tk.LEFT, expand = True, fill = tk.BOTH)
 
 
@@ -424,8 +424,8 @@ class Application(tk.Frame):
 
 
     def remove_draw_objects_glob(self, pattern):
-        names = list(self.draw_objects.keys())
-        matched_names = list(name for name in names if fnmatch.fnmatch(name, pattern))
+        matched_names = list(name for name in self.draw_objects.keys() \
+            if fnmatch.fnmatch(name, pattern))
         for matched_name in matched_names:
             self.remove_draw_object(matched_name)
 
@@ -517,14 +517,18 @@ class Application(tk.Frame):
                 delta_x = event.x - self.last_x
                 delta_y = event.y - self.last_y
 
-                # rotate delta to get correct pan direction:
-                delta = Matrix.rotate2d((0,0), self.camera_rot).multiply(
-                    Vector2(delta_x, delta_y)).values
+                # rotate and zoom delta to get correct pan direction:
+                delta = (
+                    Matrix.rotate2d((0,0), self.camera_rot)
+                    .multiply(Matrix.scale2d((0,0), (self.camera_size, self.camera_size)))
+                    .multiply(Vector2(delta_x, delta_y)).values
+                )
 
                 self.camera_pos -= Vector2(delta[0], delta[1])
 
 
             elif self.rotate_mode:
+                # TODO rotate around mouse pointer rather that screen center
                 delta_x = event.x - self.last_x
 
                 angle = 0.008*delta_x
@@ -544,16 +548,17 @@ class Application(tk.Frame):
 
 
 
-
+    # TODO scale relative to mouse pointer rather than screen center
     def _mousewheel_up(self, event):
         self.camera_size /= 1.04
-        # self.draw_all()
+        self.draw_all()
         # pass
 
 
+    # TODO scale relative to mouse pointer rather than screen center
     def _mousewheel_down(self, event):
         self.camera_size *= 1.04
-        # self.draw_all()
+        self.draw_all()
         # pass
      
 
@@ -572,8 +577,8 @@ class Application(tk.Frame):
 
         rot_mtx = Matrix.rotate2d((0,0), -self.camera_rot)
 
-        # un-zoom TODO
-        zoom_mtx = Matrix.identity(3)
+        # un-zoom
+        zoom_mtx = Matrix.scale2d((0,0), (1./self.camera_size, 1./self.camera_size))
 
         offset_mtx = Matrix.translate2d(self.canvas_center)
 
@@ -593,8 +598,8 @@ class Application(tk.Frame):
         # offset coords to move origin to center of screen
         offset_mtx = Matrix.translate2d(-self.canvas_center)
 
-        # zoom TODO
-        zoom_mtx = Matrix.identity(3)
+        # zoom
+        zoom_mtx = Matrix.scale2d((0,0), (self.camera_size, self.camera_size))
 
         # rotate
         rot_mtx = Matrix.rotate2d((0,0), self.camera_rot)
