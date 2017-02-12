@@ -92,7 +92,6 @@ class ObjectView(object):
 
 
     def cleanup(self, canvas):
-        print ("cleaning up...")
         for eid in self.element_ids:
             canvas.delete(eid)
 
@@ -314,26 +313,16 @@ class Application(tk.Frame):
         self.last_x = 0
         self.last_y = 0
 
-        # views that represent content objects
-        self.object_views = []
-
-        # views that represent helper objects
-        self.helper_object_views = []
-
-        # views that represent camera UI
-        self.camera_pan_marker = None
-        self.camera_rotate_marker = None
-        self.camera_zoom_marker = None
-
         self.draw_objects = {}
 
         # info about camera position
         self.camera_pos = Vector2(0,0)
         self.camera_rot = 0.
-        self.camera_target = Vector2(0,0)
-        self.camera_zoom = 1.
+        self.camera_size = 1.
 
-        # self.helper_object_views.append(OriginView(250, tags=self.root_tag))
+        self.camera_target = Vector2(0,0)
+
+        # draw big cross marker at the world coordinate origin
         self.add_draw_object(
             'origin_marker',
             OriginView(250)
@@ -529,10 +518,10 @@ class Application(tk.Frame):
                 delta_y = event.y - self.last_y
 
                 # rotate delta to get correct pan direction:
-                delta = Matrix.rotate2d((0,0), -self.camera_rot).multiply(
+                delta = Matrix.rotate2d((0,0), self.camera_rot).multiply(
                     Vector2(delta_x, delta_y)).values
 
-                self.camera_pos += Vector2(delta[0], delta[1])
+                self.camera_pos -= Vector2(delta[0], delta[1])
 
 
             elif self.rotate_mode:
@@ -542,7 +531,7 @@ class Application(tk.Frame):
 
                 # if event.y < self.canvas_center.y: angle*= -1
 
-                self.camera_rot -= angle
+                self.camera_rot += angle
 
                 self.camera_target = self.get_world_crds(
                     self.canvas_center.x, self.canvas_center.y)
@@ -557,58 +546,80 @@ class Application(tk.Frame):
 
 
     def _mousewheel_up(self, event):
-        self.camera_zoom *= 1.04
+        self.camera_size /= 1.04
         # self.draw_all()
         # pass
 
 
     def _mousewheel_down(self, event):
-        self.camera_zoom /= 1.04
+        self.camera_size *= 1.04
         # self.draw_all()
         # pass
      
 
 
-    def get_world_crds(self, screen_x, screen_y):
-        screen_crds = Vector2(screen_x, screen_y)
 
-        # center becomes upper left corner
-        screen_crds -= self.canvas_center
+    def get_world_to_screen_mtx(self):
+        '''
+        Apply the opposite transformations from those of the camera
+        1. Un-translate
+        2. Un-rotate
+        3. Un-zoom
+        4. un-offset
+        '''
+
+        tran_mtx = Matrix.translate2d(-self.camera_pos)
+
+        rot_mtx = Matrix.rotate2d((0,0), -self.camera_rot)
+
+        # un-zoom TODO
+        zoom_mtx = Matrix.identity(3)
+
+        offset_mtx = Matrix.translate2d(self.canvas_center)
+
+        return offset_mtx.multiply(zoom_mtx).multiply(rot_mtx).multiply(tran_mtx)
+
+
+
+    def get_screen_to_world_mtx(self):
+        '''
+        Apply the same transformations that we applied to the camera
+        1. Offset
+        2. Zoom
+        3. Rotate
+        4. Translate
+        '''
+
+        # offset coords to move origin to center of screen
+        offset_mtx = Matrix.translate2d(-self.canvas_center)
 
         # zoom TODO
+        zoom_mtx = Matrix.identity(3)
 
-        # then rotate
-        rmtx = Matrix.rotate2d((0,0), -self.camera_rot)
-        screen_crds = rmtx.multiply(screen_crds).values
-        # then translate
-        world_crds = Vector2(
-            screen_crds[0] - self.camera_pos[0],
-            screen_crds[1] - self.camera_pos[1]
-        )
-        
+        # rotate
+        rot_mtx = Matrix.rotate2d((0,0), self.camera_rot)
+
+        # translate
+        tran_mtx = Matrix.translate2d(self.camera_pos)
+
+        return tran_mtx.multiply(rot_mtx).multiply(zoom_mtx).multiply(offset_mtx)
+
+
+
+
+    def get_world_crds(self, screen_x, screen_y):
+
+        screen_crds = Vector2(screen_x, screen_y)
+        world_crds = self.get_screen_to_world_mtx().multiply(screen_crds).values
         return Vector2(world_crds[0], world_crds[1])
 
 
 
     def get_screen_crds(self, world_x, world_y):
+
         world_crds = Vector2(world_x, world_y)
-
-        # translate then rotate
-        camera_trans = (Matrix.rotate2d((0,0), self.camera_rot)
-            .multiply(
-                Matrix.translate2d((self.camera_pos))))
-
-        # # then unzoom
-        # camera_trans = (Matrix.scale2d((0, 0), (self.camera_zoom, self.camera_zoom))
-        #     .multiply(camera_trans))
-
-        # move the center of coordinates to the center of the canvas:
-        camera_trans.loc[(0,2)] += self.canvas_center[0]
-        camera_trans.loc[(1,2)] += self.canvas_center[1]
-
-        screen_crds = camera_trans.multiply(world_crds).values
+        screen_crds = self.get_world_to_screen_mtx().multiply(world_crds).values
         return Vector2(screen_crds[0], screen_crds[1])
-
 
 
 
@@ -639,7 +650,6 @@ class Application(tk.Frame):
     def _add_polygon(self, event):
         if len(self._new_vertices) < 3: return
 
-        # del self.helper_object_views[:]
         self.canvas.delete(self.obj_creation_helper_tag)
 
         threshold = 10.0 # degrees
@@ -674,7 +684,6 @@ class Application(tk.Frame):
 
 
         self._polygons.append(new_poly)
-        # self.object_views.append(NavMeshView(new_poly, tags=self.root_tag))
 
         # add navmesh view
         self.add_draw_object(
@@ -685,29 +694,15 @@ class Application(tk.Frame):
         # remove helper views
         self.remove_draw_objects_glob('obj_creation_helpers/*')
 
-
+        # set current tool on 'Select'
         self.active_tool = self.select_tool
-
-        # for d_id in self._dots_ids:
-        #     self.canvas.delete(d_id)
 
         self.draw_all()
 
 
 
     def draw_all(self):
-        # self.canvas.delete(self.root_tag)
-
-        camera_trans = (Matrix.rotate2d((0,0), self.camera_rot)
-            .multiply(
-                Matrix.translate2d((self.camera_pos))))
-
-        # camera_trans = (Matrix.scale2d((0, 0), (self.camera_zoom, self.camera_zoom))
-        #     .multiply(camera_trans))
-
-        # move the center of coordinates to the center of the canvas:
-        camera_trans.loc[(0,2)] += self.canvas_center[0]
-        camera_trans.loc[(1,2)] += self.canvas_center[1]
+        camera_trans = self.get_world_to_screen_mtx()
 
         for obj_name in self.draw_objects:
             self.draw_objects[obj_name].draw_self(camera_trans, self.canvas)

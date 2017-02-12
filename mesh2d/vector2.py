@@ -72,6 +72,11 @@ class Vector2:
         return Vector2(self.x * left_scalar, self.y * left_scalar)
 
 
+    # negation
+    def __neg__(self):
+        return Vector2(-self.x, -self.y)
+
+
     # equality
     def __eq__(self, right_operand):
         return self.x == right_operand.x and self.y == right_operand.y
