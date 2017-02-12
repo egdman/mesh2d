@@ -23,6 +23,76 @@ class Tool(object):
     def left_click(self, event):
         pass
 
+    def mouse_moved(self, event, dx, dy):
+        pass
+
+
+
+class CreateWall(Tool):
+    def __init__(self, parent):
+        self.width_mode = False
+        self.start = None
+        self.end = None
+        self.width = 10.
+        super(CreateWall, self).__init__(parent)
+
+
+    # toggle width adjustment mode
+    def right_click(self, event):
+        if self.start is None: return
+        self.width_mode = not self.width_mode
+
+        # When exiting width adjustment mode, snap cursor back to endpoint.
+        # This might not work on all platforms.
+        if not self.width_mode:
+            endpt_screen = self.parent.get_screen_crds(self.end.x, self.end.y)
+            self.parent.canvas.event_generate('<Motion>', warp=True,
+                x=endpt_screen.x, y=endpt_screen.y)
+
+        self.redraw()
+
+
+    # if not in window adj mode, set start- and end-points
+    def left_click(self, event):
+        app = self.parent
+        if not self.width_mode:
+            click_world = app.get_world_crds(event.x, event.y)
+
+            if self.start is None:
+                self.start = click_world
+                self.end = click_world + Vector2(1, 0)
+
+                app.add_draw_object('wall_tool_helpers/wall_helper',
+                    WallHelperView(self.start, self.end, self.width))
+
+                app.draw_all()
+
+            else:
+                self.end = click_world
+                app.add_wall(self.start, self.end, self.width)
+                app.remove_draw_objects_glob('wall_tool_helpers/*')
+
+
+
+    def mouse_moved(self, event, dx, dy):
+        app = self.parent
+        if self.width_mode:
+            self.width += 1.*dx
+            if self.width < 0.05: self.width = 0.05
+            self.redraw()
+        elif self.start is not None:
+            self.end = app.get_world_crds(event.x, event.y)
+            self.redraw()
+
+
+    # draw temporary wall helpers
+    def redraw(self):
+        app = self.parent
+        app.draw_objects['wall_tool_helpers/wall_helper'].modify(
+            self.start, self.end, self.width)
+        app.draw_all()
+
+
 
 class Create(Tool):
 
@@ -70,7 +140,7 @@ class ObjectView(object):
             self.tags = []
 
 
-
+    
     def draw_self(self, camera_transform, canvas):
         if len(self.crd_buf) == 0:
             self.first_time_draw(canvas)
@@ -84,11 +154,31 @@ class ObjectView(object):
         self.redraw(camera_transform, canvas)
 
 
+
+    def offset_by(self, vec):
+        '''
+        move all coordinates in crd_buf by vec
+        '''
+        new_crds = []
+        switch = 0
+        for crd in self.crd_buf:
+            new_crds.append(crd + vec[switch])
+            switch = (switch + 1) % 2
+        self.crd_buf = new_crds
+
+
+
     def first_time_draw(self, canvas):
         '''
         first time draw (add elements to canvas)
         '''
         raise NotImplementedError("Implement method 'first_time_draw' in your subclass")
+
+    def modify(self, *args, **kwargs):
+        '''
+        Modify draw object. Concrete functionality depends on the concrete class.
+        '''
+        raise NotImplementedError("Implement method 'modify' in your subclass")        
 
 
     def cleanup(self, canvas):
@@ -151,12 +241,92 @@ class ObjectView(object):
 
 
 
+class WallHelperView(ObjectView):
+    def __init__(self, vec1, vec2, width, color='#ffffff'):
+        self.v1 = vec1
+        self.v2 = vec2
+        self.width = width
+        self.color = color
+        super(WallHelperView, self).__init__()
+
+
+    def find_corners(self):
+        wd = self.width
+        axis = self.v2 - self.v1
+        perp = Vector2(axis.y, -axis.x)
+        perp /= perp.length()
+        c1 = self.v1 + wd*perp
+        c2 = self.v1 - wd*perp
+
+        c3 = self.v2 - wd*perp
+        c4 = self.v2 + wd*perp
+        return c1, c2, c3, c4
+
+
+
+    def first_time_draw(self, canvas):
+        (c1, c2, c3, c4) = self.find_corners()
+
+        id1 = canvas.create_line((c1.x, c1.y, c2.x, c2.y),
+            fill = self.color, width=1)
+
+        id2 = canvas.create_line((c2.x, c2.y, c3.x, c3.y),
+            fill = self.color, width=1)
+
+        id3 = canvas.create_line((c3.x, c3.y, c4.x, c4.y),
+            fill = self.color, width=1)
+
+        id4 = canvas.create_line((c4.x, c4.y, c1.x, c1.y),
+            fill = self.color, width=1)
+
+        self.element_ids.append(id1)
+        self.element_ids.append(id2)
+        self.element_ids.append(id3)
+        self.element_ids.append(id4)
+
+
+
+    def modify(self, vec1, vec2, width):
+        self.v1 = vec1
+        self.v2 = vec2
+        self.width = width
+        c1, c2, c3, c4 = self.find_corners()
+        self.crd_buf[0] = c1.x
+        self.crd_buf[1] = c1.y
+        self.crd_buf[2] = c2.x
+        self.crd_buf[3] = c2.y
+
+        self.crd_buf[4] = c2.x
+        self.crd_buf[5] = c2.y
+        self.crd_buf[6] = c3.x
+        self.crd_buf[7] = c3.y
+
+        self.crd_buf[8] = c3.x
+        self.crd_buf[9] = c3.y
+        self.crd_buf[10] = c4.x
+        self.crd_buf[11] = c4.y
+
+        self.crd_buf[12] = c4.x
+        self.crd_buf[13] = c4.y
+        self.crd_buf[14] = c1.x
+        self.crd_buf[15] = c1.y
+
+
+
+
+
+
 class PointHelperView(ObjectView):
     def __init__(self, loc, color='#ffffff', tags=None):
         self.loc = loc
         self.color = color
         super(PointHelperView, self).__init__(tags)
 
+
+    def modify(self, vec):
+        delta = vec - self.loc
+        self.loc = vec
+        self.offset_by(delta)
 
 
     def first_time_draw(self, canvas):
@@ -208,6 +378,19 @@ class SegmentHelperView(ObjectView):
 
 
 
+    def modify(self, vec1, vec2):
+        delta1 = vec1 - self.v1
+        delta2 = vec2 - self.v2
+        self.v1 = vec1
+        self.v2 = vec2
+
+        self.crd_buf[0] += delta1.x
+        self.crd_buf[1] += delta1.y
+
+        self.crd_buf[2] += delta2.x
+        self.crd_buf[3] += delta2.y
+
+
 
 
 class OriginView(ObjectView):
@@ -221,6 +404,12 @@ class OriginView(ObjectView):
 
         super(OriginView, self).__init__(tags)
 
+
+
+    def modify(self, vec):
+        delta = vec - self.loc
+        self.loc = vec
+        self.offset_by(delta)
 
 
 
@@ -287,14 +476,6 @@ class Application(tk.Frame):
         self._dots_ids = []
         self.dot_size = 3
 
-
-        # canvas object tags
-        self.root_tag = 'root'
-        self.camera_ui_tag = 'camera_ui'
-        self.obj_creation_helper_tag = 'obj_creation_helper'
-
-
-
         self.select_tool = Select(self)
         self.create_tool = Create(self)
         # ......
@@ -344,7 +525,6 @@ class Application(tk.Frame):
         self.pack(side = tk.LEFT, expand = True, fill = tk.BOTH)
 
         self.canvas.config(xscrollincrement=1, yscrollincrement=1)
-
 
         # bind right and left mouse clicks
         self.canvas.bind('<ButtonRelease-1>', self._left_up)
@@ -399,6 +579,15 @@ class Application(tk.Frame):
         self.saveToolBtn.pack()
 
 
+        self.wallToolBtn = tk.Button(
+            self,
+            text='wall',
+            # command = lambda: self.active_tool = CreateWall(self),
+            command = self._create_wall_cb
+        )
+        self.wallToolBtn.pack()
+
+
 
     def add_draw_object(self, name, draw_obj):
         print("adding draw object \'{}\'".format(name))
@@ -428,6 +617,9 @@ class Application(tk.Frame):
         with open("saved_poly.yaml", 'w') as savef:
             yaml.dump(self.last_created_poly, savef)
 
+
+    def _create_wall_cb(self):
+        self.active_tool = CreateWall(self)
 
 
     def _select_cb(self):
@@ -495,13 +687,19 @@ class Application(tk.Frame):
 
 
     def _mouse_moved(self, event):
-        
+        delta_x = event.x - self.last_x
+        delta_y = event.y - self.last_y
+
+        self.last_x = event.x
+        self.last_y = event.y
+
+        # tell the active tool that mouse has moved
+        self.active_tool.mouse_moved(event, delta_x, delta_y)
+
         # draw camera UI only when in camera control mode:
         if self.rotate_mode or self.pan_mode or self.zoom_mode:
 
             if self.pan_mode:
-                delta_x = event.x - self.last_x
-                delta_y = event.y - self.last_y
 
                 # rotate and zoom delta to get correct pan direction:
                 delta = (
@@ -514,7 +712,6 @@ class Application(tk.Frame):
 
 
             elif self.rotate_mode:
-                delta_x = event.x - self.last_x
                 angle = 0.008*delta_x
 
                 self.camera_rot += angle
@@ -528,27 +725,18 @@ class Application(tk.Frame):
             self.draw_all()
 
 
-        self.last_x = event.x
-        self.last_y = event.y
 
 
 
     def _mousewheel_up(self, event):
-        rate = 1./self.zoom_rate
-        self.camera_size *= rate
-
-        scale_cntr_world = self.get_world_crds(event.x, event.y)
-        camera_new_pos = (
-            Matrix.scale2d(scale_cntr_world, (rate, rate))
-            .multiply(self.camera_pos).values
-        )
-        self.camera_pos = Vector2(camera_new_pos[0], camera_new_pos[1])
-
-        self.draw_all()
-
+        self._scale_around_pointer(1./self.zoom_rate, event)
+        
 
     def _mousewheel_down(self, event):
-        rate = self.zoom_rate
+        self._scale_around_pointer(self.zoom_rate, event)
+
+
+    def _scale_around_pointer(self, rate, event):
         self.camera_size *= rate
 
         scale_cntr_world = self.get_world_crds(event.x, event.y)
@@ -653,8 +841,6 @@ class Application(tk.Frame):
     def _add_polygon(self, event):
         if len(self._new_vertices) < 3: return
 
-        self.canvas.delete(self.obj_creation_helper_tag)
-
         threshold = 10.0 # degrees
         new_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
 
@@ -701,6 +887,12 @@ class Application(tk.Frame):
         self.active_tool = self.select_tool
 
         self.draw_all()
+
+
+
+    def add_wall(self, start, end, width):
+        self.active_tool = self.select_tool
+        print ("added wall {}, {}, {}".format(start, end, width))
 
 
 
