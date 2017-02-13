@@ -12,44 +12,146 @@ def minus_wrap(pos, num):
     return num - 1 if pos == 0 else pos - 1
 
 
-class Bbox:
+
+class Polygon2d(object):
     def __init__(self, vertices, indices):
-        vrt = vertices
-        ind = indices
-        self.xmin = self.xmax = vrt[ind[0]].x
-        self.ymin = self.ymax = vrt[ind[0]].y
 
-        for i in ind:
-            v = vrt[i]
-            if v.x < self.xmin:
-                self.xmin = v.x
-            elif v.x > self.xmax:
-                self.xmax = v.x
-
-            if v.y < self.ymin:
-                self.ymin = v.y
-            elif v.y > self.ymax:
-                self.ymax = v.y
-
-
-        def point_inside(self, point):
-            return point.x < self.xmax and point.x > self.xmin and \
-                point.y < self.ymax and point.y > self.ymin
-
-
-
-
-
-class Mesh2d:
-    def __init__(self, vertices, indices):
-        if self.check_ccw(vertices, indices):
-            self.indices = indices[:]
+        # need to find self-intersections
+        if Polygon2d.check_ccw(vertices, indices):
+            self.outline = indices[:]
         else:
-            self.indices = indices[::-1]
+            self.outline = indices[::-1]
 
         self.vertices = vertices[:]
+        sinters = self.find_self_intersections()
 
-        self.bbox = Bbox(vertices, indices)
+
+
+    def find_self_intersections(self):
+        segs = Polygon2d.get_segments(self.outline)
+        sinters = []
+        for i in range(len(segs)):
+            for j in range(i+2, len(segs)):
+                seg1 = segs[i]
+                seg2 = segs[j]
+
+                seg11 = self.vertices[seg1[0]]
+                seg12 = self.vertices[seg1[1]]
+
+                seg21 = self.vertices[seg2[0]]
+                seg22 = self.vertices[seg2[1]]
+
+                seg_x = Vector2.where_segments_cross(
+                    seg11, seg12, seg21, seg22)
+
+                if seg_x is not None:
+                    sinters.append((seg1, seg2, seg_x))
+        return sinters
+
+
+
+    def add_vertex_to_outline(self, vertex, edge):
+        e1_i = edge[0]
+        e2_i = edge[1]
+
+        e1_pos = self.outline.index(e1_i)
+        e2_pos = self.outline.index(e2_i)
+
+        # e1_pos and e2_pos can either differ by 1
+        # or loop around the index buffer
+        if e1_pos > e2_pos: e1_pos, e2_pos = e2_pos, e1_pos
+
+        if e1_pos == e2_pos: raise ValueError("Adding vertex to outline: invalid edge")
+
+        if e2_pos - e1_pos > 1:
+            if e1_pos != 0: raise ValueError("Adding vertex to outline: invalid edge")
+            insert_at = e2_pos + 1
+
+        else:
+            insert_at = e2_pos
+
+        new_vert_index = len(self.vertices)
+        self.vertices.append(vertex)
+        self.outline.insert(insert_at, new_vert_index)
+        return new_vert_index
+
+
+
+
+    @staticmethod
+    def _split_index_buffer(indices, index_1, index_2):
+        if index_1 == index_2:
+            raise ValueError("split indices must not be equal to each other")
+
+        if index_1 not in indices or index_2 not in indices:
+            raise ValueError("split indices must both be present in the index buffer")
+
+        buffers = ([], [])
+        switch = 0
+
+        for index in indices:
+            if index == index_1:
+                buffers[switch].append(index_1)
+                buffers[switch].append(index_2)
+                switch = (switch + 1) % 2
+            elif index == index_2: 
+                buffers[switch].append(index_2)
+                buffers[switch].append(index_1)
+                switch = (switch + 1) % 2
+            else:
+                buffers[switch].append(index)
+
+        return buffers
+
+
+
+    @staticmethod
+    def get_segments(indices):
+        segs = []
+        for loc in range(len(indices) - 1):
+            segs.append((indices[loc], indices[loc + 1]))
+        segs.append((indices[-1], indices[0]))
+        return segs
+
+
+
+    @staticmethod
+    def check_ccw(vertices, indices):
+        return Polygon2d.signed_area(vertices, indices) > 0
+
+
+
+    @staticmethod
+    def signed_area(vertices, indices):
+        area = 0.0
+        for i in range(len(indices) - 1):
+            ind1 = indices[i]
+            ind2 = indices[i+1]
+
+            vert1 = vertices[ind1]
+            vert2 = vertices[ind2]
+
+            area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
+
+        # wrap for last segment:
+        vert1 = vertices[indices[-1]]
+        vert2 = vertices[indices[0]]
+
+        area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
+        return area / 2.0
+
+
+
+
+
+
+
+class Mesh2d(Polygon2d):
+    def __init__(self, vertices, indices):
+        super(Mesh2d, self).__init__(vertices, indices)
+
+        # just an alias (need to get rid of it later)
+        self.indices = self.outline
 
         self.pieces = []
         self.portals = []
@@ -179,7 +281,7 @@ class Mesh2d:
                 continue
 
             # split index buffer of the outline of this piece using the portal
-            piece1, piece2 = Mesh2d._split_index_buffer(indices, start_i, end_i)
+            piece1, piece2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
 
             # if this portal is actually an edge, skip it
             if len(piece1) < 3 or len(piece2) < 3:
@@ -196,85 +298,7 @@ class Mesh2d:
 
 
 
-    def add_vertex_to_outline(self, vertex, edge):
-        e1_i = edge[0]
-        e2_i = edge[1]
-
-        e1_pos = self.indices.index(e1_i)
-        e2_pos = self.indices.index(e2_i)
-
-        # e1_pos and e2_pos can either differ by 1
-        # or loop around the index buffer
-        if e1_pos > e2_pos: e1_pos, e2_pos = e2_pos, e1_pos
-
-        if e1_pos == e2_pos: raise ValueError("Adding vertex to outline: invalid edge")
-
-        if e2_pos - e1_pos > 1:
-            if e1_pos != 0: raise ValueError("Adding vertex to outline: invalid edge")
-            insert_at = e2_pos + 1
-
-        else:
-            insert_at = e2_pos
-
-        new_vert_index = len(self.vertices)
-        self.vertices.append(vertex)
-        self.indices.insert(insert_at, new_vert_index)
-        return new_vert_index
-
     
-
-
-    @staticmethod
-    def _split_index_buffer(indices, index_1, index_2):
-        if index_1 == index_2:
-            raise ValueError("split indices must not be equal to each other")
-
-        if index_1 not in indices or index_2 not in indices:
-            raise ValueError("split indices must both be present in the index buffer")
-
-        buffers = ([], [])
-        switch = 0
-
-        for index in indices:
-            if index == index_1:
-                buffers[switch].append(index_1)
-                buffers[switch].append(index_2)
-                switch = (switch + 1) % 2
-            elif index == index_2: 
-                buffers[switch].append(index_2)
-                buffers[switch].append(index_1)
-                switch = (switch + 1) % 2
-            else:
-                buffers[switch].append(index)
-
-        return buffers
-
-
-
-
-    @staticmethod
-    def signed_area(vertices, indices):
-        area = 0.0
-        for i in range(len(indices) - 1):
-            ind1 = indices[i]
-            ind2 = indices[i+1]
-
-            vert1 = vertices[ind1]
-            vert2 = vertices[ind2]
-
-            area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
-
-        # wrap for last segment:
-        vert1 = vertices[indices[-1]]
-        vert2 = vertices[indices[0]]
-
-        area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
-        return area / 2.0
-
-
-    @staticmethod
-    def check_ccw(vertices, indices):
-        return Mesh2d.signed_area(vertices, indices) > 0
 
 
     def get_triangle_coords(self, triangle):

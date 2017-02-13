@@ -306,6 +306,45 @@ class Vector2:
 
 
 
+    @staticmethod
+    def where_segments_cross(seg11, seg12, seg21, seg22):
+        line_rel = Vector2.lines_intersect(seg11, seg12, seg21, seg22)
+
+        line_x = line_rel.intersection
+        lines_overlap =  line_rel.identical
+
+        # if lines intersect
+        if line_x is not None:
+            # if intersection lies inside both segments
+            if Vector2.point_between_inclusive(line_x, seg11, seg12) and \
+               Vector2.point_between_inclusive(line_x, seg21, seg22):
+                return line_x
+            else:
+                return None
+
+        # if lines overlap fully
+        elif lines_overlap:
+            # order vertices by x
+            if seg11.x > seg12.x: seg11, seg12 = seg12, seg11
+            if seg21.x > seg22.x: seg21, seg22 = seg22, seg21
+
+            # if segments only touch at endpoints
+            if seg12 == seg21:
+                return seg12
+
+            elif seg11 == seg22:
+                return seg11
+                
+            else:
+                return False
+
+        # if lines are parallel
+        else:
+            return False
+
+
+
+
 
     @staticmethod
     def where_segment_crosses_ray(seg1, seg2, ray1, ray2):
