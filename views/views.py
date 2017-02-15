@@ -9,8 +9,9 @@ class ObjectView(object):
     as points, lines, polygons, navmeshes, various helpers etc.
     '''
     def __init__(self):
-        self.crd_buf = []
+        self.world_vertices = []
         self.element_ids = []
+        self.coord_fences = []
         # generate unique tag for all canvas objects of this draw object
         self.tag = uuid.uuid4().hex
 
@@ -31,17 +32,29 @@ class ObjectView(object):
 
     
     def draw_self(self, camera_transform, canvas):
-        if len(self.crd_buf) == 0:
+        if len(self.world_vertices) == 0:
             self.first_time_draw(canvas)
 
+            crd_buf = []
             # add this tag to all canvas objects of this draw object
             for eid in self.element_ids:
                 canvas.addtag_withtag(self.tag, eid)
 
                 # remember all coordinates of all canvas objects of this draw object
-                self.crd_buf.extend(canvas.coords(eid))
+                curr_obj_crds = canvas.coords(eid)
+                self.coord_fences.append(len(crd_buf) + len(curr_obj_crds))
+                crd_buf.extend(curr_obj_crds)
 
-            print("new object with {} coordinates created".format(len(self.crd_buf)))
+            # convert crd_buf to list of Vector2's
+            for loc in range(len(crd_buf) / 2):
+                self.world_vertices.append(Vector2(
+                    crd_buf[2*loc],
+                    crd_buf[2*loc+1]
+                )
+            )
+
+            print("new object with {} vertices created".format(len(self.world_vertices)))
+            print("fences: {}".format(self.coord_fences))
 
         self.redraw(camera_transform, canvas)
 
@@ -51,13 +64,10 @@ class ObjectView(object):
         '''
         move all coordinates in crd_buf by vec
         '''
-        new_crds = []
-        switch = 0
-        for crd in self.crd_buf:
-            new_crds.append(crd + vec[switch])
-            switch = (switch + 1) % 2
-        self.crd_buf = new_crds
-
+        new_verts = []
+        for vert in self.world_vertices:
+            new_verts.append(vert + vec)
+        self.world_vertices = new_verts
 
 
 
@@ -68,14 +78,8 @@ class ObjectView(object):
 
     def redraw(self, camera_transform, canvas):
         obj_view = camera_transform
-            
-        obj_vertices = []
-        for idx in range(len(self.crd_buf)/2):
-            x = self.crd_buf[2*idx]
-            y = self.crd_buf[2*idx+1]
-            obj_vertices.append(Vector2(x, y))
 
-        screen_vertices = list(self.apply_transform(obj_view, obj_vertices))
+        screen_vertices = list(self.apply_transform(obj_view, self.world_vertices))
 
         screen_crd_buf = []
         for screen_v in screen_vertices:
@@ -83,11 +87,12 @@ class ObjectView(object):
             screen_crd_buf.append(screen_v[1])
 
         notch = 0
-        for eid in self.element_ids:
-            num_crds = len(canvas.coords(eid))
-            new_crds = screen_crd_buf[notch:notch+num_crds]
+
+        for (loc, eid) in enumerate(self.element_ids):
+            fence = self.coord_fences[loc]
+            new_crds = screen_crd_buf[notch:fence]
             canvas.coords(eid, *new_crds)
-            notch += num_crds
+            notch = fence
 
 
 
@@ -169,25 +174,15 @@ class WallHelperView(ObjectView):
         self.v2 = vec2
         self.width = width
         c1, c2, c3, c4 = self.find_corners()
-        self.crd_buf[0] = c1.x
-        self.crd_buf[1] = c1.y
-        self.crd_buf[2] = c2.x
-        self.crd_buf[3] = c2.y
 
-        self.crd_buf[4] = c2.x
-        self.crd_buf[5] = c2.y
-        self.crd_buf[6] = c3.x
-        self.crd_buf[7] = c3.y
-
-        self.crd_buf[8] = c3.x
-        self.crd_buf[9] = c3.y
-        self.crd_buf[10] = c4.x
-        self.crd_buf[11] = c4.y
-
-        self.crd_buf[12] = c4.x
-        self.crd_buf[13] = c4.y
-        self.crd_buf[14] = c1.x
-        self.crd_buf[15] = c1.y
+        self.world_vertices[0] = c1
+        self.world_vertices[1] = c2
+        self.world_vertices[2] = c2
+        self.world_vertices[3] = c3
+        self.world_vertices[4] = c3
+        self.world_vertices[5] = c4
+        self.world_vertices[6] = c4
+        self.world_vertices[7] = c1
 
 
 
@@ -260,11 +255,8 @@ class SegmentHelperView(ObjectView):
         self.v1 = vec1
         self.v2 = vec2
 
-        self.crd_buf[0] += delta1.x
-        self.crd_buf[1] += delta1.y
-
-        self.crd_buf[2] += delta2.x
-        self.crd_buf[3] += delta2.y
+        self.world_vertices[0] = delta1
+        self.world_vertices[1] = delta2
 
 
 
