@@ -97,8 +97,8 @@ class CreateWall(Tool):
 class Create(Tool):
 
     def right_click(self, event):
-        # self.parent._add_navmesh(event)
-        self.parent._add_polygon(event)
+        self.parent._add_navmesh(event)
+        # self.parent._add_polygon(event)
 
     def left_click(self, event):
         self.parent._add_vertex(event)
@@ -173,7 +173,7 @@ class Application(tk.Frame):
         # draw big cross marker at the world coordinate origin
         self.add_draw_object(
             'origin_marker',
-            OriginView(250)
+            PlusView(250)
         )
 
         self.draw_all()
@@ -338,7 +338,7 @@ class Application(tk.Frame):
 
         self.add_draw_object(
             'pan_marker',
-            OriginView(15, loc=pointer_world_crds, color='yellow')
+            PlusView(15, loc=pointer_world_crds, color='yellow')
         )
 
 
@@ -350,7 +350,7 @@ class Application(tk.Frame):
 
         self.add_draw_object(
             'rotate_marker',
-            OriginView(15, loc=self.rot_marker_world, color='red')
+            PlusView(15, loc=self.rot_marker_world, color='red')
         )
 
 
@@ -526,7 +526,7 @@ class Application(tk.Frame):
         for si_num, sinter in enumerate(sinters):
             pt = sinter[2]
             self.add_draw_object('poly_sinters/sinter_{}_{}'.format(num_polys, si_num),
-                OriginView(16, loc=pt, color='cyan'))
+                PlusView(16, loc=pt, color='cyan'))
 
         # set current tool on 'Select'
         self.active_tool = self.select_tool

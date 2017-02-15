@@ -2,6 +2,11 @@ from mesh2d import Vector2, Matrix
 import random
 
 class ObjectView(object):
+    '''
+    Object View aka 'Draw Object' handles drawing of some data on the canvas.
+    This class is intended to be subclassed to draw concrete kinds of data such
+    as points, lines, polygons, navmeshes, various helpers etc.
+    '''
     def __init__(self, tags=None):
         self.crd_buf = []
         self.element_ids = []
@@ -10,6 +15,21 @@ class ObjectView(object):
             self.tags = tags
         else:
             self.tags = []
+
+
+
+    def first_time_draw(self, canvas):
+        '''
+        First time draw (add elements to canvas and store their canvas ids in 'element_ids'.)
+        '''
+        raise NotImplementedError("Implement method 'first_time_draw' in your subclass")
+
+
+    def modify(self, *args, **kwargs):
+        '''
+        Modify draw object. Concrete functionality depends on the concrete class.
+        '''
+        raise NotImplementedError("Implement method 'modify' in your subclass")
 
 
     
@@ -39,18 +59,6 @@ class ObjectView(object):
         self.crd_buf = new_crds
 
 
-
-    def first_time_draw(self, canvas):
-        '''
-        first time draw (add elements to canvas)
-        '''
-        raise NotImplementedError("Implement method 'first_time_draw' in your subclass")
-
-    def modify(self, *args, **kwargs):
-        '''
-        Modify draw object. Concrete functionality depends on the concrete class.
-        '''
-        raise NotImplementedError("Implement method 'modify' in your subclass")        
 
 
     def cleanup(self, canvas):
@@ -265,7 +273,7 @@ class SegmentHelperView(ObjectView):
 
 
 
-class OriginView(ObjectView):
+class PlusView(ObjectView):
     def __init__(self, size, tags=None, loc=None, color='#2f2f2f'):
         self.size = size
         self.color = color
@@ -274,7 +282,7 @@ class OriginView(ObjectView):
         self.down = Vector2(0, self.size)
         self.right = Vector2(self.size, 0)
 
-        super(OriginView, self).__init__(tags)
+        super(PlusView, self).__init__(tags)
 
 
 
