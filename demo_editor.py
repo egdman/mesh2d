@@ -255,7 +255,7 @@ class Application(tk.Frame):
 
 
     def add_draw_object(self, name, draw_obj):
-        print("adding draw object \'{}\'".format(name))
+        # print("adding draw object \'{}\'".format(name))
         self.draw_objects[name] = draw_obj
 
 
@@ -264,7 +264,7 @@ class Application(tk.Frame):
         try:
             self.draw_objects[name].cleanup(self.canvas)
             del self.draw_objects[name]
-            print("removing draw object \'{}\'".format(name))
+            # print("removing draw object \'{}\'".format(name))
         except KeyError:
             pass
 

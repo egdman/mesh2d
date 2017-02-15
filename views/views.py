@@ -53,8 +53,8 @@ class ObjectView(object):
                 )
             )
 
-            print("new object with {} vertices created".format(len(self.world_vertices)))
-            print("fences: {}".format(self.coord_fences))
+            # print("new object with {} vertices created".format(len(self.world_vertices)))
+            # print("fences: {}".format(self.coord_fences))
 
         self.redraw(camera_transform, canvas)
 

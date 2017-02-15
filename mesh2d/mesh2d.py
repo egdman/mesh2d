@@ -1,6 +1,7 @@
 import math
 import random
 from collections import deque
+from operator import itemgetter
 
 from .vector2 import Vector2, ZeroSegmentError
 
@@ -480,6 +481,7 @@ class Mesh2d(Polygon2d):
 
                     # if portal_end_i is None: portal['parent_portal'] = closest_portal
 
+                # if closest point is not one of the endpoints, make 2 portals to both endpoints
                 else:
                 
                     start_inside = self._inside_cone(portal_start_p, left, tip, right)
@@ -616,7 +618,28 @@ class Mesh2d(Polygon2d):
 
                 candid_pt, candid_dist = self.segment_closest_point_inside_cone(port1, port2, left, tip, right)
 
+                # # portal's closest point can only be one of the endpoints
+                # if candid_pt != port1 and candid_pt != port2:
 
+                    # start_inside = self._inside_cone(port1, left, tip, right)
+                    # end_inside = self._inside_cone(port2, left, tip, right)
+
+                    # endpts_inside = (
+                    #     (port1, self._inside_cone(port1, left, tip, right)),
+                    #     (port2, self._inside_cone(port2, left, tip, right))
+                    # )
+
+                    # # calculate distances to endpoints that are inside cone
+                    # endpt_dists = tuple((endpt, Vector2.distance(endpt, tip)) \
+                    #     for (endpt, inside) in endpts_inside if inside)
+
+                    # # if more than one endpoint is inside cone, picke the closest one
+                    # if len(endpt_dists) > 0:
+                    #     (candid_pt, candid_dist) = min(endpt_dists, key=itemgetter(1))
+                    # # if both endpoints are outside cone, leave it like this (we'll create 2 portals later)
+                                           
+
+                # update closest portal
                 if closest_dist is None or candid_dist < closest_dist:
                     closest_dist = candid_dist
                     closest_pt = candid_pt
@@ -741,34 +764,43 @@ class Mesh2d(Polygon2d):
 
 
     def segment_closest_point_inside_cone(self, seg1, seg2, left, tip, right):
-        proj = Vector2.project_to_line(tip, seg1, seg2)
+        '''
+        Find point on the segment that lies inside the cone that is closest to the cone tip.
+        This method assumes that the segment is at least partially inside the cone.
+        Use _segment_inside_cone method to verify that before calling this method.
+        '''
 
-        dist = None
-        closest_pt = None
-        # if projected point is inside anticone:
-        if self._inside_cone(proj, left, tip, right):
+        '''
+        Need to find closest point that is both inside cone and inside segment
+        Points of interest:
+        - proj point (check if inside cone AND inside segment)
+        - endpoint1 (check if inside cone)
+        - endpoint2 (check if inside cone)
+        - intersect1 (check if not None)
+        - intersect2 (check if not None)
+        '''
+        pts_of_interest = []
+        proj_pt = Vector2.project_to_line(tip, seg1, seg2)
 
-            # 1st case: projected point is inside anticone and inside segment:
-            if Vector2.point_between(proj, seg1, seg2):
-                dist = Vector2.distance(tip, proj)
-                closest_pt = proj
+        if self._inside_cone(proj_pt, left, tip, right) and \
+            Vector2.point_between(proj_pt, seg1, seg2):
+            pts_of_interest.append(proj_pt)
 
-            # 2nd case: projected point is inside anticone and outside segment:
-            else:
-                dist1 = Vector2.distance(seg1, tip)
-                dist2 = Vector2.distance(seg2, tip)
-                dist = min(dist1, dist2)
-                closest_pt = seg1 if dist1 < dist2 else seg2
+        if self._inside_cone(seg1, left, tip, right):
+            pts_of_interest.append(seg1)
+        if self._inside_cone(seg2, left, tip, right):
+            pts_of_interest.append(seg2)
 
-        # 3rd case: projected point is outside anticone:
-        else:
-            inters_left = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
-            inters_right = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
+        inters_left = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
+        inters_right = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
 
-            dist_left = Vector2.distance(tip, inters_left) if inters_left is not None else 9999999.0
-            dist_right = Vector2.distance(tip, inters_right) if inters_right is not None else 9999999.0
+        if inters_left is not None:
+            pts_of_interest.append(inters_left)
+        if inters_right is not None:
+            pts_of_interest.append(inters_right)
 
-            dist = min(dist_left, dist_right)
-            closest_pt = inters_left if dist_left < dist_right else inters_right
+
+        pts_of_interest = [(poi, Vector2.distance(poi, tip)) for poi in pts_of_interest]
+        (closest_pt, dist) = min(pts_of_interest, key=itemgetter(1))
 
         return closest_pt, dist
