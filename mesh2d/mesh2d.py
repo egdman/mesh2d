@@ -299,9 +299,6 @@ class Mesh2d(Polygon2d):
 
 
 
-    
-
-
     def get_triangle_coords(self, triangle):
 
         v1 = self.vertices[triangle[0]]
@@ -378,7 +375,7 @@ class Mesh2d(Polygon2d):
         The endpoints of portals can be new vertices,
         but they are guaranteed to lie on the polygon boundary (not inside the polygon)
 
-        TODO This function is ridiculously complex right now
+        TODO This function is slightly less complex right now
         """
         spikes = self.find_spikes(threshold)
         portals = []
@@ -393,7 +390,6 @@ class Mesh2d(Polygon2d):
             tip = self.vertices[spike_i]
             left = tip + conevec2
             right = tip + conevec1
-
 
             # find closest edge
             closest_seg, closest_seg_point, closest_seg_dst = \
@@ -428,6 +424,7 @@ class Mesh2d(Polygon2d):
                 'end_point': None
             }
 
+            # we might want to add a second portal later
             new_portals = [portal]
 
             portal['start_index'] = spike_i
@@ -444,7 +441,8 @@ class Mesh2d(Polygon2d):
                 portal['end_point'] = self.vertices[closest_vert_i]
                 
 
-
+            # check if there is a portal closer than the previous closest element
+            # TODO When attaching to an existing portal, need to reconsider the necessity of the older portal
             if closest_portal_dst is not None and closest_portal_dst < closest_dst:
                 closest_dst = closest_portal_dst
 
@@ -454,13 +452,11 @@ class Mesh2d(Polygon2d):
                 portal_end_i = closest_portal['end_index'] # might be None
                 portal_end_p = closest_portal['end_point']
 
-
                 # now we know:
                 # position of starting point of other portal (portal_start_p)
                 # index of starting point of other portal (portal_start_i)
                 # position of ending point of other portal (portal_end_p)
                 # (possibly) index of ending point of other portal (portal_end_i)
-
 
                 # figure out if we want to create one or two portals
 
@@ -479,39 +475,26 @@ class Mesh2d(Polygon2d):
                     portal['end_index'] = portal_end_i # this might be None
                     portal['end_point'] = portal_end_p
 
-                    # if portal_end_i is None: portal['parent_portal'] = closest_portal
-
                 # if closest point is not one of the endpoints, make 2 portals to both endpoints
                 else:
-                
-                    start_inside = self._inside_cone(portal_start_p, left, tip, right)
-                    end_inside = self._inside_cone(portal_end_p, left, tip, right)
 
-                    # if both portal endpoints are inside
-                    if start_inside and end_inside:
-                        # pick the closest one
-                        dst_start = Vector2.distance(portal_start_p, tip)
-                        dst_end = Vector2.distance(portal_end_p, tip)
+                    portal_endpoints = (
+                        (portal_start_i, portal_start_p),
+                        (portal_end_i, portal_end_p)
+                    )
 
-                        if dst_start <= dst_end:
-                            portal['end_index'] = portal_start_i
-                            portal['end_point'] = portal_start_p
-                        else:
-                            portal['end_index'] = portal_end_i # this might be None
-                            portal['end_point'] = portal_end_p
+                    endpt_dists = tuple((idx, pos, Vector2.distance(pos, tip)) \
+                        for (idx, pos) in portal_endpoints \
+                        if self._inside_cone(pos, left, tip, right))
+
+                    # if 1 or 2 points are inside cone, pick the closest one
+                    if len(endpt_dists) > 0:
+                        (cl_idx, cl_pos, cl_dist) = min(endpt_dists, key=itemgetter(2))
+                        portal['end_index'] = cl_idx
+                        portal['end_point'] = cl_pos
 
 
-                    # if only the start of other portal is inside:
-                    elif start_inside:
-                        portal['end_index'] = portal_start_i
-                        portal['end_point'] = portal_start_p
-
-                    # if only the end of other portal is inside:
-                    elif end_inside:
-                        portal['end_index'] = portal_end_i # this might be None
-                        portal['end_point'] = portal_end_p
-
-                    # if none of the portal endpoints is inside, create 2 portals to both ends:
+                    # if none of the portal endpoints is inside cone, create 2 portals to both ends:
                     else:
                         second_portal = {}
                         second_portal.update(portal)
@@ -616,28 +599,7 @@ class Mesh2d(Polygon2d):
 
             if self._segment_inside_cone(port1, port2, left, tip, right):
 
-                candid_pt, candid_dist = self.segment_closest_point_inside_cone(port1, port2, left, tip, right)
-
-                # # portal's closest point can only be one of the endpoints
-                # if candid_pt != port1 and candid_pt != port2:
-
-                    # start_inside = self._inside_cone(port1, left, tip, right)
-                    # end_inside = self._inside_cone(port2, left, tip, right)
-
-                    # endpts_inside = (
-                    #     (port1, self._inside_cone(port1, left, tip, right)),
-                    #     (port2, self._inside_cone(port2, left, tip, right))
-                    # )
-
-                    # # calculate distances to endpoints that are inside cone
-                    # endpt_dists = tuple((endpt, Vector2.distance(endpt, tip)) \
-                    #     for (endpt, inside) in endpts_inside if inside)
-
-                    # # if more than one endpoint is inside cone, picke the closest one
-                    # if len(endpt_dists) > 0:
-                    #     (candid_pt, candid_dist) = min(endpt_dists, key=itemgetter(1))
-                    # # if both endpoints are outside cone, leave it like this (we'll create 2 portals later)
-                                           
+                candid_pt, candid_dist = self.segment_closest_point_inside_cone(port1, port2, left, tip, right)                                          
 
                 # update closest portal
                 if closest_dist is None or candid_dist < closest_dist:
@@ -654,6 +616,7 @@ class Mesh2d(Polygon2d):
         '''
         Check if vert is inside cone defined by left_v, tip_v, right_v.
         If vert is on the border of the cone, method returns False.
+        If vert == the cone tip, method returns False
         '''
         right_area = Vector2.double_signed_area(tip_v, right_v, vert)
         left_area = Vector2.double_signed_area(tip_v, left_v, vert)
@@ -690,8 +653,6 @@ class Mesh2d(Polygon2d):
         '''
         vrt = self.vertices
         num_vrt = len(self.vertices)
-        # next_ind = plus_wrap(spike_ind, num_vrt)
-        # prev_ind = minus_wrap(spike_ind, num_vrt)
 
         spike_v = vrt[spike_ind]
         prev_v = vrt[prev_ind]
@@ -710,7 +671,6 @@ class Mesh2d(Polygon2d):
         anticone_angle_plus = anticone_angle + clearance
 
         
-
         # limit anticone opening to 180 degrees:
         anticone_angle_plus = anticone_angle_plus if anticone_angle_plus < math.pi else math.pi
 
