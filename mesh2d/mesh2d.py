@@ -386,10 +386,10 @@ class Mesh2d(Polygon2d):
             spike_i = spike[1]
             next_i = spike[2]
 
-            conevec1, conevec2 = self.get_anticone(prev_i, spike_i, next_i, threshold)
+            sectorvec1, sectorvec2 = self.get_sector(prev_i, spike_i, next_i, threshold)
             tip = self.vertices[spike_i]
-            left = tip + conevec2
-            right = tip + conevec1
+            left = tip + sectorvec2
+            right = tip + sectorvec1
 
             # find closest edge
             closest_seg, closest_seg_point, closest_seg_dst = \
@@ -414,8 +414,8 @@ class Mesh2d(Polygon2d):
 
 
             # closest edge always exists
-            # closest vertex - not always (there might be no vertices inside the anticone)
-            # closest portal - not always (there might be no portals inside the anticone
+            # closest vertex - not always (there might be no vertices inside the sector)
+            # closest portal - not always (there might be no portals inside the sector
             # or no portals at all)
 
             portal = {
@@ -485,16 +485,16 @@ class Mesh2d(Polygon2d):
 
                     endpt_dists = tuple((idx, pos, Vector2.distance(pos, tip)) \
                         for (idx, pos) in portal_endpoints \
-                        if self._inside_cone(pos, left, tip, right))
+                        if self._inside_sector(pos, left, tip, right))
 
-                    # if 1 or 2 points are inside cone, pick the closest one
+                    # if 1 or 2 points are inside sector, pick the closest one
                     if len(endpt_dists) > 0:
                         (cl_idx, cl_pos, cl_dist) = min(endpt_dists, key=itemgetter(2))
                         portal['end_index'] = cl_idx
                         portal['end_point'] = cl_pos
 
 
-                    # if none of the portal endpoints is inside cone, create 2 portals to both ends:
+                    # if none of the portal endpoints is inside sector, create 2 portals to both ends:
                     else:
                         second_portal = {}
                         second_portal.update(portal)
@@ -536,7 +536,7 @@ class Mesh2d(Polygon2d):
 
             if cur_v != tip:
 
-                if self._inside_cone(vrt[cur_i], left, tip, right):
+                if self._inside_sector(vrt[cur_i], left, tip, right):
                     dst = Vector2.distance(vrt[cur_i], tip)
                     if closest_dst is None or dst < closest_dst:
                         closest_dst = dst
@@ -565,16 +565,16 @@ class Mesh2d(Polygon2d):
             seg1 = vrt[seg_i1]
             seg2 = vrt[seg_i2]
 
-            # skip edges adjacent to the tip of the cone:
+            # skip edges adjacent to the tip of the sector:
             if seg2 == tip:
                 continue
             if seg1 == tip:
                 continue
 
             
-            if self._segment_inside_cone(seg1, seg2, left, tip, right):
+            if self._segment_inside_sector(seg1, seg2, left, tip, right):
 
-                candid_pt, candid_dist = self.segment_closest_point_inside_cone(seg1, seg2, left, tip, right)
+                candid_pt, candid_dist = self.segment_closest_point_inside_sector(seg1, seg2, left, tip, right)
 
                 if closest_dist is None or candid_dist < closest_dist:
                     closest_dist = candid_dist
@@ -597,9 +597,9 @@ class Mesh2d(Polygon2d):
             port1 = self.vertices[portal['start_index']]
             port2 = portal['end_point']
 
-            if self._segment_inside_cone(port1, port2, left, tip, right):
+            if self._segment_inside_sector(port1, port2, left, tip, right):
 
-                candid_pt, candid_dist = self.segment_closest_point_inside_cone(port1, port2, left, tip, right)                                          
+                candid_pt, candid_dist = self.segment_closest_point_inside_sector(port1, port2, left, tip, right)                                          
 
                 # update closest portal
                 if closest_dist is None or candid_dist < closest_dist:
@@ -611,12 +611,11 @@ class Mesh2d(Polygon2d):
 
 
 
-
-    def _inside_cone(self, vert, left_v, tip_v, right_v):
+    def _inside_sector(self, vert, left_v, tip_v, right_v):
         '''
-        Check if vert is inside cone defined by left_v, tip_v, right_v.
-        If vert is on the border of the cone, method returns False.
-        If vert == the cone tip, method returns False
+        Check if vert is inside sector defined by left_v, tip_v, right_v.
+        If vert is on the border of the sector, method returns False.
+        If vert == the sector tip, method returns False
         '''
         right_area = Vector2.double_signed_area(tip_v, right_v, vert)
         left_area = Vector2.double_signed_area(tip_v, left_v, vert)
@@ -625,13 +624,13 @@ class Mesh2d(Polygon2d):
 
 
 
-    def _segment_inside_cone(self, seg1, seg2, left, tip, right):
-        v1_inside = self._inside_cone(seg1, left, tip, right)
-        v2_inside = self._inside_cone(seg2, left, tip, right)
-        # if at least one vertex is inside the cone:
+    def _segment_inside_sector(self, seg1, seg2, left, tip, right):
+        v1_inside = self._inside_sector(seg1, left, tip, right)
+        v2_inside = self._inside_sector(seg2, left, tip, right)
+        # if at least one vertex is inside the sector:
         if v1_inside or v2_inside:
             return True
-        # if none of the endpoints is inside cone, the middle of the segment might still be:
+        # if none of the endpoints is inside sector, the middle of the segment might still be:
         else:
             left_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
             right_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
@@ -645,9 +644,9 @@ class Mesh2d(Polygon2d):
 
 
 
-    def get_anticone(self, prev_ind, spike_ind, next_ind, threshold=0.0):
+    def get_sector(self, prev_ind, spike_ind, next_ind, threshold=0.0):
         '''
-        Returns 2 vectors that define the cone rays.
+        Returns 2 vectors that define the sector rays.
         The vectors have unit lengths
         The vector pair is right-hand
         '''
@@ -664,17 +663,17 @@ class Mesh2d(Polygon2d):
         vec1 /= vec1.length()
         vec2 /= vec2.length()
 
-        anticone_angle = math.acos(vec1.dot_product(vec2))
+        sector_angle = math.acos(vec1.dot_product(vec2))
         
         # degrees to radian
         clearance = math.pi * threshold / 180.0
-        anticone_angle_plus = anticone_angle + clearance
+        sector_angle_plus = sector_angle + clearance
 
         
-        # limit anticone opening to 180 degrees:
-        anticone_angle_plus = anticone_angle_plus if anticone_angle_plus < math.pi else math.pi
+        # limit sector opening to 180 degrees:
+        sector_angle_plus = sector_angle_plus if sector_angle_plus < math.pi else math.pi
 
-        clearance = anticone_angle_plus - anticone_angle
+        clearance = sector_angle_plus - sector_angle
 
         clearance = clearance / 2.0
 
@@ -723,32 +722,32 @@ class Mesh2d(Polygon2d):
 
 
 
-    def segment_closest_point_inside_cone(self, seg1, seg2, left, tip, right):
+    def segment_closest_point_inside_sector(self, seg1, seg2, left, tip, right):
         '''
-        Find point on the segment that lies inside the cone that is closest to the cone tip.
-        This method assumes that the segment is at least partially inside the cone.
-        Use _segment_inside_cone method to verify that before calling this method.
+        Find point on the segment that lies inside the sector that is closest to the sector tip.
+        This method assumes that the segment is at least partially inside the sector.
+        Use _segment_inside_sector method to verify that before calling this method.
         '''
 
         '''
-        Need to find closest point that is both inside cone and inside segment
+        Need to find closest point that is both inside sector and inside segment
         Points of interest:
-        - proj point (check if inside cone AND inside segment)
-        - endpoint1 (check if inside cone)
-        - endpoint2 (check if inside cone)
+        - proj point (check if inside sector AND inside segment)
+        - endpoint1 (check if inside sector)
+        - endpoint2 (check if inside sector)
         - intersect1 (check if not None)
         - intersect2 (check if not None)
         '''
         pts_of_interest = []
         proj_pt = Vector2.project_to_line(tip, seg1, seg2)
 
-        if self._inside_cone(proj_pt, left, tip, right) and \
+        if self._inside_sector(proj_pt, left, tip, right) and \
             Vector2.point_between(proj_pt, seg1, seg2):
             pts_of_interest.append(proj_pt)
 
-        if self._inside_cone(seg1, left, tip, right):
+        if self._inside_sector(seg1, left, tip, right):
             pts_of_interest.append(seg1)
-        if self._inside_cone(seg2, left, tip, right):
+        if self._inside_sector(seg2, left, tip, right):
             pts_of_interest.append(seg2)
 
         inters_left = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
