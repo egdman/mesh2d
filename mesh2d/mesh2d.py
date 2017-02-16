@@ -571,15 +571,14 @@ class Mesh2d(Polygon2d):
             if seg1 == tip:
                 continue
 
-            
-            if self._segment_inside_sector(seg1, seg2, left, tip, right):
 
-                candid_pt, candid_dist = self.segment_closest_point_inside_sector(seg1, seg2, left, tip, right)
+            candid_pt, candid_dist = self.segment_closest_point_inside_sector(seg1, seg2, left, tip, right)
+            if candid_pt is None: continue
 
-                if closest_dist is None or candid_dist < closest_dist:
-                    closest_dist = candid_dist
-                    closest_pt = candid_pt
-                    closest_edge = (seg_i1, seg_i2)
+            if closest_dist is None or candid_dist < closest_dist:
+                closest_dist = candid_dist
+                closest_pt = candid_pt
+                closest_edge = (seg_i1, seg_i2)
 
         return closest_edge, closest_pt, closest_dist
 
@@ -597,15 +596,14 @@ class Mesh2d(Polygon2d):
             port1 = self.vertices[portal['start_index']]
             port2 = portal['end_point']
 
-            if self._segment_inside_sector(port1, port2, left, tip, right):
+            candid_pt, candid_dist = self.segment_closest_point_inside_sector(port1, port2, left, tip, right)
+            if candid_pt is None: continue
 
-                candid_pt, candid_dist = self.segment_closest_point_inside_sector(port1, port2, left, tip, right)                                          
-
-                # update closest portal
-                if closest_dist is None or candid_dist < closest_dist:
-                    closest_dist = candid_dist
-                    closest_pt = candid_pt
-                    closest_portal = portal
+            # update closest portal
+            if closest_dist is None or candid_dist < closest_dist:
+                closest_dist = candid_dist
+                closest_pt = candid_pt
+                closest_portal = portal
 
         return closest_portal, closest_pt, closest_dist
 
@@ -621,26 +619,6 @@ class Mesh2d(Polygon2d):
         left_area = Vector2.double_signed_area(tip_v, left_v, vert)
         if right_area == 0 or left_area == 0: return False
         return right_area > 0 and left_area < 0
-
-
-
-    def _segment_inside_sector(self, seg1, seg2, left, tip, right):
-        v1_inside = self._inside_sector(seg1, left, tip, right)
-        v2_inside = self._inside_sector(seg2, left, tip, right)
-        # if at least one vertex is inside the sector:
-        if v1_inside or v2_inside:
-            return True
-        # if none of the endpoints is inside sector, the middle of the segment might still be:
-        else:
-            left_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
-            right_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
-
-            if left_x is not None and right_x is not None:
-                if left_x == tip and right_x == tip: return False
-                return True
-            else:
-                return False
-
 
 
 
@@ -721,12 +699,30 @@ class Mesh2d(Polygon2d):
 
 
 
+    def _segment_inside_sector(self, seg1, seg2, left, tip, right):
+        v1_inside = self._inside_sector(seg1, left, tip, right)
+        v2_inside = self._inside_sector(seg2, left, tip, right)
+        # if at least one vertex is inside the sector:
+        if v1_inside or v2_inside:
+            return True
+        # if none of the endpoints is inside sector, the middle of the segment might still be:
+        else:
+            left_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
+            right_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
+
+            if left_x is not None and right_x is not None:
+                if left_x == tip and right_x == tip: return False
+                return True
+            else:
+                return False
+
+
 
     def segment_closest_point_inside_sector(self, seg1, seg2, left, tip, right):
         '''
         Find point on the segment that lies inside the sector that is closest to the sector tip.
-        This method assumes that the segment is at least partially inside the sector.
-        Use _segment_inside_sector method to verify that before calling this method.
+        Returns (Vector2, distance).
+        If the segment is entirely outside the sector, returns (None, None)
         '''
 
         '''
@@ -758,6 +754,7 @@ class Mesh2d(Polygon2d):
         if inters_right is not None:
             pts_of_interest.append(inters_right)
 
+        if len(pts_of_interest) == 0: return None, None
 
         pts_of_interest = [(poi, Vector2.distance(poi, tip)) for poi in pts_of_interest]
         (closest_pt, dist) = min(pts_of_interest, key=itemgetter(1))
