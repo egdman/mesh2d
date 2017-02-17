@@ -1,5 +1,6 @@
 from mesh2d import Vector2, Matrix
 import random
+import numpy as np
 import uuid
 
 class ObjectView(object):
@@ -47,16 +48,39 @@ class ObjectView(object):
 
             # convert crd_buf to list of Vector2's
             for loc in range(len(crd_buf) / 2):
-                self.world_vertices.append(Vector2(
+
+                # store list of Vector2 objects
+                # self.world_vertices.append(Vector2(
+                #     crd_buf[2*loc],
+                #     crd_buf[2*loc+1]
+                # ))
+
+                # # store as jagged array
+                # self.world_vertices.append((
+                #     crd_buf[2*loc],
+                #     crd_buf[2*loc+1],
+                #     1.0
+                # ))
+
+                # store as flat array
+                self.world_vertices.extend([
                     crd_buf[2*loc],
-                    crd_buf[2*loc+1]
-                )
-            )
+                    crd_buf[2*loc+1],
+                    1.0
+                ])
 
             # print("new object with {} vertices created".format(len(self.world_vertices)))
             # print("fences: {}".format(self.coord_fences))
 
         self.redraw(camera_transform, canvas)
+
+
+
+    def set_vector(self, index, vector):
+        index *= 3
+        self.world_vertices[index] = vector[0]
+        self.world_vertices[index + 1] = vector[1]
+        self.world_vertices[index + 2] = vector[2]
 
 
 
@@ -66,7 +90,13 @@ class ObjectView(object):
         '''
         new_verts = []
         for vert in self.world_vertices:
-            new_verts.append(vert + vec)
+            new_vec = vert + vec
+            # # if jagged array
+            # new_verts.append((new_vec.x, new_vec.y, 1.0))
+
+            # if flat array
+            new_verts.extend([new_vec.x, new_vec.y, 1.0])
+
         self.world_vertices = new_verts
 
 
@@ -79,7 +109,11 @@ class ObjectView(object):
     def redraw(self, camera_transform, canvas):
         obj_view = camera_transform
 
-        screen_vertices = list(self.apply_transform(obj_view, self.world_vertices))
+        # use numpy:
+        screen_vertices = self.apply_transform_np(obj_view, self.world_vertices)
+
+        # # do not use numpy:
+        # screen_vertices = self.apply_transform(obj_view, self.world_vertices)
 
         screen_crd_buf = []
         for screen_v in screen_vertices:
@@ -120,8 +154,28 @@ class ObjectView(object):
 
     @staticmethod
     def apply_transform(transform, vertices):
-        return (transform.multiply(vert).values[:-1] for vert in vertices)
+        return list(transform.multiply(Vector2(vert[0], vert[1])).values[:-1] \
+            for vert in vertices)
 
+
+    @staticmethod
+    def apply_transform_np(transform, vertices):
+        num_vectors = len(vertices) / 3
+        # np_verts = np.array(vertices).T
+        np_verts = np.ndarray(
+            shape = (num_vectors, 3),
+            buffer=np.array(vertices)
+        ).T
+
+        transform = np.ndarray(
+            shape = transform.shape,
+            buffer = np.array(transform.values)
+        )
+        res = np.array(transform).dot(np_verts).T[:, :-1]
+        # print("verts       : {}".format(np_verts.shape))
+        # print("transform   : {}".format(transform.shape))
+        # print("result      : {}".format(res.shape))
+        return res
 
 
 class WallHelperView(ObjectView):
@@ -175,16 +229,23 @@ class WallHelperView(ObjectView):
         self.width = width
         c1, c2, c3, c4 = self.find_corners()
 
-        self.world_vertices[0] = c1
-        self.world_vertices[1] = c2
-        self.world_vertices[2] = c2
-        self.world_vertices[3] = c3
-        self.world_vertices[4] = c3
-        self.world_vertices[5] = c4
-        self.world_vertices[6] = c4
-        self.world_vertices[7] = c1
+        # self.world_vertices[0] = c1.column(0)
+        # self.world_vertices[1] = c2.column(0)
+        # self.world_vertices[2] = c2.column(0)
+        # self.world_vertices[3] = c3.column(0)
+        # self.world_vertices[4] = c3.column(0)
+        # self.world_vertices[5] = c4.column(0)
+        # self.world_vertices[6] = c4.column(0)
+        # self.world_vertices[7] = c1.column(0)
 
-
+        self.set_vector(0, c1)
+        self.set_vector(1, c2)
+        self.set_vector(2, c2)
+        self.set_vector(3, c3)
+        self.set_vector(4, c3)
+        self.set_vector(5, c4)
+        self.set_vector(6, c4)
+        self.set_vector(7, c1)
 
 
 
@@ -255,8 +316,11 @@ class SegmentHelperView(ObjectView):
         self.v1 = vec1
         self.v2 = vec2
 
-        self.world_vertices[0] = delta1
-        self.world_vertices[1] = delta2
+        # self.world_vertices[0] = delta1.column(0)
+        # self.world_vertices[1] = delta2.column(0)
+
+        self.set_vector(0, delta1)
+        self.set_vector(1, delta2)
 
 
 

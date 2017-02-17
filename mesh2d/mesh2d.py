@@ -2,6 +2,7 @@ import math
 import random
 from collections import deque
 from operator import itemgetter
+from rtree import index
 
 from .vector2 import Vector2, ZeroSegmentError
 
@@ -25,6 +26,13 @@ class Polygon2d(object):
 
         self.vertices = vertices[:]
         sinters = self.find_self_intersections()
+        self.rti = index.Index()
+        self.rti.interleaved = True
+
+        # insert vertices into spatial index
+        for vid in self.outline:
+            vert = self.vertices[vid]
+            self.rti.insert(vid, (vert.x, vert.y, vert.x, vert.y))
 
 
 
@@ -74,8 +82,17 @@ class Polygon2d(object):
         new_vert_index = len(self.vertices)
         self.vertices.append(vertex)
         self.outline.insert(insert_at, new_vert_index)
+
+        # add new vertex to spatial index:
+        self.rti.insert(new_vert_index,
+            (vertex.x, vertex.y, vertex.x, vertex.y))
+
         return new_vert_index
 
+
+
+    def find_verts_in_bbox(self, vect_min, vect_max):
+        return self.rti.intersection((vect_min.x, vect_min.y, vect_max.x, vect_max.y))
 
 
 
@@ -534,13 +551,13 @@ class Mesh2d(Polygon2d):
         for cur_i in indices:
             cur_v = vrt[cur_i]
 
-            if cur_v != tip:
+            if cur_v == tip: continue
 
-                if self._inside_sector(vrt[cur_i], left, tip, right):
-                    dst = Vector2.distance(vrt[cur_i], tip)
-                    if closest_dst is None or dst < closest_dst:
-                        closest_dst = dst
-                        closest_ind = cur_i
+            if self._inside_sector(vrt[cur_i], left, tip, right):
+                dst = Vector2.distance(vrt[cur_i], tip)
+                if closest_dst is None or dst < closest_dst:
+                    closest_dst = dst
+                    closest_ind = cur_i
 
         return closest_ind, closest_dst
 

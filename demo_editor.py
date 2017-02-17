@@ -362,6 +362,25 @@ class Application(tk.Frame):
         self.last_x = event.x
         self.last_y = event.y
 
+        # find polygon vertices near the mouse pointer
+
+        self.remove_draw_objects_glob("highlight_points/*")
+        if len(self._polygons) > 0:
+            ptr_world = self.get_world_crds(event.x, event.y)
+            vect_nw = ptr_world - Vector2(20., 20.)
+            vect_se = ptr_world + Vector2(20., 20.)
+
+            num = 0
+            for poly in self._polygons:
+                idxs = poly.find_verts_in_bbox(vect_nw, vect_se)
+                for idx in idxs:
+                    vect = poly.vertices[idx]
+                    self.add_draw_object("highlight_points/{}".format(num),
+                        PointHelperView(loc = vect, color = 'green'))
+                    num += 1
+            if num > 0: self.draw_all()
+
+
         # tell the active tool that mouse has moved
         self.active_tool.mouse_moved(event, delta_x, delta_y)
 
@@ -527,6 +546,8 @@ class Application(tk.Frame):
             pt = sinter[2]
             self.add_draw_object('poly_sinters/sinter_{}_{}'.format(num_polys, si_num),
                 PlusView(16, loc=pt, color='cyan'))
+
+        self._polygons.append(new_poly)
 
         # set current tool on 'Select'
         self.active_tool = self.select_tool
