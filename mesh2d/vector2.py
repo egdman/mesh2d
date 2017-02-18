@@ -226,7 +226,8 @@ class Vector2:
         '''
         Tells whether vert is between vert1 and vert2.
         Assumes they are on the same straight line.
-        If vert == vert1 or vert == vert2, returns False.
+        This is exclusive version:
+        if vert == vert1 or vert == vert2, returns False.
         '''
         if vert1.x == vert2.x:
             ymin = min(vert1.y, vert2.y)
@@ -244,6 +245,7 @@ class Vector2:
         '''
         Tells whether vert is between vert1 and vert2.
         Assumes they are on the same straight line.
+        This is inclusive version:
         If vert == vert1 or vert == vert2, returns True.
         '''
         if vert1.x == vert2.x:
@@ -307,7 +309,7 @@ class Vector2:
 
 
     @staticmethod
-    def where_segments_cross(seg11, seg12, seg21, seg22):
+    def where_segments_cross_inclusive(seg11, seg12, seg21, seg22):
         line_rel = Vector2.lines_intersect(seg11, seg12, seg21, seg22)
 
         line_x = line_rel.intersection
@@ -315,7 +317,7 @@ class Vector2:
 
         # if lines intersect
         if line_x is not None:
-            # if intersection lies inside both segments
+            # if intersection lies inside both segments (INCLUDING ENDPOINTS)
             if Vector2.point_between_inclusive(line_x, seg11, seg12) and \
                Vector2.point_between_inclusive(line_x, seg21, seg22):
                 return line_x
@@ -336,13 +338,30 @@ class Vector2:
                 return seg11
                 
             else:
-                return False
+                return None
 
         # if lines are parallel
         else:
-            return False
+            return None
 
 
+
+
+    @staticmethod
+    def where_segments_cross_exclusive(seg11, seg12, seg21, seg22):
+        line_rel = Vector2.lines_intersect(seg11, seg12, seg21, seg22)
+
+        line_x = line_rel.intersection
+        lines_overlap =  line_rel.identical
+
+        # if lines intersect
+        if line_x is not None:
+            # if intersection lies inside both segments (EXCLUDING ENDPOINTS)
+            if Vector2.point_between(line_x, seg11, seg12) and \
+               Vector2.point_between(line_x, seg21, seg22):
+                return line_x
+            else:
+                return None
 
 
 

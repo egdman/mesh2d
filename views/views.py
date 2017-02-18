@@ -48,21 +48,7 @@ class ObjectView(object):
 
             # convert crd_buf to list of Vector2's
             for loc in range(len(crd_buf) / 2):
-
-                # store list of Vector2 objects
-                # self.world_vertices.append(Vector2(
-                #     crd_buf[2*loc],
-                #     crd_buf[2*loc+1]
-                # ))
-
-                # # store as jagged array
-                # self.world_vertices.append((
-                #     crd_buf[2*loc],
-                #     crd_buf[2*loc+1],
-                #     1.0
-                # ))
-
-                # store as flat array
+                # store coords as flat array including the 3rd coord which is 1.0
                 self.world_vertices.extend([
                     crd_buf[2*loc],
                     crd_buf[2*loc+1],
@@ -86,18 +72,12 @@ class ObjectView(object):
 
     def offset_by(self, vec):
         '''
-        move all coordinates in crd_buf by vec
+        move all coordinates in world_vertices by vec
         '''
-        new_verts = []
-        for vert in self.world_vertices:
-            new_vec = vert + vec
-            # # if jagged array
-            # new_verts.append((new_vec.x, new_vec.y, 1.0))
-
-            # if flat array
-            new_verts.extend([new_vec.x, new_vec.y, 1.0])
-
-        self.world_vertices = new_verts
+        for vnum in range(len(self.world_vertices) / 3):
+            vhead = vnum*3
+            old_vec = Vector2(self.world_vertices[vhead], self.world_vertices[vhead+1])
+            self.set_vector(vnum, old_vec + vec)
 
 
 
@@ -159,23 +139,21 @@ class ObjectView(object):
 
 
     @staticmethod
-    def apply_transform_np(transform, vertices):
-        num_vectors = len(vertices) / 3
+    def apply_transform_np(transform, vertices): 
         # np_verts = np.array(vertices).T
         np_verts = np.ndarray(
-            shape = (num_vectors, 3),
+            shape = (len(vertices) / 3, 3),
             buffer=np.array(vertices)
         ).T
 
         transform = np.ndarray(
             shape = transform.shape,
             buffer = np.array(transform.values)
-        )
-        res = np.array(transform).dot(np_verts).T[:, :-1]
-        # print("verts       : {}".format(np_verts.shape))
-        # print("transform   : {}".format(transform.shape))
-        # print("result      : {}".format(res.shape))
-        return res
+        )[:-1] # chop off the last row of the matrix (we don't need it)
+
+        # return np.array(transform).dot(np_verts).T[:, :-1]
+        return np.array(transform).dot(np_verts).T
+
 
 
 class WallHelperView(ObjectView):
@@ -228,15 +206,6 @@ class WallHelperView(ObjectView):
         self.v2 = vec2
         self.width = width
         c1, c2, c3, c4 = self.find_corners()
-
-        # self.world_vertices[0] = c1.column(0)
-        # self.world_vertices[1] = c2.column(0)
-        # self.world_vertices[2] = c2.column(0)
-        # self.world_vertices[3] = c3.column(0)
-        # self.world_vertices[4] = c3.column(0)
-        # self.world_vertices[5] = c4.column(0)
-        # self.world_vertices[6] = c4.column(0)
-        # self.world_vertices[7] = c1.column(0)
 
         self.set_vector(0, c1)
         self.set_vector(1, c2)
@@ -370,8 +339,13 @@ class PolygonView(ObjectView):
 
     def first_time_draw(self, canvas):
         verts = self.poly.vertices
+
+        poly_crds = self.get_open_crds(verts, self.poly.outline)
+        Id = canvas.create_polygon(poly_crds, fill=self.color)
+        self.element_ids.append(Id)
+
         outline_crds = self.get_closed_crds(verts, self.poly.outline)
-        Id = canvas.create_line(outline_crds, fill=self.color, width=1)
+        Id = canvas.create_line(outline_crds, fill='#ffffff', width=1)
         self.element_ids.append(Id)
 
 

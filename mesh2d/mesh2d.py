@@ -25,7 +25,7 @@ class Polygon2d(object):
             self.outline = indices[::-1]
 
         self.vertices = vertices[:]
-        sinters = self.find_self_intersections()
+
         self.rti = index.Index()
         self.rti.interleaved = True
 
@@ -34,28 +34,77 @@ class Polygon2d(object):
             vert = self.vertices[vid]
             self.rti.insert(vid, (vert.x, vert.y, vert.x, vert.y))
 
+        self.resolve_sinters()
 
 
-    def find_self_intersections(self):
-        segs = Polygon2d.get_segments(self.outline)
-        sinters = []
-        for i in range(len(segs)):
-            for j in range(i+2, len(segs)):
-                seg1 = segs[i]
-                seg2 = segs[j]
 
-                seg11 = self.vertices[seg1[0]]
-                seg12 = self.vertices[seg1[1]]
-
-                seg21 = self.vertices[seg2[0]]
-                seg22 = self.vertices[seg2[1]]
-
-                seg_x = Vector2.where_segments_cross(
+    def _segments_cross_helper(self, seg1, seg2):
+        seg11 = self.vertices[seg1[0]]
+        seg12 = self.vertices[seg1[1]]
+        seg21 = self.vertices[seg2[0]]
+        seg22 = self.vertices[seg2[1]]
+        return Vector2.where_segments_cross_exclusive(
                     seg11, seg12, seg21, seg22)
 
+
+
+    def find_first_sinter(self, segments):
+        # first segment with every other
+        seg1 = segments[0]
+        num_seg = len(segments)
+        for j in range(2, num_seg - 1):
+            seg2 = segments[j]
+            seg_x = self._segments_cross_helper(seg1, seg2)
+            if seg_x is not None:
+                return (seg1, seg2, seg_x)
+
+        # remaining segments
+        for i in range(1, num_seg - 2):
+            for j in range(i+2, num_seg):
+                seg1 = segments[i]
+                seg2 = segments[j]
+                seg_x = self._segments_cross_helper(seg1, seg2)
                 if seg_x is not None:
-                    sinters.append((seg1, seg2, seg_x))
-        return sinters
+                    return (seg1, seg2, seg_x)
+
+        return (None, None, None)
+
+
+
+    def resolve_sinters(self):
+        while True:
+            segments = Polygon2d.get_segments(self.outline)
+            (seg1, seg2, seg_x) = self.find_first_sinter(segments)
+            if seg_x is None: return
+
+            # insert 2 new vertices at the intersection
+            new_idx1 = self.add_vertex_to_outline(seg_x, seg1)
+            new_idx2 = self.add_vertex_to_outline(seg_x, seg2)
+
+            # reverse indices:
+            self.outline = self._mirror_indices(self.outline, new_idx1, new_idx2)
+            print("BOOM!!!!!")
+
+
+
+
+    @staticmethod
+    def _mirror_indices(indices, start_after, end_before):
+        '''
+        input: indices=[0, 1, 2, 3, 4, 5, 6, 7], start_after=2, end_before=6
+        output: [0, 1, 2, 5, 4, 3, 6, 7]
+        '''
+        start_loc = indices.index(start_after)
+        end_loc = indices.index(end_before)
+
+        if start_loc >= end_loc:
+            raise ValueError("'start_after' must be to the left of 'end_before'")
+
+        before = indices[:start_loc+1]
+        middle = indices[start_loc+1:end_loc]
+        after = indices[end_loc:]
+        return before + middle[::-1] + after
+
 
 
 

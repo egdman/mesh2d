@@ -97,8 +97,8 @@ class CreateWall(Tool):
 class Create(Tool):
 
     def right_click(self, event):
-        self.parent._add_navmesh(event)
-        # self.parent._add_polygon(event)
+        # self.parent._add_navmesh(event)
+        self.parent._add_polygon(event)
 
     def left_click(self, event):
         self.parent._add_vertex(event)
@@ -532,8 +532,8 @@ class Application(tk.Frame):
         new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
         del self._new_vertices[:]
 
-        sinters = new_poly.find_self_intersections()
-        print("{} sinters".format(len(sinters)))
+        # sinters = new_poly.find_self_intersections()
+        # print("{} sinters".format(len(sinters)))
 
         num_polys = len(self.find_draw_objects_glob('polys/*'))
         self.add_draw_object('polys/poly_{}'.format(num_polys),
@@ -542,10 +542,10 @@ class Application(tk.Frame):
         # remove helper views
         self.remove_draw_objects_glob('obj_creation_helpers/*')
 
-        for si_num, sinter in enumerate(sinters):
-            pt = sinter[2]
-            self.add_draw_object('poly_sinters/sinter_{}_{}'.format(num_polys, si_num),
-                PlusView(16, loc=pt, color='cyan'))
+        # for si_num, sinter in enumerate(sinters):
+        #     pt = sinter[2]
+        #     self.add_draw_object('poly_sinters/sinter_{}_{}'.format(num_polys, si_num),
+        #         PlusView(16, loc=pt, color='cyan'))
 
         self._polygons.append(new_poly)
 
