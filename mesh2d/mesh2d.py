@@ -34,7 +34,21 @@ class Polygon2d(object):
             vert = self.vertices[vid]
             self.rti.insert(vid, (vert.x, vert.y, vert.x, vert.y))
 
-        self.resolve_sinters()
+        # resolve self-intersections (sinters)
+        self._resolve_sinters()
+
+
+
+    def get_adjacent_edges(self, index):
+        vert_loc = self.outline.index(index)
+        prev_idx = self.outline[(vert_loc - 1)]
+        next_idx = self.outline[(vert_loc + 1) % len(self.outline)]
+        return (prev_idx, index), (index, next_idx)
+
+
+
+    def find_verts_in_bbox(self, vect_min, vect_max):
+        return self.rti.intersection((vect_min.x, vect_min.y, vect_max.x, vect_max.y))
 
 
 
@@ -48,7 +62,7 @@ class Polygon2d(object):
 
 
 
-    def find_first_sinter(self, segments):
+    def _find_first_sinter(self, segments):
         # first segment with every other
         seg1 = segments[0]
         num_seg = len(segments)
@@ -71,21 +85,19 @@ class Polygon2d(object):
 
 
 
-    def get_adj_edges(self, index):
-        vert_loc = self.outline.index(index)
-        prev_idx = self.outline[(vert_loc - 1)]
-        next_idx = self.outline[(vert_loc + 1) % len(self.outline)]
-        return (prev_idx, index), (index, next_idx)
-
-
-
     def _pull_direction(self, edge1, edge2, intersect_vector):
         e11 = self.vertices[edge1[0]]
-
         e21 = self.vertices[edge2[0]]
-        e22 = self.vertices[edge2[1]]
-        dir1 = (e11 + e21) - intersect_vector
-        dir2 = (e11 + e22) - intersect_vector
+
+        vec1 = e11 - intersect_vector
+        vec2 = e21 - intersect_vector
+
+        vec1 /= vec1.length()
+        vec2 /= vec2.length()
+
+        dir1 = vec1 + vec2
+        dir2 = vec1 - vec2
+
         ldir1 = dir1.length()
         ldir2 = dir2.length()
 
@@ -96,18 +108,19 @@ class Polygon2d(object):
 
 
 
-
-    def resolve_sinters(self):
+    def _resolve_sinters(self):
         while True:
             segments = Polygon2d.get_segments(self.outline)
-            (seg1, seg2, seg_x) = self.find_first_sinter(segments)
+            (seg1, seg2, seg_x) = self._find_first_sinter(segments)
+
+            # stop when there are no more sinters
             if seg_x is None: break
 
             # pull vertices apart:
             # determine direction:
             pull_dir = self._pull_direction(seg1, seg2, seg_x)
-            nv1 = seg_x + pull_dir * 10.
-            nv2 = seg_x - pull_dir * 10.
+            nv1 = seg_x + pull_dir * .5
+            nv2 = seg_x - pull_dir * .5
 
             # insert 2 new vertices at the intersection
             new_idx1 = self.add_vertex_to_outline(nv1, seg1)
@@ -158,11 +171,6 @@ class Polygon2d(object):
             (vertex.x, vertex.y, vertex.x, vertex.y))
 
         return new_vert_index
-
-
-
-    def find_verts_in_bbox(self, vect_min, vect_max):
-        return self.rti.intersection((vect_min.x, vect_min.y, vect_max.x, vect_max.y))
 
 
 
@@ -260,7 +268,7 @@ class Mesh2d(Polygon2d):
         # just an alias (need to get rid of it later)
         self.indices = self.outline
 
-        self.pieces = []
+        self.rooms = []
         self.portals = []
 
 
@@ -268,10 +276,10 @@ class Mesh2d(Polygon2d):
         return self.__dict__
 
 
-    def get_pieces_as_meshes(self):
+    def get_rooms_as_meshes(self):
         meshes = []
-        for piece in self.pieces:
-            meshes.append(Mesh2d(self.vertices, piece))
+        for room in self.rooms:
+            meshes.append(Mesh2d(self.vertices, room))
         return meshes
 
 
@@ -343,26 +351,26 @@ class Mesh2d(Polygon2d):
                 portal['end_index'] = portal['parent_portal']['end_index']
 
 
-        # Now break the mesh outline into convex pieces
+        # Now break the mesh outline into convex rooms
 
-        # queue of pieces
-        piece_q = deque()
+        # queue of rooms
+        room_q = deque()
 
         # append a copy of the entire outline
-        piece_q.append(self.indices[:])
+        room_q.append(self.indices[:])
 
-        while len(piece_q) > 0:
-            piece = piece_q.popleft()
-            piece1, piece2, new_portal = Mesh2d._break_in_two(piece, portals)
+        while len(room_q) > 0:
+            room = room_q.popleft()
+            room1, room2, new_portal = Mesh2d._break_in_two(room, portals)
 
-            # if could not split this piece, finalize it
-            if piece1 is None:
-                self.pieces.append(piece)
+            # if could not split this room, finalize it
+            if room1 is None:
+                self.rooms.append(room)
 
-            # otherwise add new pieces to the queue
+            # otherwise add new rooms to the queue
             else:
-                piece_q.append(piece1)
-                piece_q.append(piece2)
+                room_q.append(room1)
+                room_q.append(room2)
                 self.portals.append(new_portal)
 
         return portals
@@ -377,8 +385,8 @@ class Mesh2d(Polygon2d):
             # if this portal has already been created, skip it
             if 'created' in portal: continue
 
-            piece1 = []
-            piece2 = []
+            room1 = []
+            room2 = []
 
             start_i = portal['start_index']
             end_i = portal['end_index']
@@ -387,19 +395,19 @@ class Mesh2d(Polygon2d):
             if start_i not in indices or end_i not in indices:
                 continue
 
-            # split index buffer of the outline of this piece using the portal
-            piece1, piece2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
+            # split index buffer of the outline of this room using the portal
+            room1, room2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
 
             # if this portal is actually an edge, skip it
-            if len(piece1) < 3 or len(piece2) < 3:
+            if len(room1) < 3 or len(room2) < 3:
                 continue
 
             # mark this portal as created
             portal['created'] = True
 
-            return piece1, piece2, (start_i, end_i)
+            return room1, room2, (start_i, end_i)
 
-        # if we did not find any portals to split, this piece must be convex
+        # if we did not find any portals to split, this room must be convex
         return None, None, None
 
 

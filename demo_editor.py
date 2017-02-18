@@ -362,23 +362,23 @@ class Application(tk.Frame):
         self.last_x = event.x
         self.last_y = event.y
 
+
         # find polygon vertices near the mouse pointer
+        # self.remove_draw_objects_glob("highlight_points/*")
+        # if len(self._polygons) > 0:
+        #     ptr_world = self.get_world_crds(event.x, event.y)
+        #     vect_nw = ptr_world - Vector2(20., 20.)
+        #     vect_se = ptr_world + Vector2(20., 20.)
 
-        self.remove_draw_objects_glob("highlight_points/*")
-        if len(self._polygons) > 0:
-            ptr_world = self.get_world_crds(event.x, event.y)
-            vect_nw = ptr_world - Vector2(20., 20.)
-            vect_se = ptr_world + Vector2(20., 20.)
-
-            num = 0
-            for poly in self._polygons:
-                idxs = poly.find_verts_in_bbox(vect_nw, vect_se)
-                for idx in idxs:
-                    vect = poly.vertices[idx]
-                    self.add_draw_object("highlight_points/{}".format(num),
-                        PointHelperView(loc = vect, color = 'green'))
-                    num += 1
-            if num > 0: self.draw_all()
+        #     num = 0
+        #     for poly in self._polygons:
+        #         idxs = poly.find_verts_in_bbox(vect_nw, vect_se)
+        #         for idx in idxs:
+        #             vect = poly.vertices[idx]
+        #             self.add_draw_object("highlight_points/{}".format(num),
+        #                 PointHelperView(loc = vect, color = 'green'))
+        #             num += 1
+        #     if num > 0: self.draw_all()
 
 
         # tell the active tool that mouse has moved
@@ -561,6 +561,7 @@ class Application(tk.Frame):
         if len(self._new_vertices) < 3: return
 
         threshold = 10.0 # degrees
+
         new_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
 
         # to save in case of failure
@@ -577,7 +578,7 @@ class Application(tk.Frame):
 
         try:
             portals = new_poly.break_into_convex(threshold)
-            polys = new_poly.get_pieces_as_meshes()
+            polys = new_poly.get_rooms_as_meshes()
 
             print ("number of portals      = {0}".format(len(portals)))
             print ("number of convex parts = {0}".format(len(polys)))

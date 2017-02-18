@@ -366,10 +366,10 @@ class NavMeshView(ObjectView):
 
         trans_vertices = self.navmesh.vertices
 
-        # draw pieces
-        for piece in self.navmesh.pieces:
-            piece_crds = self.get_open_crds(trans_vertices, piece)
-            Id = canvas.create_polygon(piece_crds, fill='#1A1A1A', activefill='#111111')
+        # draw rooms
+        for room in self.navmesh.rooms:
+            room_crds = self.get_open_crds(trans_vertices, room)
+            Id = canvas.create_polygon(room_crds, fill='#1A1A1A', activefill='#111111')
             self.element_ids.append(Id)
 
         # draw portals
