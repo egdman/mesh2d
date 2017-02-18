@@ -97,8 +97,8 @@ class CreateWall(Tool):
 class Create(Tool):
 
     def right_click(self, event):
-        # self.parent._add_navmesh(event)
-        self.parent._add_polygon(event)
+        self.parent._add_navmesh(event)
+        # self.parent._add_polygon(event)
 
     def left_click(self, event):
         self.parent._add_vertex(event)
@@ -550,7 +550,7 @@ class Application(tk.Frame):
         self._polygons.append(new_poly)
 
         # set current tool on 'Select'
-        self.active_tool = self.select_tool
+        # self.active_tool = self.select_tool
 
         self.draw_all()
 
@@ -603,7 +603,7 @@ class Application(tk.Frame):
         self.remove_draw_objects_glob('obj_creation_helpers/*')
 
         # set current tool on 'Select'
-        self.active_tool = self.select_tool
+        # self.active_tool = self.select_tool
 
         self.draw_all()
 

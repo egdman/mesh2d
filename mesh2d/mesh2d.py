@@ -71,40 +71,61 @@ class Polygon2d(object):
 
 
 
+    def get_adj_edges(self, index):
+        vert_loc = self.outline.index(index)
+        prev_idx = self.outline[(vert_loc - 1)]
+        next_idx = self.outline[(vert_loc + 1) % len(self.outline)]
+        return (prev_idx, index), (index, next_idx)
+
+
+
+    def _pull_direction(self, edge1, edge2, intersect_vector):
+        e11 = self.vertices[edge1[0]]
+
+        e21 = self.vertices[edge2[0]]
+        e22 = self.vertices[edge2[1]]
+        dir1 = (e11 + e21) - intersect_vector
+        dir2 = (e11 + e22) - intersect_vector
+        ldir1 = dir1.length()
+        ldir2 = dir2.length()
+
+        if ldir1 > ldir2:
+            return dir1 / ldir1
+        else:
+            return dir2 / ldir2
+
+
+
+
     def resolve_sinters(self):
         while True:
             segments = Polygon2d.get_segments(self.outline)
             (seg1, seg2, seg_x) = self.find_first_sinter(segments)
-            if seg_x is None: return
+            if seg_x is None: break
+
+            # pull vertices apart:
+            # determine direction:
+            pull_dir = self._pull_direction(seg1, seg2, seg_x)
+            nv1 = seg_x + pull_dir * 10.
+            nv2 = seg_x - pull_dir * 10.
 
             # insert 2 new vertices at the intersection
-            new_idx1 = self.add_vertex_to_outline(seg_x, seg1)
-            new_idx2 = self.add_vertex_to_outline(seg_x, seg2)
+            new_idx1 = self.add_vertex_to_outline(nv1, seg1)
+            new_idx2 = self.add_vertex_to_outline(nv2, seg2)
 
             # reverse indices:
             self.outline = self._mirror_indices(self.outline, new_idx1, new_idx2)
-            print("BOOM!!!!!")
 
 
+            # flip new verts if necessary:
+            if self._segments_cross_helper((seg1[0], new_idx1), (new_idx2, seg2[1])):
+                self.vertices[new_idx1], self.vertices[new_idx2] = \
+                self.vertices[new_idx2], self.vertices[new_idx1]
 
 
-    @staticmethod
-    def _mirror_indices(indices, start_after, end_before):
-        '''
-        input: indices=[0, 1, 2, 3, 4, 5, 6, 7], start_after=2, end_before=6
-        output: [0, 1, 2, 5, 4, 3, 6, 7]
-        '''
-        start_loc = indices.index(start_after)
-        end_loc = indices.index(end_before)
-
-        if start_loc >= end_loc:
-            raise ValueError("'start_after' must be to the left of 'end_before'")
-
-        before = indices[:start_loc+1]
-        middle = indices[start_loc+1:end_loc]
-        after = indices[end_loc:]
-        return before + middle[::-1] + after
-
+        # check that points are ccw, if not - reverse
+        if not Polygon2d.check_ccw(self.vertices, self.outline):
+            self.outline = self.outline[::-1]
 
 
 
@@ -206,6 +227,25 @@ class Polygon2d(object):
 
         area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
         return area / 2.0
+
+
+
+    @staticmethod
+    def _mirror_indices(indices, start_after, end_before):
+        '''
+        input: indices=[0, 1, 2, 3, 4, 5, 6, 7], start_after=2, end_before=6
+        output: [0, 1, 2, 5, 4, 3, 6, 7]
+        '''
+        start_loc = indices.index(start_after)
+        end_loc = indices.index(end_before)
+
+        if start_loc >= end_loc:
+            raise ValueError("'start_after' must be to the left of 'end_before'")
+
+        before = indices[:start_loc+1]
+        middle = indices[start_loc+1:end_loc]
+        after = indices[end_loc:]
+        return before + middle[::-1] + after
 
 
 
@@ -484,11 +524,12 @@ class Mesh2d(Polygon2d):
             # closest portal - not always (there might be no portals inside the sector
             # or no portals at all)
 
-            portal = {
-                'start_index': None,
-                'end_index': None,
-                'end_point': None
-            }
+            # portal = {
+            #     'start_index': None,
+            #     'end_index': None,
+            #     'end_point': None
+            # }
+            portal = {}
 
             # we might want to add a second portal later
             new_portals = [portal]
