@@ -37,6 +37,8 @@ class Polygon2d(object):
         # resolve self-intersections (sinters)
         self._resolve_sinters()
 
+        self.holes = []
+
 
 
     def get_adjacent_edges(self, index):
@@ -49,6 +51,21 @@ class Polygon2d(object):
 
     def find_verts_in_bbox(self, vect_min, vect_max):
         return self.rti.intersection((vect_min.x, vect_min.y, vect_max.x, vect_max.y))
+
+
+
+    def _add_hole(self, vertices):
+        hole = []
+        for vert in vertices:
+            new_idx = len(self.vertices)
+            self.vertices.append(vert)
+            hole.append(new_idx)
+
+        # Holes must be CW
+        if Polygon2d.check_ccw(self.vertices, hole):
+            hole = hole[::-1]
+
+        self.holes.append(hole)
 
 
 
@@ -110,7 +127,7 @@ class Polygon2d(object):
 
     def _resolve_sinters(self):
         while True:
-            segments = Polygon2d.get_segments(self.outline)
+            segments = Polygon2d.get_segments([self.outline])
             (seg1, seg2, seg_x) = self._find_first_sinter(segments)
 
             # stop when there are no more sinters
@@ -202,11 +219,18 @@ class Polygon2d(object):
 
 
     @staticmethod
-    def get_segments(indices):
+    def get_segments(borders):
+        '''
+        Each element in 'borders' is an index buffer representing a separate border.
+        It can either be the outline or a hole.
+        '''
         segs = []
-        for loc in range(len(indices) - 1):
-            segs.append((indices[loc], indices[loc + 1]))
-        segs.append((indices[-1], indices[0]))
+
+        for border in borders:
+            for loc in range(len(border) - 1):
+                segs.append((border[loc], border[loc + 1]))
+            segs.append((border[-1], border[0]))
+
         return segs
 
 
@@ -422,22 +446,29 @@ class Mesh2d(Polygon2d):
 
 
 
-
     def find_spikes(self, threshold = 0.0):
         vrt = self.vertices
+        borders = [self.outline] + self.holes
 
-        indices = self.indices
-        num_indices = len(indices)
+        segments = Polygon2d.get_segments(borders)
+        num_segs = len(segments)
+
         # find spikes:
         spikes = []
-        for cur_pos in range(num_indices):
-            next_pos = plus_wrap(cur_pos, num_indices)
-            prev_pos = minus_wrap(cur_pos, num_indices)
+        start_seg = segments[0][0]
+        for cur_pos in range(num_segs):
 
-            next_ind = indices[next_pos]
-            prev_ind = indices[prev_pos]
-            cur_ind = indices[cur_pos]
-            
+            cur_seg = segments[cur_pos]
+            next_seg = segments[(cur_pos + 1) % num_segs]
+
+            # check if we are at the end of the border
+            if cur_seg[1] != next_seg[0]:
+                next_seg, start_seg = start_seg, next_seg
+
+            prev_ind = cur_seg[0]
+            cur_ind = cur_seg[1]
+            next_ind = next_seg[1]
+
             prev_v = vrt[prev_ind]
             cand_v = vrt[cur_ind]
             next_v = vrt[next_ind]
@@ -452,6 +483,7 @@ class Mesh2d(Polygon2d):
 
                 if external_angle > threshold:
                     spikes.append((prev_ind, cur_ind, next_ind))
+
         return spikes
 
 
