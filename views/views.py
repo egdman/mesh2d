@@ -379,6 +379,6 @@ class NavMeshView(ObjectView):
             self.element_ids.append(Id)
 
         # draw outline
-        outline_crds = self.get_closed_crds(trans_vertices, self.navmesh.indices)
+        outline_crds = self.get_closed_crds(trans_vertices, self.navmesh.outline)
         Id = canvas.create_line(outline_crds, fill='#FFFFFF', width=1)
         self.element_ids.append(Id)

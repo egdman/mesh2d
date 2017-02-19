@@ -61,6 +61,9 @@ class Polygon2d(object):
             self.vertices.append(vert)
             hole.append(new_idx)
 
+            # add vertex to spatial index:
+            self.rti.insert(new_idx, (vert.x, vert.y, vert.x, vert.y))
+
         # Holes must be CW
         if Polygon2d.check_ccw(self.vertices, hole):
             hole = hole[::-1]
@@ -159,21 +162,50 @@ class Polygon2d(object):
 
 
 
+
     def add_vertex_to_outline(self, vertex, edge):
+        return self.add_vertex_to_border(vertex, edge, self.outline)
+
+
+
+    def add_vertex_to_borders(self, vertex, edge):
+        '''
+        Add vertex to one of the borders which is determined automatically.
+        '''
+        try:
+            return self.add_vertex_to_border(vertex, edge, self.outline)
+        except ValueError:
+            pass
+
+        for hole in self.holes:
+            try:
+                return self.add_vertex_to_border(vertex, edge, hole)
+            except ValueError:
+                pass
+
+        raise ValueError("Adding vertex to borders: invalid edge")
+
+
+
+
+    def add_vertex_to_border(self, vertex, edge, border):
+        '''
+        Add vertex to the index buffer passed as 'border' argument.
+        '''
         e1_i = edge[0]
         e2_i = edge[1]
 
-        e1_pos = self.outline.index(e1_i)
-        e2_pos = self.outline.index(e2_i)
+        e1_pos = border.index(e1_i)
+        e2_pos = border.index(e2_i)
 
         # e1_pos and e2_pos can either differ by 1
         # or loop around the index buffer
         if e1_pos > e2_pos: e1_pos, e2_pos = e2_pos, e1_pos
 
-        if e1_pos == e2_pos: raise ValueError("Adding vertex to outline: invalid edge")
+        if e1_pos == e2_pos: raise ValueError("Adding vertex to border: invalid edge")
 
         if e2_pos - e1_pos > 1:
-            if e1_pos != 0: raise ValueError("Adding vertex to outline: invalid edge")
+            if e1_pos != 0: raise ValueError("Adding vertex to border: invalid edge")
             insert_at = e2_pos + 1
 
         else:
@@ -181,7 +213,7 @@ class Polygon2d(object):
 
         new_vert_index = len(self.vertices)
         self.vertices.append(vertex)
-        self.outline.insert(insert_at, new_vert_index)
+        border.insert(insert_at, new_vert_index)
 
         # add new vertex to spatial index:
         self.rti.insert(new_vert_index,
@@ -191,8 +223,11 @@ class Polygon2d(object):
 
 
 
-
-    def get_all_indices(self):
+    def get_border(self):
+        '''
+        Return vertex indices of the entire polygon border including holes
+        as a flat list.
+        '''
         all_ind = self.outline[:]
         for hole in self.holes:
             all_ind.extend(hole)
@@ -349,7 +384,7 @@ class Mesh2d(Polygon2d):
 
                 op_edge = intersection[1]
             
-                end_i = self.add_vertex_to_outline(new_vrt, op_edge)
+                end_i = self.add_vertex_to_borders(new_vrt, op_edge)
 
                 portal['end_index'] = end_i
 
@@ -655,7 +690,7 @@ class Mesh2d(Polygon2d):
     def find_closest_vert(self, left, tip, right):
         vrt = self.vertices
 
-        indices = self.get_all_indices()
+        indices = self.get_border()
 
         closest_ind = None
         closest_dst = None
