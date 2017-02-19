@@ -191,6 +191,15 @@ class Polygon2d(object):
 
 
 
+
+    def get_all_indices(self):
+        all_ind = self.outline[:]
+        for hole in self.holes:
+            all_ind.extend(hole)
+        return all_ind
+
+
+
     @staticmethod
     def _split_index_buffer(indices, index_1, index_2):
         if index_1 == index_2:
@@ -288,10 +297,6 @@ class Polygon2d(object):
 class Mesh2d(Polygon2d):
     def __init__(self, vertices, indices):
         super(Mesh2d, self).__init__(vertices, indices)
-
-        # just an alias (need to get rid of it later)
-        self.indices = self.outline
-
         self.rooms = []
         self.portals = []
 
@@ -309,7 +314,7 @@ class Mesh2d(Polygon2d):
 
 
     def outline_coordinates(self, indices=None):
-        if indices is None: indices = self.indices
+        if indices is None: indices = self.outline
         crds = []
 
         for ind in indices:
@@ -360,7 +365,7 @@ class Mesh2d(Polygon2d):
         room_q = deque()
 
         # append a copy of the entire outline
-        room_q.append(self.indices[:])
+        room_q.append(self.outline[:])
 
         while len(room_q) > 0:
             room = room_q.popleft()
@@ -650,7 +655,7 @@ class Mesh2d(Polygon2d):
     def find_closest_vert(self, left, tip, right):
         vrt = self.vertices
 
-        indices = self.indices
+        indices = self.get_all_indices()
 
         closest_ind = None
         closest_dst = None
@@ -672,19 +677,17 @@ class Mesh2d(Polygon2d):
 
     def find_closest_edge(self, left, tip, right):
         vrt = self.vertices
+        borders = [self.outline] + self.holes
 
-        indices = self.indices
-        num_indices = len(indices)
+        segments = Polygon2d.get_segments(borders)
 
         closest_pt = None
         closest_dist = None
         closest_edge = None
 
-        for pos in range(num_indices):
-            # here we assume that indices go counter-clockwise,
-            # and seg2 comes after seg1
-            seg_i1 = indices[pos]
-            seg_i2 = indices[plus_wrap(pos, num_indices)]
+        for seg in segments:
+            seg_i1 = seg[0]
+            seg_i2 = seg[1]
 
             seg1 = vrt[seg_i1]
             seg2 = vrt[seg_i2]
@@ -695,7 +698,6 @@ class Mesh2d(Polygon2d):
             if seg1 == tip:
                 continue
 
-
             candid_pt, candid_dist = self.segment_closest_point_inside_sector(seg1, seg2, left, tip, right)
             if candid_pt is None: continue
 
@@ -705,7 +707,6 @@ class Mesh2d(Polygon2d):
                 closest_edge = (seg_i1, seg_i2)
 
         return closest_edge, closest_pt, closest_dist
-
 
 
 
@@ -790,12 +791,12 @@ class Mesh2d(Polygon2d):
 
 
     def trace_ray(self, ray1, ray2):
-        num_indices = len(self.indices)
+        num_indices = len(self.outline)
         intersections = []
         for pos1 in range(num_indices):
             pos2 = plus_wrap(pos1, num_indices)
-            seg1 = self.vertices[self.indices[pos1]]
-            seg2 = self.vertices[self.indices[pos2]]
+            seg1 = self.vertices[self.outline[pos1]]
+            seg2 = self.vertices[self.outline[pos2]]
 
             # ignore edges that are adjacent to the ray's starting point
             if seg1 == ray1 or seg2 == ray1:
@@ -804,7 +805,7 @@ class Mesh2d(Polygon2d):
             inter_pt = Vector2.where_segment_crosses_ray(seg1, seg2, ray1, ray2)
             if inter_pt:
                 # append a tuple of a vertex and an edge
-                intersections.append((inter_pt, (self.indices[pos1], self.indices[pos2])))
+                intersections.append((inter_pt, (self.outline[pos1], self.outline[pos2])))
 
         if len(intersections) == 0:
             return None
