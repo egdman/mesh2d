@@ -14,6 +14,15 @@ def minus_wrap(pos, num):
     return num - 1 if pos == 0 else pos - 1
 
 
+def chain_index_buffers(loops):
+    '''
+    Return vertex indices of the given loops as a flat list.
+    '''
+    all_ind = []
+    for loop in loops: all_ind.extend(loops)
+    return all_ind
+
+
 
 class Polygon2d(object):
     def __init__(self, vertices, indices):
@@ -236,15 +245,77 @@ class Polygon2d(object):
 
 
 
-    def get_index_buffer(self):
+    def _split_border(self, loops, index_1, index_2):
         '''
-        Return vertex indices of the entire polygon border including holes
-        as a flat list.
+        Either split one loop in 2 parts, or connect 2 loops into one
         '''
-        all_ind = self.outline[:]
-        for hole in self.holes:
-            all_ind.extend(hole)
-        return all_ind
+        if index_1 == index_2:
+            raise ValueError("split indices must not be equal to each other")
+
+        # find first loop that has index_1 (there should be only one)
+        index_1_in = next((loop for loop in loops if index_1 in loop), None)
+        index_2_in = next((loop for loop in loops if index_2 in loop), None)
+
+        if index_1_in is None or index_2_in is None:
+            raise ValueError("split indices must be present in the index buffers")
+
+        # if splitting same loop:
+        if index_1_in == index_2_in:
+            piece1, piece2 = Polygon2d._split_index_buffer(loops[0], index_1, index_2)
+            border1 = []
+            border2 = []
+
+            # figure out which holes go where
+
+            # # find 1st vertex in piece1 that's not in the split
+            # piece1_start_index = next((idx for idx in piece1 if idx != index_1 and idx != index_2))
+
+            # # split vertex 1
+            # sv1 = self.vertices[index_1]
+            # sv2 = self.vertices[index_2]
+            # piece1_v = self.vertices[piece1_start_index]
+
+            # if Vector2.are_points_ccw(sv1, sv2, piece1_v):
+            #     left_piece = piece1
+            #     right_piece = piece2
+            # else:
+            #     left_piece = piece2
+            #     right_piece = piece1
+
+        if len(loops) == 1:
+            piece1, piece2 = Polygon2d._split_index_buffer(loops[0], index_1, index_2)
+
+
+
+    def point_inside(self, indices, point):
+        return Polygon2d.point_inside_poly(self.vertices, indices, point)
+
+
+
+    @staticmethod
+    def point_inside_poly(vertices, indices, point):
+        verts = list(vertices[idx] - point for idx in indices)
+        nverts = len(verts)
+        num_inters = 0
+        for loc in range(nverts):
+            cur_v = verts[loc]
+            next_v = verts[(loc+1) % nverts]
+
+            if cur_v.y == 0: cur_v.y += 0.01
+
+            if next_v.y == 0: next_v.y += 0.01
+
+            if cur_v.y * next_v.y < 0:
+
+                inters = Vector2.lines_intersect(
+                    cur_v, next_v,
+                    Vector2(0, 0), Vector2(1, 0)).intersection
+
+                if inters.x > 0: num_inters += 1
+
+        return num_inters%2 > 0
+
+
 
 
 
@@ -276,17 +347,17 @@ class Polygon2d(object):
 
 
     @staticmethod
-    def get_segments(borders):
+    def get_segments(loops):
         '''
-        Each element in 'borders' is an index buffer representing a separate border.
-        It can either be the outline or a hole.
+        Each element in 'loops' is an index buffer representing a separate
+        piece of the polygon border. It can either be the outline or a hole.
         '''
         segs = []
 
-        for border in borders:
-            for loc in range(len(border) - 1):
-                segs.append((border[loc], border[loc + 1]))
-            segs.append((border[-1], border[0]))
+        for loop in loops:
+            for loc in range(len(loop) - 1):
+                segs.append((loop[loc], loop[loc + 1]))
+            segs.append((loop[-1], loop[0]))
 
         return segs
 
@@ -417,8 +488,46 @@ class Mesh2d(Polygon2d):
 
 
 
+    # @staticmethod
+    # def _break_in_two(indices, portals):
+    #     # iterate over portals trying to find the first portal that belongs to this polygon
+    #     for portal in portals:
+
+    #         # if this portal has already been created, skip it
+    #         if 'created' in portal: continue
+
+    #         room1 = []
+    #         room2 = []
+
+    #         start_i = portal['start_index']
+    #         end_i = portal['end_index']
+
+    #         # if this portal starts outside of this polygon, skip it
+    #         if start_i not in indices or end_i not in indices:
+    #             continue
+
+    #         # split index buffer of the outline of this room using the portal
+    #         room1, room2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
+
+    #         # if this portal is actually an edge, skip it
+    #         if len(room1) < 3 or len(room2) < 3:
+    #             continue
+
+    #         # mark this portal as created
+    #         portal['created'] = True
+
+    #         return room1, room2, (start_i, end_i)
+
+    #     # if we did not find any portals to split, this room must be convex
+    #     return None, None, None
+
+
+
+
     @staticmethod
-    def _break_in_two(indices, portals):
+    def _break_in_two(loops, portals):
+        indices = chain_index_buffers(loops)
+
         # iterate over portals trying to find the first portal that belongs to this polygon
         for portal in portals:
 
@@ -451,14 +560,12 @@ class Mesh2d(Polygon2d):
         return None, None, None
 
 
+    # def get_triangle_coords(self, triangle):
 
-
-    def get_triangle_coords(self, triangle):
-
-        v1 = self.vertices[triangle[0]]
-        v2 = self.vertices[triangle[1]]
-        v3 = self.vertices[triangle[2]]
-        return [v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v1.x, v1.y]
+    #     v1 = self.vertices[triangle[0]]
+    #     v2 = self.vertices[triangle[1]]
+    #     v3 = self.vertices[triangle[2]]
+    #     return [v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v1.x, v1.y]
 
 
 
@@ -488,13 +595,9 @@ class Mesh2d(Polygon2d):
     def find_spikes(self, threshold = 0.0):
         vrt = self.vertices
         borders = [self.outline] + self.holes
-        print borders
         segments = Polygon2d.get_segments(borders)
         num_segs = len(segments)
 
-        print "----"
-
-        print segments
         # find spikes:
         spikes = []
         start_seg = segments[0]
@@ -692,7 +795,8 @@ class Mesh2d(Polygon2d):
     def find_closest_vert(self, left, tip, right):
         vrt = self.vertices
 
-        indices = self.get_index_buffer()
+        borders = [self.outline] + self.holes
+        indices = chain_index_buffers(borders)
 
         closest_ind = None
         closest_dst = None
