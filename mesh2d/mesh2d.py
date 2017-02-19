@@ -19,7 +19,7 @@ def chain_index_buffers(loops):
     Return vertex indices of the given loops as a flat list.
     '''
     all_ind = []
-    for loop in loops: all_ind.extend(loops)
+    for loop in loops: all_ind.extend(loop)
     return all_ind
 
 
@@ -247,43 +247,67 @@ class Polygon2d(object):
 
     def _split_border(self, loops, index_1, index_2):
         '''
-        Either split one loop in 2 parts, or connect 2 loops into one
+        Either split the outline loop in 2 parts, or connect 2 loops into one
         '''
         if index_1 == index_2:
-            raise ValueError("split indices must not be equal to each other")
+            raise ValueError("Split indices must not be equal to each other")
 
-        # find first loop that has index_1 (there should be only one)
-        index_1_in = next((loop for loop in loops if index_1 in loop), None)
-        index_2_in = next((loop for loop in loops if index_2 in loop), None)
+        # if splitting the outline (it comes first in 'loops'):
+        if index_1 in loops[0] and index_2 in loops[0]:
+            outline1, outline2 = Polygon2d._split_index_buffer(loops[0], index_1, index_2)
 
-        if index_1_in is None or index_2_in is None:
-            raise ValueError("split indices must be present in the index buffers")
+            # if we tried to split using an existing edge, return None, None
+            if len(outline1) < 3 or len(outline2) < 3:
+                return None, None
 
-        # if splitting same loop:
-        if index_1_in == index_2_in:
-            piece1, piece2 = Polygon2d._split_index_buffer(loops[0], index_1, index_2)
-            border1 = []
-            border2 = []
+            # put pieces of the outline first into resulting loops
+            loops1 = [outline1]
+            loops2 = [outline2]
 
             # figure out which holes go where
+            for hole in loops[1:]:
+                if self.point_inside(outline1, self.vertices[hole[0]]):
+                    loops1.append(hole)
+                else:
+                    loops2.append(hole)
 
-            # # find 1st vertex in piece1 that's not in the split
-            # piece1_start_index = next((idx for idx in piece1 if idx != index_1 and idx != index_2))
+            return loops1, loops2
 
-            # # split vertex 1
-            # sv1 = self.vertices[index_1]
-            # sv2 = self.vertices[index_2]
-            # piece1_v = self.vertices[piece1_start_index]
+        # if we are connecting 2 loops into one (hole + hole or hole + outline)
+        else:
+            
+            # find first loop that has index_1 (there should be only one)
+            index_1_in = next((num for (num, loop) in enumerate(loops) if index_1 in loop), None)
+            # find first loop that has index_2 (there should be only one)
+            index_2_in = next((num for (num, loop) in enumerate(loops) if index_2 in loop), None)
 
-            # if Vector2.are_points_ccw(sv1, sv2, piece1_v):
-            #     left_piece = piece1
-            #     right_piece = piece2
-            # else:
-            #     left_piece = piece2
-            #     right_piece = piece1
+            if index_1_in is None or index_2_in is None:
+                raise ValueError("Split indices must be present in the index buffers")
 
-        if len(loops) == 1:
-            piece1, piece2 = Polygon2d._split_index_buffer(loops[0], index_1, index_2)
+            if index_1_in == index_2_in:
+                raise ValueError("You cannot split a hole")
+
+            merged_loop = Polygon2d._merge_loops(
+                loops[index_1_in],
+                loops[index_2_in],
+                index_1,
+                index_2)
+
+
+            loops1 = loops[:]
+
+            # delete old loops:
+            del loops1[index_1_in]
+            del loops1[index_2_in]
+            # if one of loops used to be the outline, prepend the new outline at the start
+            if index_1_in == 0 or index_2_in == 0:
+                loops1 = [merged_loop] + loops1
+
+                # otherwise, added new hole at the end
+            else:
+                loops1.append(merged_loop)
+
+            return loops1, None
 
 
 
@@ -343,6 +367,20 @@ class Polygon2d(object):
                 buffers[switch].append(index)
 
         return buffers
+
+
+
+    @staticmethod
+    def _merge_loops(loop1, loop2, index1, index2):
+        '''
+        Assumes that index1 in loops1, index2 in loops2
+        '''
+        # shift loop1
+        index1_at = loop1.index(index1)
+        loop1 = loop1[index1_at:] + loop1[:index1_at] + [index1]
+
+        index2_at = loop2.index(index2)
+        return loop2[:index2_at+1] + loop1 + loop2[index2_at:]
 
 
 
@@ -464,68 +502,32 @@ class Mesh2d(Polygon2d):
                 portal['end_index'] = portal['parent_portal']['end_index']
 
 
-        # Now break the mesh outline into convex rooms
+        # Now break the mesh border into convex rooms
 
         # queue of rooms
         room_q = deque()
 
-        # append a copy of the entire outline
-        room_q.append(self.outline[:])
+        # append a copy of the entire outline plus all the holes
+        room_q.append([self.outline[:]] + self.holes)
 
         while len(room_q) > 0:
             room = room_q.popleft()
-            room1, room2, new_portal = Mesh2d._break_in_two(room, portals)
+            room1, room2, new_portal = self._break_in_two(room, portals)
 
             # if could not split this room, finalize it
             if room1 is None:
-                self.rooms.append(room)
+                if len(room) > 1: raise RuntimeError("Trying to finalize a room with a hole")
+                self.rooms.append(room[0])
 
             # otherwise add new rooms to the queue
             else:
                 room_q.append(room1)
-                room_q.append(room2)
+                if room2 is not None: room_q.append(room2)
                 self.portals.append(new_portal)
 
 
 
-    # @staticmethod
-    # def _break_in_two(indices, portals):
-    #     # iterate over portals trying to find the first portal that belongs to this polygon
-    #     for portal in portals:
-
-    #         # if this portal has already been created, skip it
-    #         if 'created' in portal: continue
-
-    #         room1 = []
-    #         room2 = []
-
-    #         start_i = portal['start_index']
-    #         end_i = portal['end_index']
-
-    #         # if this portal starts outside of this polygon, skip it
-    #         if start_i not in indices or end_i not in indices:
-    #             continue
-
-    #         # split index buffer of the outline of this room using the portal
-    #         room1, room2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
-
-    #         # if this portal is actually an edge, skip it
-    #         if len(room1) < 3 or len(room2) < 3:
-    #             continue
-
-    #         # mark this portal as created
-    #         portal['created'] = True
-
-    #         return room1, room2, (start_i, end_i)
-
-    #     # if we did not find any portals to split, this room must be convex
-    #     return None, None, None
-
-
-
-
-    @staticmethod
-    def _break_in_two(loops, portals):
+    def _break_in_two(self, loops, portals):
         indices = chain_index_buffers(loops)
 
         # iterate over portals trying to find the first portal that belongs to this polygon
@@ -545,11 +547,11 @@ class Mesh2d(Polygon2d):
                 continue
 
             # split index buffer of the outline of this room using the portal
-            room1, room2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
+            # room1, room2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
+            print ("loops = {}".format(loops))
+            room1, room2 = self._split_border(loops, start_i, end_i)
 
-            # if this portal is actually an edge, skip it
-            if len(room1) < 3 or len(room2) < 3:
-                continue
+            if room1 is None and room2 is None: continue
 
             # mark this portal as created
             portal['created'] = True
@@ -931,14 +933,20 @@ class Mesh2d(Polygon2d):
         return vec1_new, vec2_new
 
 
-    def trace_ray(self, ray1, ray2):
-        num_indices = len(self.outline)
-        intersections = []
-        for pos1 in range(num_indices):
-            pos2 = plus_wrap(pos1, num_indices)
-            seg1 = self.vertices[self.outline[pos1]]
-            seg2 = self.vertices[self.outline[pos2]]
 
+
+    def trace_ray(self, ray1, ray2):
+        vrt = self.vertices
+        borders = [self.outline] + self.holes
+        segments = Polygon2d.get_segments(borders)
+
+        intersections = []
+        for seg in segments:
+            seg_i1 = seg[0]
+            seg_i2 = seg[1]
+
+            seg1 = vrt[seg_i1]
+            seg2 = vrt[seg_i2]
             # ignore edges that are adjacent to the ray's starting point
             if seg1 == ray1 or seg2 == ray1:
                 continue
@@ -946,22 +954,14 @@ class Mesh2d(Polygon2d):
             inter_pt = Vector2.where_segment_crosses_ray(seg1, seg2, ray1, ray2)
             if inter_pt:
                 # append a tuple of a vertex and an edge
-                intersections.append((inter_pt, (self.outline[pos1], self.outline[pos2])))
+                intersections.append((inter_pt, (seg_i1, seg_i2)))
 
-        if len(intersections) == 0:
-            return None
+            if len(intersections) == 0:
+                return None
 
         # find closest intersection:
-        min_dst = Vector2.distance(ray1, intersections[0][0])
-        closest_inters = intersections[0]
-
-        for inters in intersections:
-            dst = Vector2.distance(ray1, inters[0])
-            if dst < min_dst:
-                min_dst = dst
-                closest_inters = inters
-
-        return closest_inters
+        inter_dist = ((inter, Vector2.distance(ray1, inter[0])) for inter in intersections)
+        return min(inter_dist, key=itemgetter(1))[0]
 
 
 

@@ -632,13 +632,19 @@ class Application(tk.Frame):
 
         sz = min(height, width) / 4.
 
-        h0 = cntr + Vector2(-sz, -sz)
-        h1 = cntr + Vector2(sz, -sz)
-        h2 = cntr + Vector2(sz, sz)
-        h3 = cntr + Vector2(-sz, sz)
+        h10 = (Vector2(.1, .9) - Vector2(.5, .5) )*sz + cntr
+        h11 = (Vector2(.1, .1) - Vector2(.5, .5) )*sz + cntr
+        h12 = (Vector2(.4, .1) - Vector2(.5, .5) )*sz + cntr
+        h13 = (Vector2(.4, .9) - Vector2(.5, .5) )*sz + cntr
+
+        h20 = (Vector2(.9, .9) - Vector2(.5, .5) )*sz + cntr
+        h21 = (Vector2(.5, .5) - Vector2(.5, .5) )*sz + cntr
+        h22 = (Vector2(.9, .1) - Vector2(.5, .5) )*sz + cntr
 
         new_poly = Mesh2d([v0, v1, v2, v3], range(4))
-        new_poly.add_hole([h0, h1, h2, h3])
+        new_poly.add_hole([h10, h11, h12, h13])
+        # new_poly.add_hole([h20, h21, h22])
+
         new_poly.break_into_convex(10.)
         self._polygons.append(new_poly)
 

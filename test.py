@@ -1,23 +1,19 @@
-def _mirror_indices(indices, start_after, end_before):
-    '''
-    input: indices=[0, 1, 2, 3, 4, 5, 6, 7], start_after=2, end_before=6
-    output: [0, 1, 2, 5, 4, 3, 6, 7]
-    '''
-    start_loc = indices.index(start_after)
-    end_loc = indices.index(end_before)
+def merge_loops(loop1, loop2, index1, index2):
+	'''
+	Assumes that index1 in loops1, index2 in loops2
+	'''
+	# shift loop1
+	index1_at = loop1.index(index1)
+	loop1 = loop1[index1_at:] + loop1[:index1_at] + [index1]
 
-    if start_loc >= end_loc:
-    	raise ValueError("'start_after' must be to the left of 'end_before'")
+	print loop1
 
-    before = indices[:start_loc+1]
-    middle = indices[start_loc+1:end_loc]
-    after = indices[end_loc:]
-    return before + middle[::-1] + after
-
+	index2_at = loop2.index(index2)
+	res = loop2[:index2_at+1] + loop1 + loop2[index2_at:]
+	print res
+	return res
 
 
 
-ls = [0, 1, 2, 3, 4, 5, 6, 7]
-print ls
-print "++++++++++++++++"
-print(_mirror_indices(ls, 2, 6))
+
+merge_loops([0, 11, 1, 2, 3], [7, 8, 9, 10], 3, 10)
