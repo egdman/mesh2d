@@ -8,7 +8,7 @@ from .vector2 import Vector2, ZeroSegmentError
 
 
 def plus_wrap(pos, num):
-            return 0 if pos == num - 1 else pos + 1
+    return 0 if pos == num - 1 else pos + 1
 
 def minus_wrap(pos, num):
     return num - 1 if pos == 0 else pos - 1
@@ -298,16 +298,8 @@ class Mesh2d(Polygon2d):
 
 
 
-    def break_into_convex(self, threshold = 0.0, canvas = None):
+    def break_into_convex(self, threshold = 0.0):
         portals = self.get_portals(threshold=threshold)
-
-        # draw portals
-        if canvas is not None:
-            for portal in portals:
-                v1 = self.vertices[portal['start_index']]
-                v2 = portal['end_point']
-
-                canvas.create_line(v1.x, v1.y, v2.x, v2.y, fill='red', width=1)
 
         '''
         For all the portals that require creating new vertices, create new vertices.
@@ -318,32 +310,19 @@ class Mesh2d(Polygon2d):
         '''
 
         for portal in portals:
-
-            # draw portal endpoints
-            if canvas is not None:
-                sz = 3
-                new_vrt = portal['end_point']
-                canvas.create_oval(
-                    new_vrt.x - sz, new_vrt.y - sz,
-                    new_vrt.x + sz, new_vrt.y + sz,
-                    fill='green')
-
-
             if portal['end_index'] is None and 'parent_portal' not in portal:
 
                 new_vrt = portal['end_point']
                 start_i = portal['start_index']
                 intersection = self.trace_ray(self.vertices[start_i], new_vrt)
 
-                if intersection is None:
-                    continue
+                if intersection is None: continue
 
-                else:
-                    op_edge = intersection[1]
-                
-                    end_i = self.add_vertex_to_outline(new_vrt, op_edge)
+                op_edge = intersection[1]
+            
+                end_i = self.add_vertex_to_outline(new_vrt, op_edge)
 
-                    portal['end_index'] = end_i
+                portal['end_index'] = end_i
 
         # now go through portals again to set child portals' end indexes
         for portal in portals:
@@ -372,8 +351,6 @@ class Mesh2d(Polygon2d):
                 room_q.append(room1)
                 room_q.append(room2)
                 self.portals.append(new_portal)
-
-        return portals
 
 
 
@@ -480,7 +457,7 @@ class Mesh2d(Polygon2d):
 
 
 
-    def get_portals(self, threshold = 0.0, tolerance = 0.000001, canvas=None):
+    def get_portals(self, threshold = 0.0, tolerance = 0.000001):
 
         """
         This function uses algorithm from R. Oliva and N. Pelechano - 

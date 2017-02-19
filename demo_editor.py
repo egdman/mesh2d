@@ -577,15 +577,14 @@ class Application(tk.Frame):
                 yaml.dump(poly, debf)           
 
         try:
-            portals = new_poly.break_into_convex(threshold)
-            polys = new_poly.get_rooms_as_meshes()
+            new_poly.break_into_convex(threshold)
 
-            print ("number of portals      = {0}".format(len(portals)))
-            print ("number of convex parts = {0}".format(len(polys)))
+            print ("number of portals      = {0}".format(len(new_poly.portals)))
+            print ("number of convex rooms = {0}".format(len(new_poly.rooms)))
 
-            if len(polys) != len(portals) + 1:
+            if len(new_poly.rooms) != len(new_poly.portals) + 1:
                 print ("Error!")
-                error_dump(self.last_created_poly)
+                error_dump(new_poly)
     
         except ValueError as ve:
             error_dump(self.last_created_poly)
