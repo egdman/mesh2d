@@ -1,7 +1,11 @@
 import math
 import random
+import Tkinter as tk
+from tkFont import Font as font
+
 from collections import deque
 from operator import itemgetter
+from copy import deepcopy
 from rtree import index
 
 from .vector2 import Vector2, ZeroSegmentError
@@ -91,6 +95,7 @@ class Polygon2d(object):
             hole = hole[::-1]
 
         self.holes.append(hole)
+        print("added hole: {}".format(hole))
 
 
 
@@ -194,15 +199,20 @@ class Polygon2d(object):
         '''
         Add vertex to one of the borders which is determined automatically.
         '''
+        print("adding vertex to border: {}".format(edge))
         try:
+            print("trying outline")
             return self.add_vertex_to_loop(vertex, edge, self.outline)
         except ValueError:
+            print("could not add to outline")
             pass
 
         for hole in self.holes:
             try:
+                print("trying hole {}".format(hole))
                 return self.add_vertex_to_loop(vertex, edge, hole)
             except ValueError:
+                print("could not add to hole {}".format(hole))
                 pass
 
         raise ValueError("Adding vertex to borders: invalid edge")
@@ -470,9 +480,73 @@ class Mesh2d(Polygon2d):
 
 
 
-    def break_into_convex(self, threshold = 0.0):
+
+
+
+    def debug_draw_room(self, loops, cv):
+        if not hasattr(Polygon2d, 'debug_steps'):
+            Polygon2d.debug_steps = 0
+
+
+        def diag_num(text):
+            txt = ''
+            pad = ''
+            for sym in text:
+                txt += pad + sym + '\n'
+                pad += ' '
+            return txt
+
+
+        outl = loops[0]
+        holes = loops[1:]
+
+        def get_crds(loop):
+
+            crds = []
+            for idx in loop:
+                vrt = self.vertices[idx]
+                crds.append(vrt.x)
+                crds.append(vrt.y)
+            crds.append(self.vertices[loop[0]].x)
+            crds.append(self.vertices[loop[0]].y)
+            return crds
+
+        cv.create_line(get_crds(outl), fill='cyan')
+        for h in holes:
+            cv.create_line(get_crds(h), fill='#ff6666')
+
+        switch = 0
+        anchors = (tk.SW, tk.NW)
+        for idx in chain_index_buffers(loops):
+            vrt = self.vertices[idx]
+            cv.create_text(vrt.x, vrt.y, fill='white',
+                text = "{}: {}".format(idx, vrt), anchor=anchors[switch],
+                font=font(size=8))
+            switch = (switch+1)%2
+
+        # cv.postscript(file="debug_draw_{}.eps".format(Polygon2d.debug_steps))
+        Polygon2d.debug_steps += 1
+        # for cid in cv.find_all(): cv.delete(cid)
+
+
+
+
+
+    def break_into_convex(self, threshold = 0.0, cv=None):
+
+        def print_p(p):
+            print("start : {}".format(p['start_index']))
+            print("end   : {}, {}".format(p['end_index'], p['end_point']))
+            print ("----------------------------------------------")
+
         portals = self.get_portals(threshold=threshold)
 
+        #### FOR DEBUG ####
+        print("{} portals".format(len(portals)))
+        for p in portals: print_p(p)
+        ###################
+
+        print ("########################################################")
         '''
         For all the portals that require creating new vertices, create new vertices.
         Multiple portals may have the same endpoint. If we have 5 portals that converge
@@ -488,7 +562,8 @@ class Mesh2d(Polygon2d):
                 start_i = portal['start_index']
                 intersection = self.trace_ray(self.vertices[start_i], new_vrt)
 
-                if intersection is None: continue
+                if intersection is None:
+                    raise RuntimeError("Ray casting failed to find portal endpoint")
 
                 op_edge = intersection[1]
             
@@ -496,10 +571,26 @@ class Mesh2d(Polygon2d):
 
                 portal['end_index'] = end_i
 
+                if cv:
+                    vrt = self.vertices[end_i]
+                    cv.create_oval(vrt.x - 3, vrt.y - 3, vrt.x + 3, vrt.y + 3, fill='green')
+
+
+        if cv:
+            self.debug_draw_room([self.outline] + self.holes, cv)
+
+
         # now go through portals again to set child portals' end indexes
         for portal in portals:
             if portal['end_index'] is None and 'parent_portal' in portal:
                 portal['end_index'] = portal['parent_portal']['end_index']
+
+
+
+        #### FOR DEBUG ####
+        print("{} portals".format(len(portals)))
+        for p in portals: print_p(p)
+        ###################
 
 
         # Now break the mesh border into convex rooms
@@ -508,19 +599,23 @@ class Mesh2d(Polygon2d):
         room_q = deque()
 
         # append a copy of the entire outline plus all the holes
-        room_q.append([self.outline[:]] + self.holes)
+        room_q.append([self.outline[:]] + deepcopy(self.holes))
 
         while len(room_q) > 0:
             room = room_q.popleft()
+            print("self.holes = {}".format(self.holes))
+            print ("splitting room {}".format(room))
             room1, room2, new_portal = self._break_in_two(room, portals)
 
             # if could not split this room, finalize it
             if room1 is None:
+                print ("could not split, finalize")
                 if len(room) > 1: raise RuntimeError("Trying to finalize a room with a hole")
                 self.rooms.append(room[0])
 
             # otherwise add new rooms to the queue
             else:
+                print ("used {}".format(new_portal))
                 room_q.append(room1)
                 if room2 is not None: room_q.append(room2)
                 self.portals.append(new_portal)
@@ -548,7 +643,7 @@ class Mesh2d(Polygon2d):
 
             # split index buffer of the outline of this room using the portal
             # room1, room2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
-            print ("loops = {}".format(loops))
+
             room1, room2 = self._split_border(loops, start_i, end_i)
 
             if room1 is None and room2 is None: continue
@@ -952,16 +1047,19 @@ class Mesh2d(Polygon2d):
                 continue
 
             inter_pt = Vector2.where_segment_crosses_ray(seg1, seg2, ray1, ray2)
-            if inter_pt:
+            if inter_pt is not None:
                 # append a tuple of a vertex and an edge
                 intersections.append((inter_pt, (seg_i1, seg_i2)))
 
-            if len(intersections) == 0:
-                return None
+
+        if len(intersections) == 0:
+            return None
 
         # find closest intersection:
         inter_dist = ((inter, Vector2.distance(ray1, inter[0])) for inter in intersections)
-        return min(inter_dist, key=itemgetter(1))[0]
+        res = min(inter_dist, key=itemgetter(1))[0]
+        print ("trace ray: found intersection {}".format(res))
+        return res
 
 
 

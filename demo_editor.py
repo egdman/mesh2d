@@ -184,14 +184,21 @@ class Application(tk.Frame):
 
 
     def createWidgets(self):
-        self.canvas = tk.Canvas(self, background='#000000', width=1200, height=900,
-            scrollregion=(0, 0, 1200, 900))
+        self.canvas = tk.Canvas(self, background='#000000', width=600, height=900,
+            scrollregion=(0, 0, 600, 900))
 
         self.canvas_center = Vector2(float(self.canvas['width']) / 2., float(self.canvas['height']) / 2.)
 
 
         # pack root window into OS window and make it fill the entire window
         self.pack(side = tk.LEFT, expand = True, fill = tk.BOTH)
+
+        self.debug_canvas = tk.Canvas(self, background='#000020', width=600, height=900,
+            scrollregion=(-600, -900, 600, 900))
+        self.debug_canvas.scan_dragto(300, 450, gain=1)
+        
+        self.debug_canvas.pack(side = tk.RIGHT, expand = True, fill = tk.BOTH)
+
 
         self.canvas.config(xscrollincrement=1, yscrollincrement=1)
 
@@ -614,7 +621,8 @@ class Application(tk.Frame):
 
     def add_wall(self, start, end, width):
         # self.active_tool = self.select_tool
-        print ("added wall {}, {}, {}".format(start, end, width))
+        # print ("added wall {}, {}, {}".format(start, end, width))
+        print ("\n\n\n")
 
         # add placeholder code to test polys with holes
         if start.x > end.x: start.x, end.x = end.x, start.x
@@ -641,11 +649,15 @@ class Application(tk.Frame):
         h21 = (Vector2(.5, .5) - Vector2(.5, .5) )*sz + cntr
         h22 = (Vector2(.9, .1) - Vector2(.5, .5) )*sz + cntr
 
+
         new_poly = Mesh2d([v0, v1, v2, v3], range(4))
         new_poly.add_hole([h10, h11, h12, h13])
         # new_poly.add_hole([h20, h21, h22])
 
-        new_poly.break_into_convex(10.)
+        cv = self.debug_canvas
+        for cid in cv.find_all(): cv.delete(cid)
+
+        new_poly.break_into_convex(10., self.debug_canvas)
         self._polygons.append(new_poly)
 
         num_polys = len(self.find_draw_objects_glob('polys/*'))
