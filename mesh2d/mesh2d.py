@@ -41,6 +41,19 @@ class Polygon2d(object):
 
 
 
+    def outline_coordinates(self, indices=None):
+        if indices is None: indices = self.outline
+        crds = []
+
+        for ind in indices:
+            crds.append(self.vertices[ind].x)
+            crds.append(self.vertices[ind].y)
+        crds.append(self.vertices[indices[0]].x)
+        crds.append(self.vertices[indices[0]].y)
+        return crds
+
+
+
     def get_adjacent_edges(self, index):
         vert_loc = self.outline.index(index)
         prev_idx = self.outline[(vert_loc - 1)]
@@ -54,7 +67,7 @@ class Polygon2d(object):
 
 
 
-    def _add_hole(self, vertices):
+    def add_hole(self, vertices):
         hole = []
         for vert in vertices:
             new_idx = len(self.vertices)
@@ -164,22 +177,22 @@ class Polygon2d(object):
 
 
     def add_vertex_to_outline(self, vertex, edge):
-        return self.add_vertex_to_border(vertex, edge, self.outline)
+        return self.add_vertex_to_loop(vertex, edge, self.outline)
 
 
 
-    def add_vertex_to_borders(self, vertex, edge):
+    def add_vertex_to_border(self, vertex, edge):
         '''
         Add vertex to one of the borders which is determined automatically.
         '''
         try:
-            return self.add_vertex_to_border(vertex, edge, self.outline)
+            return self.add_vertex_to_loop(vertex, edge, self.outline)
         except ValueError:
             pass
 
         for hole in self.holes:
             try:
-                return self.add_vertex_to_border(vertex, edge, hole)
+                return self.add_vertex_to_loop(vertex, edge, hole)
             except ValueError:
                 pass
 
@@ -188,24 +201,24 @@ class Polygon2d(object):
 
 
 
-    def add_vertex_to_border(self, vertex, edge, border):
+    def add_vertex_to_loop(self, vertex, edge, loop):
         '''
-        Add vertex to the index buffer passed as 'border' argument.
+        Add vertex to the index buffer passed as 'loop' argument.
         '''
         e1_i = edge[0]
         e2_i = edge[1]
 
-        e1_pos = border.index(e1_i)
-        e2_pos = border.index(e2_i)
+        e1_pos = loop.index(e1_i)
+        e2_pos = loop.index(e2_i)
 
         # e1_pos and e2_pos can either differ by 1
         # or loop around the index buffer
         if e1_pos > e2_pos: e1_pos, e2_pos = e2_pos, e1_pos
 
-        if e1_pos == e2_pos: raise ValueError("Adding vertex to border: invalid edge")
+        if e1_pos == e2_pos: raise ValueError("Adding vertex to loop: invalid edge")
 
         if e2_pos - e1_pos > 1:
-            if e1_pos != 0: raise ValueError("Adding vertex to border: invalid edge")
+            if e1_pos != 0: raise ValueError("Adding vertex to loop: invalid edge")
             insert_at = e2_pos + 1
 
         else:
@@ -213,7 +226,7 @@ class Polygon2d(object):
 
         new_vert_index = len(self.vertices)
         self.vertices.append(vertex)
-        border.insert(insert_at, new_vert_index)
+        loop.insert(insert_at, new_vert_index)
 
         # add new vertex to spatial index:
         self.rti.insert(new_vert_index,
@@ -223,7 +236,7 @@ class Polygon2d(object):
 
 
 
-    def get_border(self):
+    def get_index_buffer(self):
         '''
         Return vertex indices of the entire polygon border including holes
         as a flat list.
@@ -348,20 +361,6 @@ class Mesh2d(Polygon2d):
 
 
 
-    def outline_coordinates(self, indices=None):
-        if indices is None: indices = self.outline
-        crds = []
-
-        for ind in indices:
-            crds.append(self.vertices[ind].x)
-            crds.append(self.vertices[ind].y)
-        crds.append(self.vertices[indices[0]].x)
-        crds.append(self.vertices[indices[0]].y)
-        return crds
-
-
-
-
     def break_into_convex(self, threshold = 0.0):
         portals = self.get_portals(threshold=threshold)
 
@@ -384,7 +383,7 @@ class Mesh2d(Polygon2d):
 
                 op_edge = intersection[1]
             
-                end_i = self.add_vertex_to_borders(new_vrt, op_edge)
+                end_i = self.add_vertex_to_border(new_vrt, op_edge)
 
                 portal['end_index'] = end_i
 
@@ -489,13 +488,16 @@ class Mesh2d(Polygon2d):
     def find_spikes(self, threshold = 0.0):
         vrt = self.vertices
         borders = [self.outline] + self.holes
-
+        print borders
         segments = Polygon2d.get_segments(borders)
         num_segs = len(segments)
 
+        print "----"
+
+        print segments
         # find spikes:
         spikes = []
-        start_seg = segments[0][0]
+        start_seg = segments[0]
         for cur_pos in range(num_segs):
 
             cur_seg = segments[cur_pos]
@@ -690,7 +692,7 @@ class Mesh2d(Polygon2d):
     def find_closest_vert(self, left, tip, right):
         vrt = self.vertices
 
-        indices = self.get_border()
+        indices = self.get_index_buffer()
 
         closest_ind = None
         closest_dst = None

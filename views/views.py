@@ -340,7 +340,7 @@ class PolygonView(ObjectView):
     def first_time_draw(self, canvas):
         verts = self.poly.vertices
 
-        poly_crds = self.get_open_crds(verts, self.poly.outline)
+        poly_crds = self.get_open_crds(verts, self.poly.get_index_buffer())
         Id = canvas.create_polygon(poly_crds, fill=self.color)
         self.element_ids.append(Id)
 

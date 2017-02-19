@@ -33,7 +33,7 @@ class CreateWall(Tool):
         self.width_mode = False
         self.start = None
         self.end = None
-        self.width = 10.
+        self.width = 1.
         super(CreateWall, self).__init__(parent)
 
 
@@ -69,8 +69,11 @@ class CreateWall(Tool):
 
             else:
                 self.end = click_world
-                app.add_wall(self.start, self.end, self.width)
-                app.remove_draw_objects_glob('wall_tool_helpers/*')
+                app.add_wall(self.start.copy(), self.end.copy(), self.width)
+                # app.remove_draw_objects_glob('wall_tool_helpers/*')
+                self.width_mode = False
+                self.start = self.end
+                self.end = None
 
 
 
@@ -610,8 +613,40 @@ class Application(tk.Frame):
 
 
     def add_wall(self, start, end, width):
-        self.active_tool = self.select_tool
+        # self.active_tool = self.select_tool
         print ("added wall {}, {}, {}".format(start, end, width))
+
+        # add placeholder code to test polys with holes
+        if start.x > end.x: start.x, end.x = end.x, start.x
+        if start.y > end.y: start.y, end.y = end.y, start.y
+        v0 = start
+        v1 = Vector2(end.x, start.y)
+        v2 = end
+        v3 = Vector2(start.x, end.y)
+
+        width = end.x - start.x
+        height = end.y - start.y
+        cntr_x = start.x + width / 2.
+        cntr_y = start.y + height / 2.
+        cntr = Vector2(cntr_x, cntr_y)
+
+        sz = min(height, width) / 4.
+
+        h0 = cntr + Vector2(-sz, -sz)
+        h1 = cntr + Vector2(sz, -sz)
+        h2 = cntr + Vector2(sz, sz)
+        h3 = cntr + Vector2(-sz, sz)
+
+        new_poly = Mesh2d([v0, v1, v2, v3], range(4))
+        new_poly.add_hole([h0, h1, h2, h3])
+        new_poly.break_into_convex(10.)
+        self._polygons.append(new_poly)
+
+        num_polys = len(self.find_draw_objects_glob('polys/*'))
+        self.add_draw_object('polys/poly_{}'.format(num_polys),
+            NavMeshView(new_poly))
+
+        self.draw_all()
 
 
 
