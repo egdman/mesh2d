@@ -194,13 +194,16 @@ class Application(tk.Frame):
         self.pack(side = tk.LEFT, expand = True, fill = tk.BOTH)
 
         self.debug_canvas = tk.Canvas(self, background='#000020', width=600, height=900,
-            scrollregion=(-600, -900, 600, 900))
+            scrollregion=(-1000, -1000, 1000, 1000))
         self.debug_canvas.scan_dragto(300, 450, gain=1)
         
         self.debug_canvas.pack(side = tk.RIGHT, expand = True, fill = tk.BOTH)
 
 
         self.canvas.config(xscrollincrement=1, yscrollincrement=1)
+
+        self.debug_canvas.bind('<Button-1>', lambda ev: self.debug_canvas.scan_mark(ev.x, ev.y))
+        self.debug_canvas.bind('<Motion>', self._debug_pan_mouse)
 
         # bind right and left mouse clicks
         self.canvas.bind('<ButtonRelease-1>', self._left_up)
@@ -262,6 +265,10 @@ class Application(tk.Frame):
         )
         self.wallToolBtn.pack()
 
+
+    def _debug_pan_mouse(self, event):
+        if event.state & 0x0100 != 0:
+            self.debug_canvas.scan_dragto(event.x, event.y, 1)
 
 
     def add_draw_object(self, name, draw_obj):
@@ -587,7 +594,7 @@ class Application(tk.Frame):
                 yaml.dump(poly, debf)           
 
         try:
-            new_poly.break_into_convex(threshold)
+            new_poly.break_into_convex(threshold, self.debug_canvas)
 
             print ("number of portals      = {0}".format(len(new_poly.portals)))
             print ("number of convex rooms = {0}".format(len(new_poly.rooms)))
@@ -652,12 +659,12 @@ class Application(tk.Frame):
 
         new_poly = Mesh2d([v0, v1, v2, v3], range(4))
         new_poly.add_hole([h10, h11, h12, h13])
-        # new_poly.add_hole([h20, h21, h22])
+        new_poly.add_hole([h20, h21, h22])
 
         cv = self.debug_canvas
         for cid in cv.find_all(): cv.delete(cid)
 
-        new_poly.break_into_convex(10., self.debug_canvas)
+        new_poly.break_into_convex(0., self.debug_canvas)
         self._polygons.append(new_poly)
 
         num_polys = len(self.find_draw_objects_glob('polys/*'))

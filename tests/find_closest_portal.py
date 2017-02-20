@@ -96,7 +96,7 @@ print("right: {}".format(right))
 
 
 print("automatic:")
-conevec1, conevec2 = poly.get_anticone(0, 1, 2, 0.0)
+conevec1, conevec2 = poly.get_sector(0, 1, 2, 0.0)
 left = tip + conevec2
 right = tip + conevec1
 print("left: {}".format(left))

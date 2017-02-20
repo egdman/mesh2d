@@ -11,6 +11,14 @@ from rtree import index
 from .vector2 import Vector2, ZeroSegmentError
 
 
+def print_p(p):
+    print("start : {}".format(p['start_index']))
+    print("end   : {}, {}".format(p['end_index'], p['end_point']))
+    print ("----------------------------------------------")
+
+
+
+
 def plus_wrap(pos, num):
     return 0 if pos == num - 1 else pos + 1
 
@@ -307,13 +315,15 @@ class Polygon2d(object):
             loops1 = loops[:]
 
             # delete old loops:
-            del loops1[index_1_in]
+            if index_1_in > index_2_in: index_1_in, index_2_in = index_2_in, index_1_in
             del loops1[index_2_in]
+            del loops1[index_1_in]
+
             # if one of loops used to be the outline, prepend the new outline at the start
             if index_1_in == 0 or index_2_in == 0:
                 loops1 = [merged_loop] + loops1
 
-                # otherwise, added new hole at the end
+                # otherwise, add the new hole at the end
             else:
                 loops1.append(merged_loop)
 
@@ -520,7 +530,10 @@ class Mesh2d(Polygon2d):
         for idx in chain_index_buffers(loops):
             vrt = self.vertices[idx]
             cv.create_text(vrt.x, vrt.y, fill='white',
-                text = "{}: {}".format(idx, vrt), anchor=anchors[switch],
+                # text = "{}: {}".format(idx, vrt), anchor=anchors[switch],
+                # anchor=anchors[switch],
+                text = "{}".format(idx),
+                anchor=tk.NW,
                 font=font(size=8))
             switch = (switch+1)%2
 
@@ -533,12 +546,6 @@ class Mesh2d(Polygon2d):
 
 
     def break_into_convex(self, threshold = 0.0, cv=None):
-
-        def print_p(p):
-            print("start : {}".format(p['start_index']))
-            print("end   : {}, {}".format(p['end_index'], p['end_point']))
-            print ("----------------------------------------------")
-
         portals = self.get_portals(threshold=threshold)
 
         #### FOR DEBUG ####
@@ -747,9 +754,11 @@ class Mesh2d(Polygon2d):
 
         for spike in spikes:
 
+            print("?????????????????")
             prev_i = spike[0]
             spike_i = spike[1]
             next_i = spike[2]
+            print ("spike {}".format(spike_i))
 
             sectorvec1, sectorvec2 = self.get_sector(prev_i, spike_i, next_i, threshold)
             tip = self.vertices[spike_i]
@@ -759,15 +768,20 @@ class Mesh2d(Polygon2d):
             # find closest edge
             closest_seg, closest_seg_point, closest_seg_dst = \
                 self.find_closest_edge(left, tip, right)
+            print("cl seg: {}".format(closest_seg))
 
             # find closest vertex
             closest_vert_i, closest_vert_dst = self.find_closest_vert(left, tip, right)
-
+            print("cl vert: {}".format(closest_vert_i))
 
             # find closest portal
             closest_portal, closest_portal_point, closest_portal_dst = \
                 self.find_closest_portal(left, tip, right, portals)
-
+            print("cl portal:")
+            if closest_portal is not None:
+                print_p(closest_portal)
+            else:
+             print('None')
 
 
             # remove tiny difference between points
@@ -841,7 +855,10 @@ class Mesh2d(Polygon2d):
                     portal['end_index'] = portal_end_i # this might be None
                     portal['end_point'] = portal_end_p
 
-                # if closest point is not one of the endpoints, make 2 portals to both endpoints
+                
+                # If closest point is not one of the endpoints,
+                # we still create the portal(s) to one or two endpoints.
+                
                 else:
 
                     portal_endpoints = (
@@ -903,7 +920,7 @@ class Mesh2d(Polygon2d):
 
             if cur_v == tip: continue
 
-            if self._inside_sector(vrt[cur_i], left, tip, right):
+            if self._inside_sector_inclusive(vrt[cur_i], left, tip, right):
                 dst = Vector2.distance(vrt[cur_i], tip)
                 if closest_dst is None or dst < closest_dst:
                     closest_dst = dst
@@ -975,12 +992,21 @@ class Mesh2d(Polygon2d):
     def _inside_sector(self, vert, left_v, tip_v, right_v):
         '''
         Check if vert is inside sector defined by left_v, tip_v, right_v.
+        Exclusive.
         If vert is on the border of the sector, method returns False.
         If vert == the sector tip, method returns False
         '''
         right_area = Vector2.double_signed_area(tip_v, right_v, vert)
         left_area = Vector2.double_signed_area(tip_v, left_v, vert)
         if right_area == 0 or left_area == 0: return False
+        return right_area > 0 and left_area < 0
+
+
+
+    def _inside_sector_inclusive(self, vert, left_v, tip_v, right_v):
+        right_area = Vector2.double_signed_area(tip_v, right_v, vert)
+        left_area = Vector2.double_signed_area(tip_v, left_v, vert)
+        if right_area == 0 or left_area == 0: return True
         return right_area > 0 and left_area < 0
 
 
@@ -1063,22 +1089,22 @@ class Mesh2d(Polygon2d):
 
 
 
-    def _segment_inside_sector(self, seg1, seg2, left, tip, right):
-        v1_inside = self._inside_sector(seg1, left, tip, right)
-        v2_inside = self._inside_sector(seg2, left, tip, right)
-        # if at least one vertex is inside the sector:
-        if v1_inside or v2_inside:
-            return True
-        # if none of the endpoints is inside sector, the middle of the segment might still be:
-        else:
-            left_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
-            right_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
+    # def _segment_inside_sector(self, seg1, seg2, left, tip, right):
+    #     v1_inside = self._inside_sector(seg1, left, tip, right)
+    #     v2_inside = self._inside_sector(seg2, left, tip, right)
+    #     # if at least one vertex is inside the sector:
+    #     if v1_inside or v2_inside:
+    #         return True
+    #     # if none of the endpoints is inside sector, the middle of the segment might still be:
+    #     else:
+    #         left_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
+    #         right_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
 
-            if left_x is not None and right_x is not None:
-                if left_x == tip and right_x == tip: return False
-                return True
-            else:
-                return False
+    #         if left_x is not None and right_x is not None:
+    #             if left_x == tip and right_x == tip: return False
+    #             return True
+    #         else:
+    #             return False
 
 
 
@@ -1113,9 +1139,9 @@ class Mesh2d(Polygon2d):
         inters_left = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
         inters_right = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
 
-        if inters_left is not None:
+        if inters_left is not None and inters_left != tip:
             pts_of_interest.append(inters_left)
-        if inters_right is not None:
+        if inters_right is not None and inters_right != tip:
             pts_of_interest.append(inters_right)
 
         if len(pts_of_interest) == 0: return None, None
