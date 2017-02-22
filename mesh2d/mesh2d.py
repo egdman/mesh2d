@@ -1006,7 +1006,9 @@ class Mesh2d(Polygon2d):
     def _inside_sector_inclusive(self, vert, left_v, tip_v, right_v):
         right_area = Vector2.double_signed_area(tip_v, right_v, vert)
         left_area = Vector2.double_signed_area(tip_v, left_v, vert)
-        if right_area == 0 or left_area == 0: return True
+
+        if left_area == 0 and right_area >= 0: return True
+        if right_area == 0 and left_area <= 0: return True
         return right_area > 0 and left_area < 0
 
 
@@ -1127,8 +1129,8 @@ class Mesh2d(Polygon2d):
         pts_of_interest = []
         proj_pt = Vector2.project_to_line(tip, seg1, seg2)
 
-        if self._inside_sector(proj_pt, left, tip, right) and \
-            Vector2.point_between(proj_pt, seg1, seg2):
+        if Vector2.point_between(proj_pt, seg1, seg2) and \
+            self._inside_sector(proj_pt, left, tip, right):
             pts_of_interest.append(proj_pt)
 
         if self._inside_sector(seg1, left, tip, right):
@@ -1139,14 +1141,17 @@ class Mesh2d(Polygon2d):
         inters_left = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
         inters_right = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
 
-        if inters_left is not None and inters_left != tip:
+        if inters_left is not None:
             pts_of_interest.append(inters_left)
-        if inters_right is not None and inters_right != tip:
+        if inters_right is not None:
             pts_of_interest.append(inters_right)
 
         if len(pts_of_interest) == 0: return None, None
 
-        pts_of_interest = [(poi, Vector2.distance(poi, tip)) for poi in pts_of_interest]
-        (closest_pt, dist) = min(pts_of_interest, key=itemgetter(1))
+        pts_of_interest = list((poi, Vector2.distance(poi, tip)) for poi in pts_of_interest)
 
+        # if all dists are 0, the segment is outside but touches the tip of the sector
+        if sum((dist for (poi, dist) in pts_of_interest)) == 0: return None, None
+
+        (closest_pt, dist) = min(pts_of_interest, key=itemgetter(1))
         return closest_pt, dist
