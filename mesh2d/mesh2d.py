@@ -206,20 +206,15 @@ class Polygon2d(object):
         '''
         Add vertex to one of the borders which is determined automatically.
         '''
-        # print("adding vertex to border: {}".format(edge))
         try:
-            # print("trying outline")
             return self.add_vertex_to_loop(vertex, edge, self.outline)
         except ValueError:
-            # print("could not add to outline")
             pass
 
         for hole in self.holes:
             try:
-                # print("trying hole {}".format(hole))
                 return self.add_vertex_to_loop(vertex, edge, hole)
             except ValueError:
-                # print("could not add to hole {}".format(hole))
                 pass
 
         raise ValueError("Adding vertex to borders: invalid edge")
@@ -536,15 +531,6 @@ class Mesh2d(Polygon2d):
 
     def break_into_convex(self, threshold = 0.0, cv=None):
         portals = self.get_portals(threshold=threshold)
-
-        #### FOR DEBUG ####
-        print("NW = {}, SE = {}".format(self.vertices[0], self.vertices[2]))
-
-        print("{} portals".format(len(portals)))
-        for p in portals: print_p(p)
-        ###################
-
-        print ("########################################################")
         '''
         For all the portals that require creating new vertices, create new vertices.
         Multiple portals may have the same endpoint. If we have 5 portals that converge
@@ -559,16 +545,12 @@ class Mesh2d(Polygon2d):
                 new_vrt = portal['end_point']
                 start_i = portal['start_index']
 
-                print("tracing from {}, {} to {}".format(start_i, self.vertices[start_i], new_vrt))
-
                 intersection = self.trace_ray(self.vertices[start_i], new_vrt)
 
                 if intersection is None:
                     raise RuntimeError("Ray casting failed to find portal endpoint")
 
                 op_edge = intersection[1]
-
-                print("intersected with {}".format(op_edge))
 
                 end_i = self.add_vertex_to_border(new_vrt, op_edge)
 
@@ -589,13 +571,6 @@ class Mesh2d(Polygon2d):
                 portal['end_index'] = portal['parent_portal']['end_index']
 
 
-
-        #### FOR DEBUG ####
-        print("{} portals".format(len(portals)))
-        for p in portals: print_p(p)
-        ###################
-
-
         # Now break the mesh border into convex rooms
 
         # queue of rooms
@@ -606,19 +581,16 @@ class Mesh2d(Polygon2d):
 
         while len(room_q) > 0:
             room = room_q.popleft()
-            # print("self.holes = {}".format(self.holes))
-            # print ("splitting room {}".format(room))
+
             room1, room2, new_portal = self._break_in_two(room, portals)
 
             # if could not split this room, finalize it
             if room1 is None:
-                # print ("could not split, finalize")
                 if len(room) > 1: raise RuntimeError("Trying to finalize a room with a hole")
                 self.rooms.append(room[0])
 
             # otherwise add new rooms to the queue
             else:
-                # print ("used {}".format(new_portal))
                 room_q.append(room1)
                 if room2 is not None: room_q.append(room2)
                 self.portals.append(new_portal)
@@ -1049,7 +1021,6 @@ class Mesh2d(Polygon2d):
         borders = [self.outline] + self.holes
         segments = Polygon2d.get_segments(borders)
 
-        print "segments = {}".format(segments)
         intersections = []
         for seg in segments:
             seg_i1 = seg[0]
@@ -1063,7 +1034,6 @@ class Mesh2d(Polygon2d):
 
             inter_pt = Vector2.where_segment_crosses_ray(seg1, seg2, ray1, ray2)
             if inter_pt is not None:
-                print("got segment: {}".format(seg))
                 # append a tuple of a vertex and an edge
                 intersections.append((inter_pt, (seg_i1, seg_i2)))
 

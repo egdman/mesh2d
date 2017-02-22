@@ -3,6 +3,7 @@ import random
 import yaml
 import fnmatch
 import Tkinter as tk
+from argparse import ArgumentParser
 
 from mesh2d import *
 from views import *
@@ -10,6 +11,9 @@ from views import *
 pkg_dir = os.path.dirname(os.path.abspath(__file__))
 resource_dir = os.path.join(pkg_dir, 'resources')
 button_dir = os.path.join(resource_dir, 'buttons')
+
+parser = ArgumentParser()
+parser.add_argument('-d', '--debug', action='store_true', help='Start in debug mode')
 
 
 class Tool(object):
@@ -135,8 +139,10 @@ class Select(Tool):
 
 
 class Application(tk.Frame):
-    def __init__(self, master=None):
+    def __init__(self, master=None, db_mode = False):
         tk.Frame.__init__(self, master)
+        self.db_mode = db_mode
+
         self.grid()
         self.createWidgets()
 
@@ -184,8 +190,13 @@ class Application(tk.Frame):
 
 
     def createWidgets(self):
-        self.canvas = tk.Canvas(self, background='#000000', width=600, height=900,
-            scrollregion=(0, 0, 600, 900))
+        cwidth = 1200
+        cheight = 900
+        if self.db_mode: cwidth /= 2
+
+
+        self.canvas = tk.Canvas(self, background='#000000', width=cwidth, height=cheight,
+            scrollregion=(0, 0, cwidth, cheight))
 
         self.canvas_center = Vector2(float(self.canvas['width']) / 2., float(self.canvas['height']) / 2.)
 
@@ -193,11 +204,12 @@ class Application(tk.Frame):
         # pack root window into OS window and make it fill the entire window
         self.pack(side = tk.LEFT, expand = True, fill = tk.BOTH)
 
-        self.debug_canvas = tk.Canvas(self, background='#000020', width=600, height=900,
+        self.debug_canvas = tk.Canvas(self, background='#000020', width=cwidth, height=cheight,
             scrollregion=(-1000, -1000, 1000, 1000))
-        self.debug_canvas.scan_dragto(300, 450, gain=1)
+        self.debug_canvas.scan_dragto(cwidth/2, cheight/2, gain=1)
         
-        self.debug_canvas.pack(side = tk.RIGHT, expand = True, fill = tk.BOTH)
+        if self.db_mode:
+            self.debug_canvas.pack(side = tk.RIGHT, expand = True, fill = tk.BOTH)
 
 
         self.canvas.config(xscrollincrement=1, yscrollincrement=1)
@@ -629,7 +641,6 @@ class Application(tk.Frame):
     def add_wall(self, start, end, width):
         # self.active_tool = self.select_tool
         # print ("added wall {}, {}, {}".format(start, end, width))
-        print ("\n\n\n")
 
         # add placeholder code to test polys with holes
         if start.x > end.x: start.x, end.x = end.x, start.x
@@ -645,7 +656,7 @@ class Application(tk.Frame):
         cntr_y = start.y + height / 2.
         cntr = Vector2(cntr_x, cntr_y)
 
-        sz = min(height, width) / 4.
+        sz = min(height, width) / 2.
 
         h10 = (Vector2(.1, .9) - Vector2(.5, .5) )*sz + cntr
         h11 = (Vector2(.1, .1) - Vector2(.5, .5) )*sz + cntr
@@ -656,10 +667,15 @@ class Application(tk.Frame):
         h21 = (Vector2(.5, .5) - Vector2(.5, .5) )*sz + cntr
         h22 = (Vector2(.9, .1) - Vector2(.5, .5) )*sz + cntr
 
+        h30 = (Vector2(.55, .72) - Vector2(.5, .5) )*sz + cntr
+        h31 = (Vector2(.79, .92) - Vector2(.5, .5) )*sz + cntr
+        h32 = (Vector2(.60, .85) - Vector2(.5, .5) )*sz + cntr
+
 
         new_poly = Mesh2d([v0, v1, v2, v3], range(4))
         new_poly.add_hole([h10, h11, h12, h13])
         new_poly.add_hole([h20, h21, h22])
+        new_poly.add_hole([h30, h31, h32])
 
         cv = self.debug_canvas
         for cid in cv.find_all(): cv.delete(cid)
@@ -700,7 +716,10 @@ class ProvideException(object):
 
 @ProvideException
 def main():
-    app = Application()
+
+    args = parser.parse_args()
+
+    app = Application(db_mode=args.debug)
     app.master.title('Map editor')
     app.mainloop() 
 
