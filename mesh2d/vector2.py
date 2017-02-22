@@ -8,6 +8,8 @@ class LineRelation(object):
 
 
 class Vector2:
+    tolerance = 0.00001
+
     def __init__(self, x, y):
         self.x = float(x)
         self.y = float(y)
@@ -79,12 +81,16 @@ class Vector2:
 
     # equality
     def __eq__(self, right_operand):
-        return self.x == right_operand.x and self.y == right_operand.y
+        # return self.x == right_operand.x and self.y == right_operand.y
+        return abs(self.x - right_operand.x) < Vector2.tolerance and \
+            abs(self.y - right_operand.y) < Vector2.tolerance
+
 
 
     # inequality
     def __ne__(self, right_operand):
-        return self.x != right_operand.x or self.y != right_operand.y
+        # return self.x != right_operand.x or self.y != right_operand.y
+        return not self == right_operand
 
 
     # for hashing support
@@ -229,14 +235,16 @@ class Vector2:
         This is exclusive version:
         if vert == vert1 or vert == vert2, returns False.
         '''
-        if vert1.x == vert2.x:
-            ymin = min(vert1.y, vert2.y)
-            ymax = max(vert1.y, vert2.y)
-            return vert.y > ymin and vert.y < ymax
-        else:
+        if abs(vert1.x - vert2.x) > abs(vert1.y - vert2.y):
             xmin = min(vert1.x, vert2.x)
             xmax = max(vert1.x, vert2.x)
             return vert.x > xmin and vert.x < xmax
+
+        else:
+            ymin = min(vert1.y, vert2.y)
+            ymax = max(vert1.y, vert2.y)
+            return vert.y > ymin and vert.y < ymax
+            
 
 
 
@@ -248,14 +256,15 @@ class Vector2:
         This is inclusive version:
         If vert == vert1 or vert == vert2, returns True.
         '''
-        if vert1.x == vert2.x:
-            ymin = min(vert1.y, vert2.y)
-            ymax = max(vert1.y, vert2.y)
-            return vert.y >= ymin and vert.y <= ymax
-        else:
+        if abs(vert1.x - vert2.x) > abs(vert1.y - vert2.y):
             xmin = min(vert1.x, vert2.x)
             xmax = max(vert1.x, vert2.x)
             return vert.x >= xmin and vert.x <= xmax
+
+        else:
+            ymin = min(vert1.y, vert2.y)
+            ymax = max(vert1.y, vert2.y)
+            return vert.y >= ymin and vert.y <= ymax
 
 
 

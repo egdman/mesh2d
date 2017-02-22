@@ -103,7 +103,6 @@ class Polygon2d(object):
             hole = hole[::-1]
 
         self.holes.append(hole)
-        print("added hole: {}".format(hole))
 
 
 
@@ -207,20 +206,20 @@ class Polygon2d(object):
         '''
         Add vertex to one of the borders which is determined automatically.
         '''
-        print("adding vertex to border: {}".format(edge))
+        # print("adding vertex to border: {}".format(edge))
         try:
-            print("trying outline")
+            # print("trying outline")
             return self.add_vertex_to_loop(vertex, edge, self.outline)
         except ValueError:
-            print("could not add to outline")
+            # print("could not add to outline")
             pass
 
         for hole in self.holes:
             try:
-                print("trying hole {}".format(hole))
+                # print("trying hole {}".format(hole))
                 return self.add_vertex_to_loop(vertex, edge, hole)
             except ValueError:
-                print("could not add to hole {}".format(hole))
+                # print("could not add to hole {}".format(hole))
                 pass
 
         raise ValueError("Adding vertex to borders: invalid edge")
@@ -497,16 +496,6 @@ class Mesh2d(Polygon2d):
         if not hasattr(Polygon2d, 'debug_steps'):
             Polygon2d.debug_steps = 0
 
-
-        def diag_num(text):
-            txt = ''
-            pad = ''
-            for sym in text:
-                txt += pad + sym + '\n'
-                pad += ' '
-            return txt
-
-
         outl = loops[0]
         holes = loops[1:]
 
@@ -549,6 +538,8 @@ class Mesh2d(Polygon2d):
         portals = self.get_portals(threshold=threshold)
 
         #### FOR DEBUG ####
+        print("NW = {}, SE = {}".format(self.vertices[0], self.vertices[2]))
+
         print("{} portals".format(len(portals)))
         for p in portals: print_p(p)
         ###################
@@ -567,13 +558,18 @@ class Mesh2d(Polygon2d):
 
                 new_vrt = portal['end_point']
                 start_i = portal['start_index']
+
+                print("tracing from {}, {} to {}".format(start_i, self.vertices[start_i], new_vrt))
+
                 intersection = self.trace_ray(self.vertices[start_i], new_vrt)
 
                 if intersection is None:
                     raise RuntimeError("Ray casting failed to find portal endpoint")
 
                 op_edge = intersection[1]
-            
+
+                print("intersected with {}".format(op_edge))
+
                 end_i = self.add_vertex_to_border(new_vrt, op_edge)
 
                 portal['end_index'] = end_i
@@ -610,19 +606,19 @@ class Mesh2d(Polygon2d):
 
         while len(room_q) > 0:
             room = room_q.popleft()
-            print("self.holes = {}".format(self.holes))
-            print ("splitting room {}".format(room))
+            # print("self.holes = {}".format(self.holes))
+            # print ("splitting room {}".format(room))
             room1, room2, new_portal = self._break_in_two(room, portals)
 
             # if could not split this room, finalize it
             if room1 is None:
-                print ("could not split, finalize")
+                # print ("could not split, finalize")
                 if len(room) > 1: raise RuntimeError("Trying to finalize a room with a hole")
                 self.rooms.append(room[0])
 
             # otherwise add new rooms to the queue
             else:
-                print ("used {}".format(new_portal))
+                # print ("used {}".format(new_portal))
                 room_q.append(room1)
                 if room2 is not None: room_q.append(room2)
                 self.portals.append(new_portal)
@@ -754,11 +750,9 @@ class Mesh2d(Polygon2d):
 
         for spike in spikes:
 
-            print("?????????????????")
             prev_i = spike[0]
             spike_i = spike[1]
             next_i = spike[2]
-            print ("spike {}".format(spike_i))
 
             sectorvec1, sectorvec2 = self.get_sector(prev_i, spike_i, next_i, threshold)
             tip = self.vertices[spike_i]
@@ -768,21 +762,13 @@ class Mesh2d(Polygon2d):
             # find closest edge
             closest_seg, closest_seg_point, closest_seg_dst = \
                 self.find_closest_edge(left, tip, right)
-            print("cl seg: {}".format(closest_seg))
 
             # find closest vertex
             closest_vert_i, closest_vert_dst = self.find_closest_vert(left, tip, right)
-            print("cl vert: {}".format(closest_vert_i))
 
             # find closest portal
             closest_portal, closest_portal_point, closest_portal_dst = \
                 self.find_closest_portal(left, tip, right, portals)
-            print("cl portal:")
-            if closest_portal is not None:
-                print_p(closest_portal)
-            else:
-             print('None')
-
 
             # remove tiny difference between points
             if closest_portal is not None:
@@ -1063,6 +1049,7 @@ class Mesh2d(Polygon2d):
         borders = [self.outline] + self.holes
         segments = Polygon2d.get_segments(borders)
 
+        print "segments = {}".format(segments)
         intersections = []
         for seg in segments:
             seg_i1 = seg[0]
@@ -1076,6 +1063,7 @@ class Mesh2d(Polygon2d):
 
             inter_pt = Vector2.where_segment_crosses_ray(seg1, seg2, ray1, ray2)
             if inter_pt is not None:
+                print("got segment: {}".format(seg))
                 # append a tuple of a vertex and an edge
                 intersections.append((inter_pt, (seg_i1, seg_i2)))
 
@@ -1086,27 +1074,7 @@ class Mesh2d(Polygon2d):
         # find closest intersection:
         inter_dist = ((inter, Vector2.distance(ray1, inter[0])) for inter in intersections)
         res = min(inter_dist, key=itemgetter(1))[0]
-        print ("trace ray: found intersection {}".format(res))
         return res
-
-
-
-    # def _segment_inside_sector(self, seg1, seg2, left, tip, right):
-    #     v1_inside = self._inside_sector(seg1, left, tip, right)
-    #     v2_inside = self._inside_sector(seg2, left, tip, right)
-    #     # if at least one vertex is inside the sector:
-    #     if v1_inside or v2_inside:
-    #         return True
-    #     # if none of the endpoints is inside sector, the middle of the segment might still be:
-    #     else:
-    #         left_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
-    #         right_x = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
-
-    #         if left_x is not None and right_x is not None:
-    #             if left_x == tip and right_x == tip: return False
-    #             return True
-    #         else:
-    #             return False
 
 
 
