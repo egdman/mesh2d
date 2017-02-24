@@ -185,6 +185,8 @@ class Application(tk.Frame):
             PlusView(250)
         )
 
+        self.pointer_over_poly = False
+
         self.draw_all()
 
 
@@ -270,12 +272,50 @@ class Application(tk.Frame):
         self.saveToolBtn.pack()
 
 
+        self.wallToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'wall.gif'))
         self.wallToolBtn = tk.Button(
             self,
-            text='wa',
+            image=self.wallToolIcon,
             command = self._create_wall_cb
         )
         self.wallToolBtn.pack()
+
+        self.minusIcon = tk.PhotoImage(file=os.path.join(button_dir, 'minus.gif'))
+        self.minusBtn = tk.Button(
+            self,
+            image=self.minusIcon,
+            command = self._switch_subtract_mode
+        )
+        self.minusBtn.pack(side = tk.BOTTOM)
+
+        self.plusIcon = tk.PhotoImage(file=os.path.join(button_dir, 'plus.gif'))
+        self.plusBtn = tk.Button(
+            self,
+            image=self.plusIcon,
+            relief=tk.SUNKEN,
+            command = self._switch_add_mode
+        )
+        self.plusBtn.pack(side = tk.BOTTOM)
+
+
+
+    def get_bool_mode(self):
+        if self.plusBtn.cget('relief') == tk.SUNKEN:
+            return 'add'
+        return 'subtract'
+
+
+
+    def _switch_add_mode(self):
+        self.plusBtn.config(relief=tk.SUNKEN)
+        self.minusBtn.config(relief=tk.RAISED)
+
+
+
+    def _switch_subtract_mode(self):
+        self.plusBtn.config(relief=tk.RAISED)
+        self.minusBtn.config(relief=tk.SUNKEN)
+
 
 
     def _debug_pan_mouse(self, event):
@@ -388,6 +428,9 @@ class Application(tk.Frame):
         delta_x = event.x - self.last_x
         delta_y = event.y - self.last_y
 
+        last_pointer_world = self.get_world_crds(self.last_x, self.last_y)
+        pointer_world = self.get_world_crds(event.x, event.y)
+
         self.last_x = event.x
         self.last_y = event.y
 
@@ -408,6 +451,18 @@ class Application(tk.Frame):
         #                 PointHelperView(loc = vect, color = 'green'))
         #             num += 1
         #     if num > 0: self.draw_all()
+
+        ptr_over_poly_now = False
+        for poly in self._polygons:
+            if poly.point_inside(pointer_world):
+                ptr_over_poly_now = True
+                break
+
+        if ptr_over_poly_now and not self.pointer_over_poly:
+            self.canvas.config(cursor='center_ptr')
+        elif not ptr_over_poly_now and self.pointer_over_poly:
+            self.canvas.config(cursor='left_ptr')
+        self.pointer_over_poly = ptr_over_poly_now
 
 
         # tell the active tool that mouse has moved
@@ -680,7 +735,7 @@ class Application(tk.Frame):
         cv = self.debug_canvas
         for cid in cv.find_all(): cv.delete(cid)
 
-        new_poly.break_into_convex(0., self.debug_canvas)
+        new_poly.break_into_convex(10., self.debug_canvas)
         self._polygons.append(new_poly)
 
         num_polys = len(self.find_draw_objects_glob('polys/*'))

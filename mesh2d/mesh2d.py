@@ -278,7 +278,7 @@ class Polygon2d(object):
 
             # figure out which holes go where
             for hole in loops[1:]:
-                if self.point_inside(outline1, self.vertices[hole[0]]):
+                if Polygon2d.point_inside_loop(self.vertices, outline1, self.vertices[hole[0]]):
                     loops1.append(hole)
                 else:
                     loops2.append(hole)
@@ -325,13 +325,21 @@ class Polygon2d(object):
 
 
 
-    def point_inside(self, indices, point):
-        return Polygon2d.point_inside_poly(self.vertices, indices, point)
+    def point_inside(self, point):
+        # first check if inside outline
+        inside_outline = Polygon2d.point_inside_loop(self.vertices, self.outline, point)
+        if not inside_outline: return False
+
+        # now check if inside a hole
+        for hole in self.holes:
+            if Polygon2d.point_inside_loop(self.vertices, hole, point):
+                return False
+        return True
 
 
 
     @staticmethod
-    def point_inside_poly(vertices, indices, point):
+    def point_inside_loop(vertices, indices, point):
         verts = list(vertices[idx] - point for idx in indices)
         nverts = len(verts)
         num_inters = 0
@@ -754,12 +762,6 @@ class Mesh2d(Polygon2d):
             # closest vertex - not always (there might be no vertices inside the sector)
             # closest portal - not always (there might be no portals inside the sector
             # or no portals at all)
-
-            # portal = {
-            #     'start_index': None,
-            #     'end_index': None,
-            #     'end_point': None
-            # }
             portal = {}
 
             # we might want to add a second portal later
