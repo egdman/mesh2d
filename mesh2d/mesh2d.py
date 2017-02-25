@@ -391,7 +391,9 @@ class Polygon2d(object):
     @staticmethod
     def _merge_loops(loop1, loop2, index1, index2):
         '''
-        Assumes that index1 in loops1, index2 in loops2
+        Creates a 'cut' between two loops (index1 and index2 are the
+        endpoints of the cut).
+        Assumes that index1 in loops1, index2 in loops2.
         '''
         # shift loop1
         index1_at = loop1.index(index1)
