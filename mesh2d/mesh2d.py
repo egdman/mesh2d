@@ -1,7 +1,5 @@
 import math
 import random
-import Tkinter as tk
-from tkFont import Font as font
 
 from collections import deque
 from operator import itemgetter
@@ -10,6 +8,7 @@ from copy import deepcopy
 from rtree import index
 
 from .vector2 import Vector2, ZeroSegmentError
+from .utils import debug_draw_room
 
 
 def print_p(p):
@@ -313,7 +312,7 @@ class Polygon2d(object):
             if index_1_in == 0 or index_2_in == 0:
                 loops1 = [merged_loop] + loops1
 
-                # otherwise, add the new hole at the end
+            # otherwise, add the new hole at the end
             else:
                 loops1.append(merged_loop)
 
@@ -490,51 +489,6 @@ class Mesh2d(Polygon2d):
 
 
 
-
-
-
-    def debug_draw_room(self, loops, cv):
-        if not hasattr(Polygon2d, 'debug_steps'):
-            Polygon2d.debug_steps = 0
-
-        outl = loops[0]
-        holes = loops[1:]
-
-        def get_crds(loop):
-
-            crds = []
-            for idx in loop:
-                vrt = self.vertices[idx]
-                crds.append(vrt.x)
-                crds.append(vrt.y)
-            crds.append(self.vertices[loop[0]].x)
-            crds.append(self.vertices[loop[0]].y)
-            return crds
-
-        cv.create_line(get_crds(outl), fill='cyan')
-        for h in holes:
-            cv.create_line(get_crds(h), fill='#ff6666')
-
-        switch = 0
-        anchors = (tk.SW, tk.NW)
-        for idx in chain(*loops):
-            vrt = self.vertices[idx]
-            cv.create_text(vrt.x, vrt.y, fill='white',
-                # text = "{}: {}".format(idx, vrt), anchor=anchors[switch],
-                # anchor=anchors[switch],
-                text = "{}".format(idx),
-                anchor=tk.NW,
-                font=font(size=8))
-            switch = (switch+1)%2
-
-        # cv.postscript(file="debug_draw_{}.eps".format(Polygon2d.debug_steps))
-        Polygon2d.debug_steps += 1
-        # for cid in cv.find_all(): cv.delete(cid)
-
-
-
-
-
     def break_into_convex(self, threshold = 0.0, cv=None):
         portals = self.get_portals(threshold=threshold)
         '''
@@ -567,8 +521,7 @@ class Mesh2d(Polygon2d):
                     cv.create_oval(vrt.x - 3, vrt.y - 3, vrt.x + 3, vrt.y + 3, fill='green')
 
 
-        if cv:
-            self.debug_draw_room([self.outline] + self.holes, cv)
+        if cv: debug_draw_room(self, [self.outline] + self.holes, cv)
 
 
         # now go through portals again to set child portals' end indexes

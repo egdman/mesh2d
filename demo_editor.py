@@ -104,8 +104,8 @@ class CreateWall(Tool):
 class Create(Tool):
 
     def right_click(self, event):
-        self.parent._add_navmesh(event)
-        # self.parent._add_polygon(event)
+        # self.parent._add_navmesh(event)
+        self.parent._add_polygon(event)
 
     def left_click(self, event):
         self.parent._add_vertex(event)
@@ -612,16 +612,34 @@ class Application(tk.Frame):
     def _add_polygon(self, event):
         if len(self._new_vertices) < 3: return
 
-        new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
-        del self._new_vertices[:]
-
-        num_polys = len(self.find_draw_objects_glob('polys/*'))
-        self.add_draw_object('polys/poly_{}'.format(num_polys),
-            PolygonView(new_poly))
+        mode = self.get_bool_mode()
 
         # remove helper views
         self.remove_draw_objects_glob('obj_creation_helpers/*')
-        self._polygons.append(new_poly)
+
+        # delete all polygon views (we'll add them after boolean operation)
+        self.remove_draw_objects_glob('polys/*')
+
+        new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
+
+        del self._new_vertices[:]
+
+
+        if mode == 'subtract' and len(self._polygons) > 0:
+            new_polys = bool_subtract(self._polygons[-1], new_poly, self.debug_canvas)
+            del self._polygons[:]
+
+        elif mode == 'add':
+            new_polys = [new_poly]
+        else:
+            return
+
+        for poly in new_polys:
+            num_polys = len(self.find_draw_objects_glob('polys/*'))
+            self.add_draw_object('polys/poly_{}'.format(num_polys),
+                PolygonView(poly))
+
+            self._polygons.append(poly)
 
         # set current tool on 'Select'
         # self.active_tool = self.select_tool

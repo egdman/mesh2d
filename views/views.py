@@ -340,13 +340,15 @@ class PolygonView(ObjectView):
     def first_time_draw(self, canvas):
         verts = self.poly.vertices
 
-        poly_crds = self.get_open_crds(verts, self.poly.get_index_buffer())
-        Id = canvas.create_polygon(poly_crds, fill=self.color)
+        outline_crds = self.get_closed_crds(verts, self.poly.outline)
+        Id = canvas.create_line(outline_crds, fill='#a0a0a0', width=1)
         self.element_ids.append(Id)
 
-        outline_crds = self.get_closed_crds(verts, self.poly.outline)
-        Id = canvas.create_line(outline_crds, fill='#ffffff', width=1)
-        self.element_ids.append(Id)
+        for hole in self.poly.holes:
+            outline_crds = self.get_closed_crds(verts, hole)
+            Id = canvas.create_line(outline_crds, fill='#a0a0a0', width=1)
+            self.element_ids.append(Id)            
+
 
 
 

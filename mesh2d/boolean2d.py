@@ -1,7 +1,9 @@
+from itertools import chain
+from collections import deque
+
 from .mesh2d import Polygon2d
 from .vector2 import Vector2
-from itertools import chain
-
+from .utils import debug_draw_room
 
 
 def _cut_to_pieces(array, cut_items):
@@ -40,12 +42,14 @@ def _bool_cut_outline(this_poly, intersect_ids, other_poly):
 
 
 
-def bool_subtract(A, B):
+def bool_subtract(A, B, canvas=None):
+    # TODO When inserting an intersection vert into an edge,
+    # that edge becomes invalid for other intersection verts. Need to fix that.
+
     '''
     Performs boolean subtraction of B from A.
     Returns a new Polygon2d instance even if it's identical to A.
     '''
-
     A_edges = Polygon2d.get_segments(chain([A.outline], A.holes))
     B_edges = Polygon2d.get_segments(chain([B.outline], B.holes))
 
@@ -62,10 +66,11 @@ def bool_subtract(A, B):
             if seg_x is not None:
                 inters.append((seg_x, A_edge, B_edge))
 
-    # # find all other's vertices inside self
-    # other_ids = chain(other.outline, *other.holes)
-    # other_verts = (other.vertices[idx] for idx in other_ids)
-    # verts_inside = list(vrt for vrt in other_verts if self.point_indise(vrt))
+
+    # TODO check if entire B is inside A
+    if len(inters) == 0:
+        return []
+
 
     # add intersections to A's border and remember their indices
     A_new_ids = []
@@ -74,9 +79,15 @@ def bool_subtract(A, B):
     for inter in inters:
         A_new_idx = A.add_vertex_to_border(inter[0], inter[1])
         B_new_idx = B.add_vertex_to_border(inter[0], inter[2])
-        idx_map[A_new_idx] = B_new_idx
+        idx_map[B_new_idx] = A_new_idx
         A_new_ids.append(A_new_idx)
         B_new_ids.append(B_new_idx)
+
+
+
+    if canvas:
+        debug_draw_room(A, [A.outline], canvas)
+        debug_draw_room(B, [B.outline], canvas)
 
 
     # find pieces of A that are outside B
@@ -84,33 +95,40 @@ def bool_subtract(A, B):
 
     # find pieces of B that are inside A
     _, B_pieces_inside = _bool_cut_outline(B, B_new_ids, A)
-    
+
     new_outlines = []
+
+    print("A pieces:")
+    for p in A_pieces_outside: print(p)
+    print("----------")
+    print("B pieces:")
+    for p in B_pieces_inside: print(p)
+
 
     while True:
         A_piece = next((piece for piece in A_pieces_outside if len(piece) > 0), None)
-        if A_piece = None: break
+        if A_piece is None: break
 
         new_outline = A_piece[:]
         del A_piece[:]
-
+        print("creating new outline")
         while True:
 
             # find B's piece to attach:
             B_piece = next((piece for piece in B_pieces_inside if len(piece) > 0 \
-                and (idx_map[new_outline[-1]] == piece[0] \
-                or idx_map[new_outline[-1]] == piece[-1])), None)
+                and (new_outline[-1] == idx_map[piece[0]] \
+                or new_outline[-1] == idx_map[piece[-1]])), None)
             if B_piece is None: break
 
-            if idx_map[new_outline[-1]] == B_piece[-1]:
+            if new_outline[-1] == idx_map[B_piece[-1]]:
                 B_piece = list(reversed(B_piece))
 
             for B_idx in B_piece[1:-1]:
                 B_vrt = B.vertices[B_idx]
                 A.add_vertex_to_loop(B_vrt, (new_outline[-1], new_outline[0]), new_outline)
-            new_outline.append(B[-1])
+            new_outline.append(idx_map[B_piece[-1]])
             del B_piece[:]
-
+            print(new_outline)
 
             # find A's piece to attach
             next_A_piece = next((piece for piece in A_pieces_outside if len(piece) > 0 \
@@ -119,6 +137,8 @@ def bool_subtract(A, B):
 
             new_outline.extend(next_A_piece[:-1])
             del next_A_piece[:]
+            print(new_outline)
+
 
         if new_outline[0] == new_outline[-1]:
             new_outline = new_outline[:-1]
@@ -130,6 +150,7 @@ def bool_subtract(A, B):
     polys = []
     for new_outline in new_outlines:
         verts = list(A.vertices[idx] for idx in new_outline)
-        polys.append(Polygon2d(verts, new_outline))
+        print("creating new poly with {} verts".format(len(verts)))
+        polys.append(Polygon2d(verts, range(len(verts))))
 
     return polys
