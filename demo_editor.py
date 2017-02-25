@@ -587,7 +587,6 @@ class Application(tk.Frame):
 
 
     def _add_vertex(self, event):
-        # reflect y to transform into right-hand coordinates
         x = event.x
         y = event.y
         new_vrt = self.get_world_crds(event.x, event.y)
@@ -616,21 +615,12 @@ class Application(tk.Frame):
         new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
         del self._new_vertices[:]
 
-        # sinters = new_poly.find_self_intersections()
-        # print("{} sinters".format(len(sinters)))
-
         num_polys = len(self.find_draw_objects_glob('polys/*'))
         self.add_draw_object('polys/poly_{}'.format(num_polys),
             PolygonView(new_poly))
 
         # remove helper views
         self.remove_draw_objects_glob('obj_creation_helpers/*')
-
-        # for si_num, sinter in enumerate(sinters):
-        #     pt = sinter[2]
-        #     self.add_draw_object('poly_sinters/sinter_{}_{}'.format(num_polys, si_num),
-        #         PlusView(16, loc=pt, color='cyan'))
-
         self._polygons.append(new_poly)
 
         # set current tool on 'Select'
@@ -653,7 +643,6 @@ class Application(tk.Frame):
 
         del self._new_vertices[:]
 
-
         # break into convex parts:
 
         def error_dump(poly):
@@ -673,7 +662,6 @@ class Application(tk.Frame):
         except ValueError as ve:
             error_dump(self.last_created_poly)
             raise ve
-
 
         self._polygons.append(new_poly)
 
@@ -764,7 +752,7 @@ class ProvideException(object):
         try:
             return self._func(*args)
 
-        except Exception, e:
+        except Exception as e:
             print('Exception was thrown: {}'.format(e))
             # Optionally raise your own exceptions, popups etc
 

@@ -5,6 +5,7 @@ from tkFont import Font as font
 
 from collections import deque
 from operator import itemgetter
+from itertools import chain
 from copy import deepcopy
 from rtree import index
 
@@ -204,18 +205,13 @@ class Polygon2d(object):
 
     def add_vertex_to_border(self, vertex, edge):
         '''
-        Add vertex to one of the borders which is determined automatically.
+        Add vertex to one of the border loops which is determined automatically.
         '''
-        try:
-            return self.add_vertex_to_loop(vertex, edge, self.outline)
-        except ValueError:
-            pass
+        wanted_loop = next((loop for loop in chain([self.outline], self.holes) \
+                if edge[0] in loop and edge[1] in loop), None)
 
-        for hole in self.holes:
-            try:
-                return self.add_vertex_to_loop(vertex, edge, hole)
-            except ValueError:
-                pass
+        if wanted_loop is not None:
+            return self.add_vertex_to_loop(vertex, edge, wanted_loop)
 
         raise ValueError("Adding vertex to borders: invalid edge")
 
@@ -519,7 +515,7 @@ class Mesh2d(Polygon2d):
 
         switch = 0
         anchors = (tk.SW, tk.NW)
-        for idx in chain_index_buffers(loops):
+        for idx in chain(*loops):
             vrt = self.vertices[idx]
             cv.create_text(vrt.x, vrt.y, fill='white',
                 # text = "{}: {}".format(idx, vrt), anchor=anchors[switch],
@@ -606,7 +602,7 @@ class Mesh2d(Polygon2d):
 
 
     def _break_in_two(self, loops, portals):
-        indices = chain_index_buffers(loops)
+        indices = list(chain(*loops))
 
         # iterate over portals trying to find the first portal that belongs to this polygon
         for portal in portals:
@@ -870,12 +866,11 @@ class Mesh2d(Polygon2d):
         vrt = self.vertices
 
         borders = [self.outline] + self.holes
-        indices = chain_index_buffers(borders)
 
         closest_ind = None
         closest_dst = None
 
-        for cur_i in indices:
+        for cur_i in chain(*borders):
             cur_v = vrt[cur_i]
 
             if cur_v == tip: continue
