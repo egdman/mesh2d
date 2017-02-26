@@ -3,7 +3,7 @@ from collections import deque
 
 from .mesh2d import Polygon2d
 from .vector2 import Vector2
-from .utils import debug_draw_room
+from .utils import debug_draw_bool
 
 
 def _cut_to_pieces(array, cut_items):
@@ -41,19 +41,7 @@ def _bool_cut_outline(this_poly, intersect_ids, other_poly):
 
 
 
-# def _get_valid_edge(poly, vert, endpt1, endpt2):
-#     '''
-#     Find valid edge to insert new vertex between vertices endpt1 and endpt2 
-#     '''
-
-
-
-
-
 def bool_subtract(A, B, canvas=None):
-    # TODO When inserting an intersection vert into an edge,
-    # that edge becomes invalid for other intersection verts. Need to fix that.
-
     '''
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
@@ -125,9 +113,6 @@ def bool_subtract(A, B, canvas=None):
         idx_map[inserted_into_B] = inserted_into_A
 
 
-    if canvas:
-        debug_draw_room(A, [A.outline], canvas)
-        debug_draw_room(B, [B.outline], canvas)
 
 
     # find pieces of A that are outside B
@@ -135,6 +120,13 @@ def bool_subtract(A, B, canvas=None):
 
     # find pieces of B that are inside A
     _, B_pieces_inside = _bool_cut_outline(B, B_new_ids, A)
+
+
+
+    if canvas:
+        for idx in canvas.find_all(): canvas.delete(idx)
+        debug_draw_bool(A, B, A_pieces_outside, B_pieces_inside, idx_map, canvas)
+
 
     new_outlines = []
 
@@ -161,11 +153,13 @@ def bool_subtract(A, B, canvas=None):
             if B_piece is None: break
 
             if new_outline[-1] == idx_map[B_piece[-1]]:
+                print("reversing")
                 B_piece = list(reversed(B_piece))
 
             for B_idx in B_piece[1:-1]:
                 B_vrt = B.vertices[B_idx]
-                A.add_vertex_to_loop(B_vrt, (new_outline[-1], new_outline[0]), new_outline)
+                new_outline.append(len(A.vertices))
+                A.vertices.append(B_vrt)
             new_outline.append(idx_map[B_piece[-1]])
             del B_piece[:]
             print(new_outline)
@@ -175,7 +169,7 @@ def bool_subtract(A, B, canvas=None):
                 and new_outline[-1] == piece[0]), None)
             if next_A_piece is None: break
 
-            new_outline.extend(next_A_piece[:-1])
+            new_outline.extend(next_A_piece[1:])
             del next_A_piece[:]
             print(new_outline)
 
