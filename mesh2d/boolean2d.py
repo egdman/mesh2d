@@ -1,4 +1,4 @@
-from itertools import chain
+from itertools import izip, chain
 from collections import deque
 
 from .mesh2d import Polygon2d
@@ -41,21 +41,34 @@ def _bool_cut_outline(this_poly, intersect_ids, other_poly):
 
 
 
+# def _get_valid_edge(poly, vert, endpt1, endpt2):
+#     '''
+#     Find valid edge to insert new vertex between vertices endpt1 and endpt2 
+#     '''
+
+
+
+
 
 def bool_subtract(A, B, canvas=None):
     # TODO When inserting an intersection vert into an edge,
     # that edge becomes invalid for other intersection verts. Need to fix that.
 
     '''
-    Performs boolean subtraction of B from A.
-    Returns a new Polygon2d instance even if it's identical to A.
+    Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
+    or an empty list.
     '''
     A_edges = Polygon2d.get_segments(chain([A.outline], A.holes))
     B_edges = Polygon2d.get_segments(chain([B.outline], B.holes))
 
 
     # find all intersections of borders
-    inters = []
+    intersection_vertices = []
+
+    # for each edge, compile a list of vertices to add
+    A_new_vert_lists = {}
+    B_new_vert_lists = {}
+
     for A_edge in A_edges:
         for B_edge in B_edges:
             seg_x = Vector2.where_segments_cross_inclusive(
@@ -64,11 +77,21 @@ def bool_subtract(A, B, canvas=None):
                 B.vertices[B_edge[0]],
                 B.vertices[B_edge[1]])
             if seg_x is not None:
-                inters.append((seg_x, A_edge, B_edge))
+                if A_edge not in A_new_vert_lists:
+                    A_new_vert_lists[A_edge] = []
+
+                if B_edge not in B_new_vert_lists:
+                    B_new_vert_lists[B_edge] = []
+
+                inters_index = len(intersection_vertices)
+                intersection_vertices.append(seg_x)
+
+                A_new_vert_lists[A_edge].append(inters_index)
+                B_new_vert_lists[B_edge].append(inters_index)
 
 
     # TODO check if entire B is inside A
-    if len(inters) == 0:
+    if len(intersection_vertices) == 0:
         return []
 
 
@@ -76,13 +99,30 @@ def bool_subtract(A, B, canvas=None):
     A_new_ids = []
     B_new_ids = []
     idx_map = {}
-    for inter in inters:
-        A_new_idx = A.add_vertex_to_border(inter[0], inter[1])
-        B_new_idx = B.add_vertex_to_border(inter[0], inter[2])
-        idx_map[B_new_idx] = A_new_idx
-        A_new_ids.append(A_new_idx)
-        B_new_ids.append(B_new_idx)
 
+
+    A_inserted_ids = {}
+    for (A_edge, x_ids) in A_new_vert_lists.iteritems():
+        x_verts = list(intersection_vertices[idx] for idx in x_ids)
+        inserted_ids = A.add_vertices_to_border(x_verts, A_edge)
+
+        A_inserted_ids.update({x_idx: ins_idx for (x_idx, ins_idx) in izip(x_ids, inserted_ids)})
+        A_new_ids.extend(inserted_ids)
+
+
+    B_inserted_ids = {}
+    for (B_edge, x_ids) in B_new_vert_lists.iteritems():
+        x_verts = list(intersection_vertices[idx] for idx in x_ids)
+        inserted_ids = B.add_vertices_to_border(x_verts, B_edge)
+
+        B_inserted_ids.update({x_idx: ins_idx for (x_idx, ins_idx) in izip(x_ids, inserted_ids)})
+        B_new_ids.extend(inserted_ids)
+
+
+    for x_idx in range(len(intersection_vertices)):
+        inserted_into_A = A_inserted_ids[x_idx]
+        inserted_into_B = B_inserted_ids[x_idx]
+        idx_map[inserted_into_B] = inserted_into_A
 
 
     if canvas:

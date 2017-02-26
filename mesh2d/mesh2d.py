@@ -204,13 +204,43 @@ class Polygon2d(object):
 
     def add_vertex_to_border(self, vertex, edge):
         '''
-        Add vertex to one of the border loops which is determined automatically.
+        Add the given vertex to the given edge of the polygon border.
+        The exact loop that contains the edge is determined automatically.
         '''
         wanted_loop = next((loop for loop in chain([self.outline], self.holes) \
                 if edge[0] in loop and edge[1] in loop), None)
 
         if wanted_loop is not None:
             return self.add_vertex_to_loop(vertex, edge, wanted_loop)
+
+        raise ValueError("Adding vertex to borders: invalid edge")
+
+
+
+
+    def add_vertices_to_border(self, vertices, edge):
+        '''
+        Add given list of vertices to the given edge of the polygon border.
+        The exact loop that contains the edge is determined automatically.
+        This function returns a list of new indices for the list of vertices in the same order.
+        '''
+        wanted_loop = next((loop for loop in chain([self.outline], self.holes) \
+                if edge[0] in loop and edge[1] in loop), None)
+
+        if wanted_loop is not None:
+
+            # sort vertices by distance from smaller-index end of edge
+            sorted_pos_verts = sorted(enumerate(vertices),
+                key = lambda elem: Vector2.distance(elem[1], self.vertices[edge[0]]))
+
+            new_ids = [0]*len(vertices)
+
+            last_added_idx = edge[0]
+            for (pos, vert) in sorted_pos_verts:
+                last_added_idx = self.add_vertex_to_loop(vert, (last_added_idx, edge[1]), wanted_loop)
+                new_ids[pos] = last_added_idx
+
+            return new_ids 
 
         raise ValueError("Adding vertex to borders: invalid edge")
 
