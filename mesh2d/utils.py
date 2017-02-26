@@ -41,8 +41,8 @@ def debug_draw_bool(A, B, A_pieces, B_pieces, x_map, cv):
         B_piece_crds = get_crds(B, B_piece, False)
 
 
-        cv.create_line(A_piece_crds, fill='red', width=3)
-        cv.create_line(B_piece_crds, fill='green', width=3)
+        if A_piece_crds: cv.create_line(A_piece_crds, fill='red', width=3)
+        if B_piece_crds: cv.create_line(B_piece_crds, fill='green', width=3)
 
 
     for B_int, A_int in x_map.iteritems():
@@ -51,7 +51,10 @@ def debug_draw_bool(A, B, A_pieces, B_pieces, x_map, cv):
         cv.create_text(crds.x, crds.y, fill='white',
             text="{} = {}".format(A_int, B_int), anchor=tk.NW)
 
-    B_inters, A_inters = zip(*x_map.iteritems())
+    if len(x_map) > 0:
+        B_inters, A_inters = zip(*x_map.iteritems())
+    else:
+        B_inters, A_inters = [], []
 
     draw_poly(A, cv, A_inters)
     draw_poly(B, cv, B_inters)

@@ -62,6 +62,14 @@ class Polygon2d(object):
 
 
 
+    def copy(self):
+        res = Polygon2d(self.vertices, self.outline)
+        for hole in self.holes:
+            res.add_hole((self.vertices[idx] for idx in hole))
+        return res
+
+
+
     def outline_coordinates(self, indices=None):
         if indices is None: indices = self.outline
         crds = []
