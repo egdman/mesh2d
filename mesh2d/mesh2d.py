@@ -466,22 +466,7 @@ class Polygon2d(object):
 
     @staticmethod
     def signed_area(vertices, indices):
-        area = 0.0
-        for i in range(len(indices) - 1):
-            ind1 = indices[i]
-            ind2 = indices[i+1]
-
-            vert1 = vertices[ind1]
-            vert2 = vertices[ind2]
-
-            area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
-
-        # wrap for last segment:
-        vert1 = vertices[indices[-1]]
-        vert2 = vertices[indices[0]]
-
-        area += (vert1.x - vert2.x) * (vert1.y + vert2.y)
-        return area / 2.0
+        return Vector2.poly_signed_area((vertices[idx] for idx in indices))
 
 
 

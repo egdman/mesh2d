@@ -1,27 +1,26 @@
-def cut_to_pieces(array, cut_items):
+def _cut_to_pieces(array, cut_items):
     pieces = [[]]
     for el in array:
         pieces[-1].append(el)
         if el in cut_items:
             pieces.append([el])
 
-    pieces[0] = pieces[-1] + pieces[0]
-    del pieces[-1]
+    if len(pieces) == 1:
+        pieces[0].append(pieces[0][0])
+    else:
+        pieces[0] = pieces[-1] + pieces[0]
+        del pieces[-1]
+
     return pieces
 
 
 
-from collections import deque
 
-ls = deque([0,1,2,3,4,7,8,9,10,11,12,5,6])
-fd = [7,8,9,10,11,12]
-fd = []
+print(_cut_to_pieces(
+    [0,1,2,3,4,5],
+    [5,3,0,2]
+    ))
 
-for _ in range(len(ls)):
-    # print(ls)
-    print(sorted(cut_to_pieces(ls, fd)))
-
-    ls.rotate(1)
 
 # def point_inside(idx):
 #     return idx in [2]

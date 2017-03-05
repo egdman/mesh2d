@@ -10,13 +10,11 @@ from mesh2d import Mesh2d, Vector2
 
 
 def poly_repr(poly):
-	# crds = list((poly.vertices[ind].x, poly.vertices[ind].y) for ind in poly.indices)
-
 	outl = poly.outline_coordinates()
 
 	crds = list((outl[2*pos], outl[2*pos+1]) for pos in range(len(outl) / 2))
 	st = ''
-	st += 'indices:  ' + repr(poly.indices)
+	st += 'indices:  ' + repr(poly.outline)
 	st += '\n'
 	st += 'outline:  ' + repr(crds)
 	return st 
@@ -95,16 +93,30 @@ print("==================================\n")
 
 
 # test area of polygon
+print("Testing area of polygon")
 a = Vector2(54., 154.)
 b = Vector2(55., 154.)
 c = Vector2(55., 155.)
 d = Vector2(54., 155.)
 vertices = [a, b, c, d]
 
-poly = Mesh2d(vertices[:], range(len(vertices)))
-print(poly_repr(poly))
-print ("Area = {}".format(Mesh2d.signed_area(poly.vertices, poly.indices)))
+print ("Area = {} (must be 1.0)".format(Vector2.poly_signed_area(vertices)))
+print ("----------------------------------")
 
+a = Vector2(-2., -2.)
+b = Vector2(-2., 0.)
+c = Vector2(0., 0.)
+d = Vector2(0., -2.)
+vertices = [a, b, c, d]
+
+print ("Area = {} (must be -4.0)".format(Vector2.poly_signed_area(vertices)))
+print ("----------------------------------")
+
+# check that works with generator
+print ("Area = {} (must be 4.0)".format(Vector2.poly_signed_area(
+	(v for v in reversed(vertices))
+)))
+print ("----------------------------------")
 
 
 # TESTING split index buffer

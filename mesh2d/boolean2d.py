@@ -7,45 +7,59 @@ from .utils import debug_draw_bool
 
 
 def _cut_to_pieces(array, cut_items):
-    if len(cut_items) == 0: cut_items = [array[0]]
     pieces = [[]]
     for el in array:
         pieces[-1].append(el)
         if el in cut_items:
             pieces.append([el])
 
-    pieces[0] = pieces[-1] + pieces[0]
-    del pieces[-1]
+    if len(pieces) == 1:
+        pieces[0].append(pieces[0][0])
+    else:
+        pieces[0] = pieces[-1] + pieces[0]
+        del pieces[-1]
+
     return pieces
 
 
 
-def _bool_cut_outline(this_poly, intersect_ids, other_poly):
-        '''
-        Returns 2 lists:
-        1) all border pieces of this_poly outside other_poly, and
-        2) all border pieces of this_poly inside other_poly.
-        '''
-        my_outline_pieces = _cut_to_pieces(this_poly.outline, intersect_ids)
+def _bool_cut_loop(loop, this_poly, intersect_ids, other_poly):
+        loop_pieces = _cut_to_pieces(loop, intersect_ids)
 
         # find first piece that contains a non-intersection vertex
         first_piece, start_num = next(((piece, num) for num, piece \
-            in enumerate(my_outline_pieces) if len(piece) > 2), None)
+            in enumerate(loop_pieces) if len(piece) > 2))
 
         # put this piece at the start of list of pieces
-        my_outline_pieces = deque(my_outline_pieces)
-        my_outline_pieces.rotate(-start_num)
-        my_outline_pieces = list(my_outline_pieces)
+        loop_pieces = deque(loop_pieces)
+        loop_pieces.rotate(-start_num)
+        loop_pieces = list(loop_pieces)
 
         inside = other_poly.point_inside(this_poly.vertices[first_piece[1]])
         if inside:
-            pieces_inside = my_outline_pieces[0::2]
-            pieces_outside = my_outline_pieces[1::2]
+            pieces_inside = loop_pieces[0::2]
+            pieces_outside = loop_pieces[1::2]
         else:
-            pieces_inside = my_outline_pieces[1::2]
-            pieces_outside = my_outline_pieces[0::2]
+            pieces_inside = loop_pieces[1::2]
+            pieces_outside = loop_pieces[0::2]
 
         return pieces_outside, pieces_inside
+
+
+
+def _bool_cut_border(this_poly, intersect_ids, other_poly):
+    '''
+    Returns 2 lists:
+    1) all pieces of the border oth this_poly outside other_poly, and
+    2) all pieces of the border oth this_poly inside other_poly.
+    '''
+    outside, inside = _bool_cut_loop(this_poly.outline, this_poly, intersect_ids, other_poly)
+
+    for hole in this_poly.holes:
+        h_o, h_i = _bool_cut_loop(hole, this_poly, intersect_ids, other_poly)
+        outside.extend(h_o)
+        inside.extend(h_i)
+    return outside, inside        
 
 
 
@@ -54,7 +68,6 @@ def bool_subtract(A, B, canvas=None):
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-
     # Copy the original polygons because they will be changed by this algorithm.
     A = A.copy()
     B = B.copy()
@@ -93,13 +106,6 @@ def bool_subtract(A, B, canvas=None):
                 B_new_vert_lists[B_edge].append(inters_index)
 
 
-    # # TODO check if entire B is inside A
-    # if len(intersection_verts) == 0:
-    #     # if A.point_inside(B.vertices[B.outline[0]]):
-    #     #     A.add_hole()
-    #     return []
-
-
     # This list will hold indices into A's vertex buffer of all intersection verts that will be added to A.
     A_new_ids = []
 
@@ -115,7 +121,8 @@ def bool_subtract(A, B, canvas=None):
         x_verts = list(intersection_verts[idx] for idx in x_ids)
         inserted_ids = A.add_vertices_to_border(x_verts, A_edge)
 
-        A_inserted_ids.update({x_idx: ins_idx for (x_idx, ins_idx) in izip(x_ids, inserted_ids)})
+        # A_inserted_ids.update({x_idx: ins_idx for (x_idx, ins_idx) in izip(x_ids, inserted_ids)})
+        A_inserted_ids.update(dict(izip(x_ids, inserted_ids)))
         A_new_ids.extend(inserted_ids)
 
 
@@ -124,7 +131,8 @@ def bool_subtract(A, B, canvas=None):
         x_verts = list(intersection_verts[idx] for idx in x_ids)
         inserted_ids = B.add_vertices_to_border(x_verts, B_edge)
 
-        B_inserted_ids.update({x_idx: ins_idx for (x_idx, ins_idx) in izip(x_ids, inserted_ids)})
+        # B_inserted_ids.update({x_idx: ins_idx for (x_idx, ins_idx) in izip(x_ids, inserted_ids)})
+        B_inserted_ids.update(dict(izip(x_ids, inserted_ids)))
         B_new_ids.extend(inserted_ids)
 
 
@@ -136,47 +144,42 @@ def bool_subtract(A, B, canvas=None):
 
 
     # find pieces of A that are outside B
-    A_pieces_outside, _ = _bool_cut_outline(A, A_new_ids, B)
+    A_pieces_outside, _ = _bool_cut_border(A, A_new_ids, B)
 
     # find pieces of B that are inside A
-    _, B_pieces_inside = _bool_cut_outline(B, B_new_ids, A)
+    _, B_pieces_inside = _bool_cut_border(B, B_new_ids, A)
 
-    print("A outside B: {}".format(A_pieces_outside))
-    print("B inside A: {}".format(B_pieces_inside))
     # debug draw
     if canvas:
         for idx in canvas.find_all(): canvas.delete(idx)
         debug_draw_bool(A, B, A_pieces_outside, B_pieces_inside, idx_map, canvas)
 
 
-    new_outlines = []
+    # divide into closed and open loops
+    A_closed = list(p for p in A_pieces_outside if p[0] == p[-1])
+    B_closed = list(p for p in B_pieces_inside if p[0] == p[-1])
 
-    print("A pieces:")
-    for p in A_pieces_outside: print(p)
-    print("----------")
-    print("B pieces:")
-    for p in B_pieces_inside: print(p)
+    A_open = list(p for p in A_pieces_outside if p[0] != p[-1])
+    B_open = list(p for p in B_pieces_inside if p[0] != p[-1])
 
 
     while True:
-        A_found = next(((pos, piece) for pos, piece in enumerate(A_pieces_outside) if len(piece) > 0), None)
+        A_found = next(((pos, piece) for pos, piece in enumerate(A_open) if len(piece) > 0), None)
         if A_found is None: break
 
         A_pos, A_piece = A_found
-        new_outline = A_piece[:]
+        new_loop = A_piece[:]
 
-        del A_pieces_outside[A_pos]
+        del A_open[A_pos]
 
         while True:
 
-
             # stop when outline becomes closed
-            if new_outline[0] == new_outline[-1]: break
-
+            if new_loop[0] == new_loop[-1]: break
 
             # find B's piece to attach:
-            B_found = next(((pos, piece) for pos, piece in enumerate(B_pieces_inside) \
-                if len(piece) > 0 and new_outline[-1] == idx_map[piece[-1]]), None)
+            B_found = next(((pos, piece) for pos, piece in enumerate(B_open) \
+                if len(piece) > 0 and new_loop[-1] == idx_map[piece[-1]]), None)
 
             if B_found is None: break
 
@@ -184,51 +187,56 @@ def bool_subtract(A, B, canvas=None):
 
             for B_idx in reversed(B_piece[1:-1]):
                 B_vrt = B.vertices[B_idx]
-                new_outline.append(len(A.vertices))
+                new_loop.append(len(A.vertices))
                 A.vertices.append(B_vrt)
-            new_outline.append(idx_map[B_piece[0]])
+            new_loop.append(idx_map[B_piece[0]])
 
-            del B_pieces_inside[B_pos]
+            del B_open[B_pos]
 
 
             # find A's piece to attach
-            A_found = next(((pos, piece) for pos, piece in enumerate(A_pieces_outside) \
-                if len(piece) > 0 and new_outline[-1] == piece[0]), None)
+            A_found = next(((pos, piece) for pos, piece in enumerate(A_open) \
+                if len(piece) > 0 and new_loop[-1] == piece[0]), None)
             if A_found is None: break
 
             A_pos, next_A_piece = A_found
 
-            new_outline.extend(next_A_piece[1:])
-            del A_pieces_outside[A_pos]
+            new_loop.extend(next_A_piece[1:])
+            del A_open[A_pos]
 
-
-
-        if new_outline[0] != new_outline[-1]:
+        if new_loop[0] != new_loop[-1]:
             raise RuntimeError("Boolean operation failed")
 
-        new_outlines.append(new_outline)
+        A_closed.append(new_loop)
 
 
-    # create new polys
-    polys = []
-    for new_outline in new_outlines:
-        verts = list(A.vertices[idx] for idx in new_outline[:-1])
-        print("creating new poly with {} verts".format(len(verts)))
-        polys.append(Polygon2d(verts, range(len(verts))))
+    # A_closed contains outlines and holes.
+    # Create new polygon for each loop that is CCW
+    # CW loops represent holes
+    new_polys = []
+    new_holes = []
+    for loop in A_closed:
+        verts = list(A.vertices[idx] for idx in loop[:-1])
+        # if CCW
+        if Vector2.poly_signed_area(verts) > 0:
+            new_polys.append(Polygon2d(verts, range(len(verts))))
+        else:
+            new_holes.append(verts)
 
+    # B_closed contains outlines and holes.
+    # Create new polygon for each loop that is CW
+    # CCW loops represent holes
+    for loop in B_closed:
+        verts = list(B.vertices[idx] for idx in loop[:-1])
+        # if CW
+        if Vector2.poly_signed_area(verts) <= 0:
+            new_polys.append(Polygon2d(verts, range(len(verts))))
+        else:
+            new_holes.append(verts)
 
-    # if we still have pieces of B inside A, they are holes that we must add to new polygons
-    # B_pieces_inside = list(piece for piece in B_pieces_inside if len(piece) > 0)
-    print("B pieces remaining: {}".format(B_pieces_inside))
+    # try to add new holes to new polygons
+    for verts in new_holes:
+        which_poly = next((poly for poly in new_polys if poly.point_inside(verts[0])), None)
+        if which_poly is not None: which_poly.add_hole(verts)
 
-    for B_piece in B_pieces_inside:
-        verts = list(B.vertices[idx] for idx in B_piece[:-1])
-
-        # find which poly this hole must be added to
-        which_poly = next((poly for poly in polys if poly.point_inside(verts[0])), None)
-        if which_poly is None:
-            raise RuntimeError("Boolean operation failed (could not add hole)")
-        which_poly.add_hole(verts)
-        del B_piece[:]
-
-    return polys
+    return new_polys
