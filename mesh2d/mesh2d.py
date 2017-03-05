@@ -259,11 +259,11 @@ class Polygon2d(object):
         '''
         Add vertex to the index buffer passed as 'loop' argument.
         '''
-        e1_i = edge[0]
-        e2_i = edge[1]
+        e1_idx = edge[0]
+        e2_idx = edge[1]
 
-        e1_pos = loop.index(e1_i)
-        e2_pos = loop.index(e2_i)
+        e1_pos = loop.index(e1_idx)
+        e2_pos = loop.index(e2_idx)
 
         # e1_pos and e2_pos can either differ by 1
         # or loop around the index buffer
@@ -277,6 +277,10 @@ class Polygon2d(object):
 
         else:
             insert_at = e2_pos
+
+        # check if this vertex is too close to a segment endpoint
+        if vertex == self.vertices[e1_idx]: return e1_idx
+        if vertex == self.vertices[e2_idx]: return e2_idx
 
         new_vert_index = len(self.vertices)
         self.vertices.append(vertex)
@@ -500,6 +504,16 @@ class Mesh2d(Polygon2d):
         self.portals = []
 
 
+
+    @staticmethod
+    def from_polygon(poly):
+        poly.rooms = []
+        poly.portals = []
+        poly.__class__ = Mesh2d
+        return poly
+
+
+
     def dump(self):
         return self.__dict__
 
@@ -544,7 +558,9 @@ class Mesh2d(Polygon2d):
                     cv.create_oval(vrt.x - 3, vrt.y - 3, vrt.x + 3, vrt.y + 3, fill='green')
 
 
-        if cv: debug_draw_room(self, [self.outline] + self.holes, cv)
+        if cv:
+            for idx in cv.find_all(): cv.delete(idx)
+            debug_draw_room(self, [self.outline] + self.holes, cv)
 
 
         # now go through portals again to set child portals' end indexes
@@ -677,7 +693,14 @@ class Mesh2d(Polygon2d):
 
                 side1 = cand_v - prev_v
                 side2 = next_v - cand_v
-                external_angle = Vector2.angle(side1, side2)
+                try:
+                    external_angle = Vector2.angle(side1, side2)
+
+                except ValueError as ve:
+                    print(ve)
+                    print("tried to find angle between vectors: {}, {}".format(side1, side2))
+                    raise ve
+
                 external_angle = external_angle*180.0 / math.pi
 
                 if external_angle > threshold:

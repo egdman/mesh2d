@@ -620,13 +620,14 @@ class Application(tk.Frame):
         # delete all polygon views (we'll add them after boolean operation)
         self.remove_draw_objects_glob('polys/*')
 
+        # new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
         new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
 
         del self._new_vertices[:]
 
 
         if mode == 'subtract' and len(self._polygons) > 0:
-            new_polys = bool_subtract(self._polygons[-1], new_poly, self.debug_canvas)
+            new_polys = bool_subtract(self._polygons[-1], new_poly)
             del self._polygons[:]
 
         elif mode == 'add':
@@ -635,9 +636,11 @@ class Application(tk.Frame):
             return
 
         for poly in new_polys:
+            poly = Mesh2d.from_polygon(poly)
+            poly.break_into_convex(10., self.debug_canvas)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
-                PolygonView(poly))
+                NavMeshView(poly))
 
             self._polygons.append(poly)
 

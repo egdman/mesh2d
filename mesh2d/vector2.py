@@ -187,6 +187,8 @@ class Vector2:
     @staticmethod
     def angle(vect1, vect2):
         cos_angle = vect1.dot_product(vect2) / (vect1.length() * vect2.length())
+        cos_angle = min(cos_angle, 1.0)
+        cos_angle = max(cos_angle, -1.0)
         return math.acos(cos_angle)
 
 
@@ -194,6 +196,8 @@ class Vector2:
     def signed_angle(vect1, vect2):
         signed_area = Vector2.cross(vect1, vect2)
         sin_angle = signed_area / (vect1.length() * vect2.length())
+        sin_angle = min(sin_angle, 1.0)
+        sin_angle = max(sin_angle, -1.0)
         return math.asin(sin_angle)
 
 

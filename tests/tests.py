@@ -159,3 +159,9 @@ try:
 	print("-----------------")
 except ValueError as ve:
 	print (ve)
+
+
+print("testing calculation of angle between 2 vectors")
+vec1 = Vector2(-8.42218199856,-67.0031367886)
+vec2 = Vector2(-24.1159396862,-191.855697948)
+print("angle = {}".format(Vector2.angle(vec1, vec2)))
