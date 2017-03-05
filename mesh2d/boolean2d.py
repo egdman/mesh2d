@@ -47,7 +47,7 @@ def _bool_cut_loop(loop, this_poly, intersect_ids, other_poly):
 
 
 
-def _bool_cut_border(this_poly, intersect_ids, other_poly):
+def _get_pieces_outside_inside(this_poly, intersect_ids, other_poly):
     '''
     Returns 2 lists:
     1) all pieces of the border oth this_poly outside other_poly, and
@@ -63,15 +63,7 @@ def _bool_cut_border(this_poly, intersect_ids, other_poly):
 
 
 
-def bool_subtract(A, B, canvas=None):
-    '''
-    Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
-    or an empty list.
-    '''
-    # Copy the original polygons because they will be changed by this algorithm.
-    A = A.copy()
-    B = B.copy()
-
+def _add_intersections_to_polys(A, B):
     # List of vertices on edge intersections.
     intersection_verts = []
 
@@ -141,29 +133,20 @@ def bool_subtract(A, B, canvas=None):
         inserted_into_B = B_inserted_ids[x_idx]
         idx_map[inserted_into_B] = inserted_into_A
 
+    return A_new_ids, B_new_ids, idx_map
 
 
-    # find pieces of A that are outside B
-    A_pieces_outside, _ = _bool_cut_border(A, A_new_ids, B)
 
-    # find pieces of B that are inside A
-    _, B_pieces_inside = _bool_cut_border(B, B_new_ids, A)
-
-    # debug draw
-    if canvas:
-        for idx in canvas.find_all(): canvas.delete(idx)
-        debug_draw_bool(A, B, A_pieces_outside, B_pieces_inside, idx_map, canvas)
-
-
-    # divide into closed and open loops
-    A_closed = list(p for p in A_pieces_outside if p[0] == p[-1])
-    B_closed = list(p for p in B_pieces_inside if p[0] == p[-1])
-
-    A_open = list(p for p in A_pieces_outside if p[0] != p[-1])
-    B_open = list(p for p in B_pieces_inside if p[0] != p[-1])
-
-
+def _concat_border_pieces(A, B, A_open, B_open, idx_map):
+    closed_A_pieces = []
     while True:
+        
+        print("A:")
+        print (A_open)
+        print("B:")
+        print (list(list(idx_map.get(idx, -1) for idx in loop) for loop in B_open))
+        print("")
+
         A_found = next(((pos, piece) for pos, piece in enumerate(A_open) if len(piece) > 0), None)
         if A_found is None: break
 
@@ -205,16 +188,76 @@ def bool_subtract(A, B, canvas=None):
             del A_open[A_pos]
 
         if new_loop[0] != new_loop[-1]:
+            print(new_loop)
             raise RuntimeError("Boolean operation failed")
 
-        A_closed.append(new_loop)
+        closed_A_pieces.append(new_loop)
 
+    return closed_A_pieces
+
+
+
+def _bool_do(A, B, op, canvas=None):
+    '''
+    op values:
+    -1 (subtract B from A)
+     0 (intersect A and B)
+     1 (add B to A)
+    '''
+
+    # Copy the original polygons because they will be changed by this algorithm.
+    A = A.copy()
+    B = B.copy()
+
+    A_intersection_ids, B_intersection_ids, idx_map = _add_intersections_to_polys(A, B)
+
+    if op == -1:
+        # find pieces of A that are outside B
+        A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
+
+        # find pieces of B that are inside A
+        _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
+
+    elif op == 0:
+        # find pieces of A that are inside B
+        _, A_border_pieces = _get_pieces_outside_inside(A, A_intersection_ids, B)
+
+        # find pieces of B that are inside A
+        _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
+
+    elif op == 1:
+        # find pieces of A that are outside B
+        A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
+
+        # find pieces of B that are outside A
+        B_border_pieces, _ = _get_pieces_outside_inside(B, B_intersection_ids, A)
+    else:
+        raise RuntimeError("Unknown boolean operation")
+
+
+    # debug draw
+    if canvas:
+        for idx in canvas.find_all(): canvas.delete(idx)
+        debug_draw_bool(A, B, A_border_pieces, B_border_pieces, idx_map, canvas)
+
+
+    # divide into closed and open loops
+    A_closed = list(p for p in A_border_pieces if p[0] == p[-1])
+    B_closed = list(p for p in B_border_pieces if p[0] == p[-1])
+
+    A_open = list(p for p in A_border_pieces if p[0] != p[-1])
+    B_open = list(p for p in B_border_pieces if p[0] != p[-1])
+
+
+    A_closed.extend(_concat_border_pieces(A, B, A_open, B_open, idx_map))
+
+
+    new_polys = []
+    new_holes = []
 
     # A_closed contains outlines and holes.
     # Create new polygon for each loop that is CCW
     # CW loops represent holes
-    new_polys = []
-    new_holes = []
     for loop in A_closed:
         verts = list(A.vertices[idx] for idx in loop[:-1])
         # if CCW
@@ -226,10 +269,11 @@ def bool_subtract(A, B, canvas=None):
     # B_closed contains outlines and holes.
     # Create new polygon for each loop that is CW
     # CCW loops represent holes
+    if op != -1: op = 1
     for loop in B_closed:
         verts = list(B.vertices[idx] for idx in loop[:-1])
         # if CW
-        if Vector2.poly_signed_area(verts) <= 0:
+        if op * Vector2.poly_signed_area(verts) > 0:
             new_polys.append(Polygon2d(verts, range(len(verts))))
         else:
             new_holes.append(verts)
@@ -240,3 +284,20 @@ def bool_subtract(A, B, canvas=None):
         if which_poly is not None: which_poly.add_hole(verts)
 
     return new_polys
+
+
+
+def bool_subtract(A, B, canvas=None):
+    '''
+    Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
+    or an empty list.
+    '''
+    return _bool_do(A, B, -1, canvas)
+
+
+def bool_add(A, B, canvas=None):
+    '''
+    Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
+    or an empty list.
+    '''
+    return _bool_do(A, B, 1, canvas)

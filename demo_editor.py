@@ -627,20 +627,23 @@ class Application(tk.Frame):
 
 
         if mode == 'subtract' and len(self._polygons) > 0:
-            new_polys = bool_subtract(self._polygons[-1], new_poly)
+            new_polys = bool_subtract(self._polygons[-1], new_poly, self.debug_canvas)
             del self._polygons[:]
 
         elif mode == 'add':
-            new_polys = [new_poly]
+            if len(self._polygons) == 0:
+                new_polys = [new_poly]
+            else:
+                new_polys = bool_add(self._polygons[-1], new_poly, self.debug_canvas)
         else:
             return
 
         for poly in new_polys:
-            poly = Mesh2d.from_polygon(poly)
-            poly.break_into_convex(10., self.debug_canvas)
+            # poly = Mesh2d.from_polygon(poly)
+            # poly.break_into_convex(10., self.debug_canvas)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
-                NavMeshView(poly))
+                PolygonView(poly))
 
             self._polygons.append(poly)
 
