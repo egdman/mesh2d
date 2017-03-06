@@ -137,14 +137,17 @@ def _add_intersections_to_polys(A, B):
 
 
 
-def _concat_border_pieces(A, B, A_open, B_open, idx_map):
+def _concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail):
     closed_A_pieces = []
+
+    attach_point = -1 if tail_to_tail else 0
+
     while True:
-        
+
         print("A:")
         print (A_open)
         print("B:")
-        print (list(list(idx_map.get(idx, -1) for idx in loop) for loop in B_open))
+        print (list(list(idx_map.get(idx, str(idx)) for idx in loop) for loop in B_open))
         print("")
 
         A_found = next(((pos, piece) for pos, piece in enumerate(A_open) if len(piece) > 0), None)
@@ -162,17 +165,19 @@ def _concat_border_pieces(A, B, A_open, B_open, idx_map):
 
             # find B's piece to attach:
             B_found = next(((pos, piece) for pos, piece in enumerate(B_open) \
-                if len(piece) > 0 and new_loop[-1] == idx_map[piece[-1]]), None)
+                if len(piece) > 0 and new_loop[-1] == idx_map[piece[attach_point]]), None)
+
 
             if B_found is None: break
 
             B_pos, B_piece = B_found
+            B_piece_iter = reversed(B_piece[1:-1]) if tail_to_tail else iter(B_piece[1:-1])
 
-            for B_idx in reversed(B_piece[1:-1]):
+            for B_idx in B_piece_iter:
                 B_vrt = B.vertices[B_idx]
                 new_loop.append(len(A.vertices))
                 A.vertices.append(B_vrt)
-            new_loop.append(idx_map[B_piece[0]])
+            new_loop.append(idx_map[B_piece[0]] if tail_to_tail else idx_map[B_piece[-1]])
 
             del B_open[B_pos]
 
@@ -188,7 +193,6 @@ def _concat_border_pieces(A, B, A_open, B_open, idx_map):
             del A_open[A_pos]
 
         if new_loop[0] != new_loop[-1]:
-            print(new_loop)
             raise RuntimeError("Boolean operation failed")
 
         closed_A_pieces.append(new_loop)
@@ -211,21 +215,21 @@ def _bool_do(A, B, op, canvas=None):
 
     A_intersection_ids, B_intersection_ids, idx_map = _add_intersections_to_polys(A, B)
 
-    if op == -1:
+    if op == -1: # subtract
         # find pieces of A that are outside B
         A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
 
         # find pieces of B that are inside A
         _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
 
-    elif op == 0:
+    elif op == 0: # intersect
         # find pieces of A that are inside B
         _, A_border_pieces = _get_pieces_outside_inside(A, A_intersection_ids, B)
 
         # find pieces of B that are inside A
         _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
 
-    elif op == 1:
+    elif op == 1: # add
         # find pieces of A that are outside B
         A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
 
@@ -248,8 +252,8 @@ def _bool_do(A, B, op, canvas=None):
     A_open = list(p for p in A_border_pieces if p[0] != p[-1])
     B_open = list(p for p in B_border_pieces if p[0] != p[-1])
 
-
-    A_closed.extend(_concat_border_pieces(A, B, A_open, B_open, idx_map))
+    tail_to_tail = True if op == -1 else False
+    A_closed.extend(_concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail))
 
 
     new_polys = []
@@ -267,18 +271,18 @@ def _bool_do(A, B, op, canvas=None):
             new_holes.append(verts)
 
     # B_closed contains outlines and holes.
-    # Create new polygon for each loop that is CW
-    # CCW loops represent holes
-    if op != -1: op = 1
+    # Create new polygon for each loop that is CCW (CW if subtracting)
+    # CW (CCW if subtracting) loops represent holes
+    flip = -1 if op == -1 else 1
     for loop in B_closed:
         verts = list(B.vertices[idx] for idx in loop[:-1])
         # if CW
-        if op * Vector2.poly_signed_area(verts) > 0:
+        if flip * Vector2.poly_signed_area(verts) > 0:
             new_polys.append(Polygon2d(verts, range(len(verts))))
         else:
             new_holes.append(verts)
 
-    # try to add new holes to new polygons
+    # Try to add new holes to new polygons. Ignore holes that are outside all polys.
     for verts in new_holes:
         which_poly = next((poly for poly in new_polys if poly.point_inside(verts[0])), None)
         if which_poly is not None: which_poly.add_hole(verts)
