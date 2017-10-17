@@ -5,10 +5,9 @@ from .mesh2d import Polygon2d
 from .vector2 import Vector2
 from .utils import debug_draw_bool
 
-class BooleanOperation          (object): pass
-class Union           (BooleanOperation): pass
-class Subtraction     (BooleanOperation): pass
-class Intersection    (BooleanOperation): pass
+class Union       : pass
+class Subtraction : pass
+class Intersection: pass
 
 def _cut_to_pieces(array, cut_items):
     pieces = [[]]
@@ -146,6 +145,9 @@ def _concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail):
 
     attach_point = -1 if tail_to_tail else 0
 
+    def nonzero_pieces(pieces):
+        return ((i, piece) for i, piece in enumerate(pieces) if len(piece) > 0)
+
     while True:
 
         print("A:")
@@ -154,10 +156,9 @@ def _concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail):
         print (list(list(idx_map.get(idx, str(idx)) for idx in loop) for loop in B_open))
         print("")
 
-        A_found = next(((pos, piece) for pos, piece in enumerate(A_open) if len(piece) > 0), None)
-        if A_found is None: break
+        A_pos, A_piece = next(nonzero_pieces(A_open), (None, None))
+        if A_pos is None: break
 
-        A_pos, A_piece = A_found
         new_loop = A_piece[:]
 
         del A_open[A_pos]
@@ -168,13 +169,10 @@ def _concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail):
             if new_loop[0] == new_loop[-1]: break
 
             # find B's piece to attach:
-            B_found = next(((pos, piece) for pos, piece in enumerate(B_open) \
-                if len(piece) > 0 and new_loop[-1] == idx_map[piece[attach_point]]), None)
+            B_pos, B_piece = next(((i, piece) for i, piece in nonzero_pieces(B_open) \
+                if new_loop[-1] == idx_map[piece[attach_point]]), (None, None))
+            if B_pos is None: break
 
-
-            if B_found is None: break
-
-            B_pos, B_piece = B_found
             B_piece_iter = reversed(B_piece[1:-1]) if tail_to_tail else iter(B_piece[1:-1])
 
             for B_idx in B_piece_iter:
@@ -187,11 +185,9 @@ def _concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail):
 
 
             # find A's piece to attach
-            A_found = next(((pos, piece) for pos, piece in enumerate(A_open) \
-                if len(piece) > 0 and new_loop[-1] == piece[0]), None)
-            if A_found is None: break
-
-            A_pos, next_A_piece = A_found
+            A_pos, next_A_piece = next(((i, piece) for i, piece in nonzero_pieces(A_open) \
+                if new_loop[-1] == piece[0]), (None, None))
+            if A_pos is None: break
 
             new_loop.extend(next_A_piece[1:])
             del A_open[A_pos]
