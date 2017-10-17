@@ -256,7 +256,7 @@ def _bool_do(A, B, op, canvas=None):
     A_open = list(p for p in A_border_pieces if p[0] != p[-1])
     B_open = list(p for p in B_border_pieces if p[0] != p[-1])
 
-    tail_to_tail = True if op == -1 else False
+    tail_to_tail = True if op == Subtraction else False
     A_closed.extend(_concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail))
 
 
@@ -277,7 +277,7 @@ def _bool_do(A, B, op, canvas=None):
     # B_closed contains outlines and holes.
     # Create new polygon for each loop that is CCW (CW if subtracting)
     # CW (CCW if subtracting) loops represent holes
-    flip = -1 if op == -1 else 1
+    flip = -1 if op == Subtraction else 1
     for loop in B_closed:
         verts = list(B.vertices[idx] for idx in loop[:-1])
         # if CW
