@@ -5,6 +5,10 @@ from .mesh2d import Polygon2d
 from .vector2 import Vector2
 from .utils import debug_draw_bool
 
+class BooleanOperation          (object): pass
+class Union           (BooleanOperation): pass
+class Subtraction     (BooleanOperation): pass
+class Intersection    (BooleanOperation): pass
 
 def _cut_to_pieces(array, cut_items):
     pieces = [[]]
@@ -215,21 +219,21 @@ def _bool_do(A, B, op, canvas=None):
 
     A_intersection_ids, B_intersection_ids, idx_map = _add_intersections_to_polys(A, B)
 
-    if op == -1: # subtract
+    if op == Subtraction: # subtract
         # find pieces of A that are outside B
         A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
 
         # find pieces of B that are inside A
         _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
 
-    elif op == 0: # intersect
+    elif op == Intersection: # intersect
         # find pieces of A that are inside B
         _, A_border_pieces = _get_pieces_outside_inside(A, A_intersection_ids, B)
 
         # find pieces of B that are inside A
         _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
 
-    elif op == 1: # add
+    elif op == Union: # add
         # find pieces of A that are outside B
         A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
 
@@ -296,7 +300,7 @@ def bool_subtract(A, B, canvas=None):
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-    return _bool_do(A, B, -1, canvas)
+    return _bool_do(A, B, Subtraction, canvas)
 
 
 def bool_add(A, B, canvas=None):
@@ -304,4 +308,4 @@ def bool_add(A, B, canvas=None):
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-    return _bool_do(A, B, 1, canvas)
+    return _bool_do(A, B, Union, canvas)
