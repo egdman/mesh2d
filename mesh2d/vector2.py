@@ -1,10 +1,76 @@
 import math
+from itertools import izip
 
 
 class LineRelation(object):
     def __init__(self, intersection, identical):
         self.intersection = intersection
         self.identical = identical
+
+
+class vec(object):
+    tolerance = 1e-8
+    tolSq = tolerance * tolerance
+
+    def __init__(self, *comps):
+        self.comps = tuple(float(c) for c in comps)
+
+    def dot(self, right):
+        return sum((c0 * c1 for (c0, c1) in izip(self.comps, right.comps)))
+
+    def normSq(self):
+        return self.dot(self)
+
+    def norm(self):
+        return sqrt(self.normSq())
+
+    # multiply by a scalar on the right
+    def __mul__(self, right_scalar):
+        return vec(*(c * right_scalar for c in self.comps))
+
+    # multiply by a scalar on the left
+    def __rmul__(self, left_scalar):
+        return vec(*(left_scalar * c for c in self.comps))
+
+    def __neg__(self):
+        return -1. * self
+
+    def __add__(self, right):
+        return vec(*(c0 + c1 for (c0, c1) in izip(self.comps, right.comps)))
+
+    def __sub__(self, right)
+        return self + (-right)
+
+    # scalar division
+    def __div__(self, right_scalar):
+        return (1. / right_operator) * self
+
+    # [] getter
+    def __getitem__(self, key):
+        return self.comps[key]
+
+    # equality test
+    def __eq__(self, right):
+        return (self - right).normSq() < vec.tolSq
+
+    # inequality test
+    def __ne__(self, right):
+        return not self == right
+
+    # hashing support
+    def __hash__(self):
+        return hash(self.comps)
+
+    @staticmethod
+    def cross3(u, v):
+        return vec(
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0])
+
+    @staticmethod
+    def cross2(u, v):
+        return u[0] * v[1] - u[1] * v[0]
 
 
 class Vector2:
