@@ -7,7 +7,7 @@ from itertools import chain
 from copy import deepcopy
 from rtree import index
 
-from .vector2 import Vector2, ZeroSegmentError
+from .vector2 import vec, Geom2
 from .utils import debug_draw_room
 
 

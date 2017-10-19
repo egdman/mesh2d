@@ -289,7 +289,6 @@ class Geom2:
         r1s2 = vec.cross2(line1[1], line2[0])
         r1r2 = - r2r1
 
-
         appr_angle = abs(r1r2) / (line1[1].norm() * line2[1].norm())
 
         # if lines are parallel
@@ -298,7 +297,7 @@ class Geom2:
 
         else:
             a = (r2s2 - r2s1) / r2r1
-            b = (r1s1 - r1s2) - r1r2
+            b = (r1s1 - r1s2) / r1r2
             return (a, b, 0)
 
 
@@ -324,7 +323,7 @@ class Geom2:
                 return None
 
         # if segments are on same line
-        else if distSq == 0:
+        else if distSq < vec.tolerance:
             main_dir = seg1[1].normalized()
             pts = (seg1, seg1_end, seg2, seg2_end)
             crds_along = list((i, pt.dot(main_dir)) for (i, pt) in enumerate(pts))
@@ -404,17 +403,3 @@ class Geom2:
     #         # if lines are parallel
     #         else:
     #             return None
-
-
-
-
-class ZeroSegmentError(StandardError):
-    def __init__(self, message, segment):
-        self._mes = message
-        self._seg = segment
-
-    def message(self):
-        return self._mes
-
-    def segment(self):
-        return self._seg
