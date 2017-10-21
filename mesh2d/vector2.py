@@ -55,7 +55,7 @@ class vec(object):
 
     # equality test
     def __eq__(self, right):
-        return (self - right).normSq() < vec.tolSq
+        return hash(self) == hash(right)
 
     # inequality test
     def __ne__(self, right):
@@ -74,8 +74,9 @@ class vec(object):
     def prepend(self, *head):
         return vec(*chain(head, self.comps))
 
-    def copy(self):
-        return vec(*self.comps)
+    def is_closer(self, other, dist = vec.tolerance):
+        return (self - other).norm() < dist
+
 
     # returns min and max corners of the axis-aligned bounding box of points
     @staticmethod
@@ -190,20 +191,97 @@ class Geom2:
 
     @staticmethod
     def signed_angle(vect1, vect2):
-        signed_area = vec.cross2(vect1, vect2)
-        sine = signed_area / (vect1.norm() * vect2.norm())
-        sine = min(sine, 1.0)
-        sine = max(sine, -1.0)
+        sine = vec.cross2(v1.normalized(), v2.normalized())
+        sine = min(max(sine, -1.), 1.)
         return math.asin(sine)
 
 
     @staticmethod
-    def mul_mtx(matrix, vector):
-        if len(matrix) != 4:
-            raise ValueError("Matrix must be 2x2")
-        x = matrix[0]*vector[0] + matrix[1]*vector[1]
-        y = matrix[2]*vector[0] + matrix[3]*vector[1]
-        return vec(x, y)
+    def mul_mtx_2x2(mtx, vector):
+        return vec(
+            mtx[0]*vector[0] + mtx[1]*vector[1],
+            mtx[2]*vector[0] + mtx[3]*vector[1])
+
+
+
+    @staticmethod
+    def get_polar_angle(point):
+        norm = point.norm()
+        cosine = min(max(point[0] / norm, -1.), 1.)
+        sine   = min(max(point[1] / norm, -1.), 1.)
+        angle = math.acos(cosine)
+        return 2 * math.pi - angle if sine < 0 else angle
+
+
+    
+
+
+
+
+        def seg_x_ray(lpara, rpara):
+            return 0 < lpara and lpara < 1 and 0 < rpara
+
+        x1 = seg_x_ray(inter1[0], inter1[1])
+        x2 = seg_x_ray(inter2[0], inter2[1])
+
+        candidates = []
+
+        if x1:
+            candidates.append(tip + (inter1[1] * dir1))
+        if x2:
+            candidates.append(tip + (inter2[1] * dir2))
+
+        # find param bounds of segment part inside sector
+        bounds = sorted((inter1[0], inter2[0]))
+
+
+        # project tip to line
+        projpara = Geom2.project_to_line(tip, line)
+
+        if bounds[0] < projpara and projpara < bounds[1] and 0 < projpara and projpara < 1:
+            candidates.append(line[0] + (projpara * line[1]))
+
+
+        
+
+
+
+    # tip is the tip of the sector
+    # polar_start is the polar angle in radians of the sector start
+    # polar_size is the angular size in radians of the sector
+    # segment is a pair of points
+    # returns closest point of the segment and the distance to it
+    # if segment is entirely outside sector, returns (None, None)
+    @staticmethod
+    def segment_closest_point_inside_sector(tip, polar_start, polar_size, segment):
+        if tip in segment:
+            return tip, 0
+
+        s_angle = Geom2.signed_angle(segment[0] - tip, segment[1] - tip)
+        if s_angle == 0:
+            return tip, 0
+        else if s_angle < 0:
+            return None, None
+
+
+
+        polar_end = polar_start + polar_size
+        if polar_end >= 2 * math.pi: polar_end -= 2 * math.pi
+
+
+        def in_sector(start, size, a):
+            if a > start:
+                return a - start < size
+            else if a < start:
+                return a < polar_end
+            else:
+                return False
+
+        a0 = Geom2.get_polar_angle(segment[0] - tip)
+        a1 = Geom2.get_polar_angle(segment[1] - tip)
+
+
+        angles = [Geom2.get_polar_angle(segment[0] - tip), Geom2.get_polar_angle(segment[1] - tip)]
 
 
 
