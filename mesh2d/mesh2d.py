@@ -494,8 +494,34 @@ class Polygon2d(object):
 
 class Portal(object):
     def __init__(self):
+        self.start_index = None
+        self.kind = None
         self.created = False
-        self.parent_portal = None
+
+    class ToSegment: pass
+    class ToVertex: pass
+    class ToPortal: pass
+
+    def calc_endpoint(self, vertices):
+        if self.kind == Portal.ToVertex:
+            return vertices[self.end_info[0]]
+
+        else if self.kind == Portal.ToSegment:
+            idx1, idx2 = self.end_info[0]
+            para = self.end_info[1]
+            return vertices[idx1] + (para * (vertices[idx2] - vertices[idx1]))
+
+        else if self.kind == Portal.ToPortal:
+            other_portal, para = self.end_info
+            if para == 0:
+                return vertices[other_portal.start_index]
+            else if para == 1:
+                return other_portal.calc_endpoint(vertices)
+            else:
+                raise RuntimeError("{} - what is this parameter value? It should be either 0 or 1".format(para))
+        else:
+             raise RuntimeError("Portal of unknown kind: {}".format(self.kind))
+
 
 
 class Mesh2d(Polygon2d):
@@ -531,36 +557,40 @@ class Mesh2d(Polygon2d):
         '''
 
         for portal in portals:
-            if portal.end_index is None and portal.parent_portal is None:
-
-                new_vrt = portal.end_point
-                start_i = portal.start_index
-
-                intersection = self.trace_ray(self.vertices[start_i], new_vrt)
-
-                if intersection is None:
-                    raise RuntimeError("Ray casting failed to find portal endpoint")
-
-                op_edge = intersection[1]
-
-                end_i = self.add_vertex_to_border(new_vrt, op_edge)
-
-                portal.end_index = end_i
+            if portal.kind == Portal.ToSegment:
+                segment, para, dist = portal.end_info
+                end_idx = self.add_vertex_to_border(segment, para)
+                portal.kind = Portal.ToVertex
+                portal.end_info = end_idx, dist
 
                 if cv:
-                    vrt = self.vertices[end_i]
-                    cv.create_oval(vrt.x - 3, vrt.y - 3, vrt.x + 3, vrt.y + 3, fill='green')
+                    vrt = self.vertices[end_idx]
+                    cv.create_oval(vrt[0] - 3, vrt[1] - 3, vrt[0] + 3, vrt[1] + 3, fill='green')
 
-
-        if cv:
-            for idx in cv.find_all(): cv.delete(idx)
-            debug_draw_room(self, [self.outline] + self.holes, cv)
+            else if portal.kind == Portal.ToVertex:
+                if cv:
+                    vrt = self.vertices[portal.end_info[0]]
+                    cv.create_oval(vrt[0] - 3, vrt[1] - 3, vrt[0] + 3, vrt[1] + 3, fill='blue')
 
 
         # now go through portals again to set child portals' end indexes
         for portal in portals:
-            if portal.end_index is None and portal.parent_portal is not None:
-                portal.end_index = portal.parent_portal.end_index
+            if portal.kind == Portal.ToPortal:
+                other_portal, para = portal.end_info
+                if other_portal.kind != Portal.ToVertex:
+                    raise RuntimeError("Why does this portal have no ending vertex created??")
+                portal.kind = Portal.ToVertex
+
+                # attach to start of other portal
+                if para == 0:
+                    portal.end_info = other_portal.start_index, 0
+
+                # attach to end of other portal
+                else if para == 1:
+                    portal.end_info = other_portal.end_info
+
+                else:
+                    raise RuntimeError("{} - what is this parameter value? It should be either 0 or 1".format(para))
 
 
         # Now break the mesh border into convex rooms
@@ -602,15 +632,13 @@ class Mesh2d(Polygon2d):
             room2 = []
 
             start_i = portal.start_index
-            end_i = portal.end_index
+            end_i, _ = portal.end_info
 
             # if this portal starts outside of this polygon, skip it
             if start_i not in indices or end_i not in indices:
                 continue
 
             # split index buffer of the outline of this room using the portal
-            # room1, room2 = Polygon2d._split_index_buffer(indices, start_i, end_i)
-
             room1, room2 = self._split_border(loops, start_i, end_i)
 
             if room1 is None and room2 is None: continue
@@ -708,17 +736,18 @@ class Mesh2d(Polygon2d):
             right_dir, left_dir = self.get_sector(prev_i, spike_i, next_i, threshold)
             tip = self.vertices[spike_i]
 
+            sector = (right_dir, tip, left_dir)
             # find closest edge
-            closest_seg, closest_seg_point, closest_seg_dst = \
-                self.find_closest_edge_inside_sector((right_dir, tip, left_dir), spike_i)
+            closest_seg, closest_seg_para, closest_seg_dst = \
+                self.find_closest_edge_inside_sector(sector, spike_i)
 
             # find closest vertex
             closest_vert_i, closest_vert_dst = \
-                self.find_closest_vert_inside_sector((right_dir, tip, left_dir), spike_i)
+                self.find_closest_vert_inside_sector(sector, spike_i)
 
             # find closest portal
-            closest_portal, closest_portal_point, closest_portal_dst = \
-                self.find_closest_portal_inside_sector((right_dir, tip, left_dir), spike_i, portals)
+            closest_portal, closest_portal_para, closest_portal_dst = \
+                self.find_closest_portal_inside_sector(sector, spike_i, portals)
 
 
             # # remove tiny difference between points
@@ -739,29 +768,27 @@ class Mesh2d(Polygon2d):
             new_portals = [portal]
 
             portal.start_index = spike_i
-            portal.end_index = None # optional, might be added later
-
-            portal.end_point = closest_seg_point
+            portal.kind = Portal.ToSegment
+            portal.end_info = closest_seg, closest_seg_para, closest_seg_dst
 
             closest_dst = closest_seg_dst
 
             # check if there is a vertex closer or equally close than the closest edge (prefer vertex)
             if closest_vert_dst is not None and closest_vert_dst <= closest_dst:
                 closest_dst = closest_vert_dst
-                portal.end_index = closest_vert_i
-                portal.end_point = self.vertices[closest_vert_i]
-                
+                portal.kind = Portal.ToVertex
+                portal.end_info = closest_vert_i, closest_vert_dst
 
             # check if there is a portal closer than the previous closest element
             # TODO When attaching to an existing portal, need to reconsider the necessity of the older portal
             if closest_portal_dst is not None and closest_portal_dst < closest_dst:
                 closest_dst = closest_portal_dst
 
-                portal_start_i = closest_portal.start_index
-                portal_start_p = self.vertices[portal_start_i]
+                # portal_start_i = closest_portal.start_index
+                # portal_start_p = self.vertices[portal_start_i]
 
-                portal_end_i = closest_portal.end_index # might be None
-                portal_end_p = closest_portal.end_point
+                # portal_end_i = closest_portal.end_index # might be None
+                # portal_end_p = closest_portal.end_point
 
                 # now we know:
                 # position of starting point of other portal (portal_start_p)
@@ -777,63 +804,41 @@ class Mesh2d(Polygon2d):
                 # we only want to connect to one or two endpoints,
                 # not to the middle of the portal
 
-                if closest_portal_point == portal_start_p:
-                    portal.end_index = portal_start_i
-                    portal.end_point = portal_start_p
-                    # new_portal_endpoint = [portal_v1]
+                portal.kind = Portal.ToPortal
 
-                elif closest_portal_point == portal_end_p:
-                    portal.end_index = portal_end_i # this might be None
-                    portal.end_point = portal_end_p
+                if closest_portal_para == 0:
+                    portal.end_info = closest_portal, 0
+                else if closest_portal_para == 1:
+                    portal.end_info = closest_portal, 1
 
-                
                 # If closest point is not one of the endpoints,
                 # we still create the portal(s) to one or two endpoints.
-                
                 else:
                     def pt_inside_sector(sector, pt):
                         dir1, tip, dir2 = sector
                         rel_pt = pt - tip
                         return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
 
-                    portal_endpoints = (
-                        (portal_start_i, portal_start_p),
-                        (portal_end_i, portal_end_p)
-                    )
+                    other_start_pt = self.vertices[closest_portal.start_index]
+                    other_end_pt = closest_portal.calc_endpoint(self.vertices)
 
-                    endpt_dists = tuple((idx, point, (point - tip).normSq()) \
-                        for (idx, point) in portal_endpoints \
-                        if pt_inside_sector((left, tip, right), point))
-
-                    # if 1 or 2 points are inside sector, pick the closest one
-                    if len(endpt_dists) > 0:
-                        (cl_idx, cl_pos, cl_dist) = min(endpt_dists, key=itemgetter(2))
-                        portal.end_index = cl_idx
-                        portal.end_point = cl_pos
-
+                    start_inside = pt_inside_sector(sector, other_start_pt)
+                    end_inside = pt_inside_sector(sector, other_end_pt)
 
                     # if none of the portal endpoints is inside sector, create 2 portals to both ends:
-                    else:
+                    if not start_inside and not end_inside:
                         second_portal = deepcopy(portal)
-
-                        portal.end_index = portal_start_i
-                        portal.end_point = portal_start_p
-
-                        second_portal.end_index = portal_end_i
-                        second_portal.end_point = portal_end_p
-
-                        # save reference to the portal that we are snapping to
-                        second_portal.parent_portal = closest_portal
+                        portal.end_info = closest_portal, 0
+                        second_portal.end_info = closest_portal, 1
                         new_portals.append(second_portal)
 
+                    else if start_inside:
+                        portal.end_info = closest_portal, 0
+                    else:
+                        portal.end_info = closest_portal, 1
 
-                # save reference to the portal that we are snapping to
-                portal.parent_portal = closest_portal
 
-            for new_portal in new_portals:
-
-                if not new_portal.end_point == tip:
-                    portals.append(new_portal)
+            portals.extend(new_portals)
 
         return portals
 
@@ -865,7 +870,7 @@ class Mesh2d(Polygon2d):
     def find_closest_edge_inside_sector(self, sector, tip_idx):
         segments = Polygon2d.get_segments(chain([self.outline], self.holes))
 
-        closest_pt, closest_distSq, closest_edge = None, None, None
+        closest_para, closest_distSq, closest_edge = None, None, None
 
         for (seg_i1, seg_i2) in segments:
 
@@ -874,35 +879,35 @@ class Mesh2d(Polygon2d):
                 continue
 
             segment = (self.vertices[seg_i1], self.vertices[seg_i2])
-            pt, distSq = self._segment_closest_point_inside_sector(segment, sector)
-            if pt is None: raise RuntimeError("Could not find a single edge inside sector")
+            para, distSq = self._segment_closest_point_inside_sector(segment, sector)
+            if para is None: raise RuntimeError("Could not find a single edge inside sector")
 
             if closest_distSq is None or distSq < closest_distSq:
                 closest_distSq = distSq
-                closest_pt = pt
+                closest_para = para
                 closest_edge = (seg_i1, seg_i2)
 
-        return closest_edge, closest_pt, closest_distSq
+        return closest_edge, closest_para, closest_distSq
 
 
 
     def find_closest_portal_inside_sector(self, sector, tip_idx, portals):
-        closest_portal, closest_distSq, closest_pt = None, None, None
+        closest_portal, closest_distSq, closest_para = None, None, None
 
         for portal in portals:
             if tip_idx == portal.start_index: continue
 
-            portal_seg = (self.vertices[portal.start_index], portal.end_point)
-            pt, distSq = self._segment_closest_point_inside_sector(portal_seg, sector)
-            if pt is None: continue
+            portal_seg = (self.vertices[portal.start_index], portal.calc_endpoint(self.vertices))
+            para, distSq = self._segment_closest_point_inside_sector(portal_seg, sector)
+            if para is None: continue
 
             # update closest portal
             if closest_distSq is None or distSq < closest_distSq:
                 closest_distSq = distSq
-                closest_pt = pt
+                closest_para = para
                 closest_portal = portal
 
-        return closest_portal, closest_pt, closest_distSq
+        return closest_portal, closest_para, closest_distSq
 
 
 
@@ -942,40 +947,6 @@ class Mesh2d(Polygon2d):
             Geom2.mul_mtx_2x2((cosine, sine, -sine, cosine), vec1),
             Geom2.mul_mtx_2x2((cosine, -sine, sine, cosine), vec2)
         )
-
-
-
-    # def trace_ray(self, ray1, ray2):
-    #     vrt = self.vertices
-    #     borders = [self.outline] + self.holes
-    #     segments = Polygon2d.get_segments(borders)
-
-    #     intersections = []
-    #     for seg in segments:
-    #         seg_i1 = seg[0]
-    #         seg_i2 = seg[1]
-
-    #         seg1 = vrt[seg_i1]
-    #         seg2 = vrt[seg_i2]
-    #         # ignore edges that are adjacent to the ray's starting point
-    #         if seg1 == ray1 or seg2 == ray1:
-    #             continue
-
-    #         ray_para, seg_para = Geom2.lines_intersect((ray1, ray))
-    #         inter_pt = Vector2.where_segment_crosses_ray(seg1, seg2, ray1, ray2)
-    #         if inter_pt is not None:
-    #             # append a tuple of a vertex and an edge
-    #             intersections.append((inter_pt, (seg_i1, seg_i2)))
-
-
-    #     if len(intersections) == 0:
-    #         return None
-
-    #     # find closest intersection:
-    #     inter_dist = ((inter, (ray1 - inter[0]).normSq()) for inter in intersections)
-    #     res = min(inter_dist, key=itemgetter(1))[0]
-    #     return res
-
 
 
     @staticmethod
@@ -1038,7 +1009,6 @@ class Mesh2d(Polygon2d):
             else:
                 return line[0] + (para * line[1])
 
-        candid_pts = (para_to_pt(para) for para in candid_params)
-        distances = ((tip - pt).normSq() for pt in candid_pts)
+        distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
 
-        return min(izip(candid_pts, distances), key = itemgetter(1))
+        return min(izip(candid_params, distances), key = itemgetter(1))

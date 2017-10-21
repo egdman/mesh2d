@@ -49,9 +49,9 @@ class CreateWall(Tool):
         # When exiting width adjustment mode, snap cursor back to endpoint.
         # This might not work on all platforms.
         if not self.width_mode:
-            endpt_screen = self.parent.get_screen_crds(self.end.x, self.end.y)
+            endpt_screen = self.parent.get_screen_crds(self.end[0], self.end[1])
             self.parent.canvas.event_generate('<Motion>', warp=True,
-                x=endpt_screen.x, y=endpt_screen.y)
+                x=endpt_screen[0], y=endpt_screen[1])
 
         self.redraw()
 
@@ -64,7 +64,7 @@ class CreateWall(Tool):
 
             if self.start is None:
                 self.start = click_world
-                self.end = click_world + Vector2(1, 0)
+                self.end = click_world + vec(1, 0)
 
                 app.add_draw_object('wall_tool_helpers/wall_helper',
                     WallHelperView(self.start, self.end, self.width))
@@ -73,7 +73,7 @@ class CreateWall(Tool):
 
             else:
                 self.end = click_world
-                app.add_wall(self.start.copy(), self.end.copy(), self.width)
+                app.add_wall(self.start, self.end, self.width)
                 # app.remove_draw_objects_glob('wall_tool_helpers/*')
                 self.width_mode = False
                 self.start = self.end
@@ -123,7 +123,7 @@ class Select(Tool):
         print (obj_ids)
 
         world_c = self.parent.get_world_crds(event.x, event.y)
-        screen_c = self.parent.get_screen_crds(world_c.x, world_c.y)
+        screen_c = self.parent.get_screen_crds(world_c[0], world_c[1])
 
         print ("mouse at {}, {} from event".format(event.x, event.y))
         print ("mouse at {} in world".format(world_c))
@@ -131,7 +131,7 @@ class Select(Tool):
 
         # x = float( self.canvas.canvasx(event.x) )
         # y = float( self.canvas.canvasy(event.y) )
-        # pointer = Vector2(x, y)
+        # pointer = vec(x, y)
 
         # for poly in parent._polygons:
         #   if poly.point_inside(pointer): 
@@ -172,10 +172,10 @@ class Application(tk.Frame):
         self.draw_objects = {}
 
         # info about camera position
-        self.camera_pos = Vector2(0,0)
+        self.camera_pos = vec(0,0)
         self.camera_rot = 0.
         self.camera_size = 1.
-        self.rot_marker_world = Vector2(0, 0)
+        self.rot_marker_world = vec(0, 0)
 
         self.zoom_rate = 1.04
 
@@ -200,7 +200,7 @@ class Application(tk.Frame):
         self.canvas = tk.Canvas(self, background='#000000', width=cwidth, height=cheight,
             scrollregion=(0, 0, cwidth, cheight))
 
-        self.canvas_center = Vector2(float(self.canvas['width']) / 2., float(self.canvas['height']) / 2.)
+        self.canvas_center = vec(float(self.canvas['width']) / 2., float(self.canvas['height']) / 2.)
 
 
         # pack root window into OS window and make it fill the entire window
@@ -439,8 +439,8 @@ class Application(tk.Frame):
         # self.remove_draw_objects_glob("highlight_points/*")
         # if len(self._polygons) > 0:
         #     ptr_world = self.get_world_crds(event.x, event.y)
-        #     vect_nw = ptr_world - Vector2(20., 20.)
-        #     vect_se = ptr_world + Vector2(20., 20.)
+        #     vect_nw = ptr_world - vec(20., 20.)
+        #     vect_se = ptr_world + vec(20., 20.)
 
         #     num = 0
         #     for poly in self._polygons:
@@ -477,10 +477,10 @@ class Application(tk.Frame):
                 delta = (
                     Matrix.rotate2d((0,0), self.camera_rot)
                     .multiply(Matrix.scale2d((0,0), (self.camera_size, self.camera_size)))
-                    .multiply(Vector2(delta_x, delta_y)).values
+                    .multiply(vec(delta_x, delta_y)).values
                 )
 
-                self.camera_pos -= Vector2(delta[0], delta[1])
+                self.camera_pos -= vec(delta[0], delta[1])
 
 
             elif self.rotate_mode:
@@ -489,10 +489,10 @@ class Application(tk.Frame):
                 self.camera_rot += angle
 
                 # make camera rotate around the marker rather than screen center
-                rot_center_world = Vector2(self.rot_marker_world.x, self.rot_marker_world.y)
+                rot_center_world = vec(self.rot_marker_world[0], self.rot_marker_world[0])
                 rot_mtx = Matrix.rotate2d(rot_center_world, angle)
                 camera_new_pos = rot_mtx.multiply(self.camera_pos).values
-                self.camera_pos = Vector2(camera_new_pos[0], camera_new_pos[1])
+                self.camera_pos = vec(camera_new_pos[0], camera_new_pos[1])
 
             self.draw_all()
 
@@ -516,7 +516,7 @@ class Application(tk.Frame):
             Matrix.scale2d(scale_cntr_world, (rate, rate))
             .multiply(self.camera_pos).values
         )
-        self.camera_pos = Vector2(camera_new_pos[0], camera_new_pos[1])
+        self.camera_pos = vec(camera_new_pos[0], camera_new_pos[1])
 
         self.draw_all()
 
@@ -573,16 +573,16 @@ class Application(tk.Frame):
 
 
     def get_world_crds(self, screen_x, screen_y):
-        screen_crds = Vector2(screen_x, screen_y)
+        screen_crds = vec(screen_x, screen_y)
         world_crds = self.get_screen_to_world_mtx().multiply(screen_crds).values
-        return Vector2(world_crds[0], world_crds[1])
+        return vec(world_crds[0], world_crds[1])
 
 
 
     def get_screen_crds(self, world_x, world_y):
-        world_crds = Vector2(world_x, world_y)
+        world_crds = vec(world_x, world_y)
         screen_crds = self.get_world_to_screen_mtx().multiply(world_crds).values
-        return Vector2(screen_crds[0], screen_crds[1])
+        return vec(screen_crds[0], screen_crds[1])
 
 
 
@@ -707,38 +707,42 @@ class Application(tk.Frame):
 
 
 
-    def add_wall(self, start, end, width):
+    def add_wall(self, start_vec, end_vec, width):
         # self.active_tool = self.select_tool
         # print ("added wall {}, {}, {}".format(start, end, width))
+        class cc: pass
+        start, end = cc(), cc()
+        start.x, start.y = start_vec.comps
+        end.x, end.y = end_vec.comps
 
         # add placeholder code to test polys with holes
         if start.x > end.x: start.x, end.x = end.x, start.x
         if start.y > end.y: start.y, end.y = end.y, start.y
-        v0 = start
-        v1 = Vector2(end.x, start.y)
-        v2 = end
-        v3 = Vector2(start.x, end.y)
+        v0 = vec(start.x, start.y)
+        v1 = vec(end.x, start.y)
+        v2 = vec(end.x, end.y)
+        v3 = vec(start.x, end.y)
 
         width = end.x - start.x
         height = end.y - start.y
         cntr_x = start.x + width / 2.
         cntr_y = start.y + height / 2.
-        cntr = Vector2(cntr_x, cntr_y)
+        cntr = vec(cntr_x, cntr_y)
 
         sz = min(height, width) / 2.
 
-        h10 = (Vector2(.1, .9) - Vector2(.5, .5) )*sz + cntr
-        h11 = (Vector2(.1, .1) - Vector2(.5, .5) )*sz + cntr
-        h12 = (Vector2(.4, .1) - Vector2(.5, .5) )*sz + cntr
-        h13 = (Vector2(.4, .9) - Vector2(.5, .5) )*sz + cntr
+        h10 = (vec(.1, .9) - vec(.5, .5) )*sz + cntr
+        h11 = (vec(.1, .1) - vec(.5, .5) )*sz + cntr
+        h12 = (vec(.4, .1) - vec(.5, .5) )*sz + cntr
+        h13 = (vec(.4, .9) - vec(.5, .5) )*sz + cntr
 
-        h20 = (Vector2(.9, .9) - Vector2(.5, .5) )*sz + cntr
-        h21 = (Vector2(.5, .5) - Vector2(.5, .5) )*sz + cntr
-        h22 = (Vector2(.9, .1) - Vector2(.5, .5) )*sz + cntr
+        h20 = (vec(.9, .9) - vec(.5, .5) )*sz + cntr
+        h21 = (vec(.5, .5) - vec(.5, .5) )*sz + cntr
+        h22 = (vec(.9, .1) - vec(.5, .5) )*sz + cntr
 
-        h30 = (Vector2(.55, .72) - Vector2(.5, .5) )*sz + cntr
-        h31 = (Vector2(.79, .92) - Vector2(.5, .5) )*sz + cntr
-        h32 = (Vector2(.60, .85) - Vector2(.5, .5) )*sz + cntr
+        h30 = (vec(.55, .72) - vec(.5, .5) )*sz + cntr
+        h31 = (vec(.79, .92) - vec(.5, .5) )*sz + cntr
+        h32 = (vec(.60, .85) - vec(.5, .5) )*sz + cntr
 
 
         new_poly = Mesh2d([v0, v1, v2, v3], range(4))
