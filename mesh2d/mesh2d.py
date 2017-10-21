@@ -38,7 +38,7 @@ class Polygon2d(object):
             self.rti.insert(vid, (vert[0], vert[1], vert[0], vert[1]))
 
         # resolve self-intersections (sinters)
-        self._resolve_sinters()
+        # self._resolve_sinters()
 
         self.holes = []
 
@@ -167,7 +167,6 @@ class Polygon2d(object):
             # insert 2 new vertices at the intersection
             new_idx1 = self.add_vertex_to_outline(.5, seg1)
             new_idx2 = self.add_vertex_to_outline(.5, seg2)
-
             self.vertices[new_idx1] = nv1
             self.vertices[new_idx2] = nv2
 
@@ -359,24 +358,26 @@ class Polygon2d(object):
 
     @staticmethod
     def point_inside_loop(vertices, indices, point):
-        verts = list(vertices[idx] - point for idx in indices)
-        nverts = len(verts)
+        # transform vertices so that query point is at the origin, append start vertex at end to wrap
+        verts = chain((vertices[idx] - point for idx in indices), [vertices[indices[0]] - point])
+        x_ray = (vec(0, 0), vec(1, 0)) # ray from origin along positive x axis
+
         num_inters = 0
-        for loc in range(nverts):
-            cur_v = verts[loc]
-            next_v = verts[(loc+1) % nverts]
 
-            if cur_v[1] == 0: cur_v += vec(0, 0.01)
+        # iterate over pairs of vertices
+        cur_v = next(verts)
+        for next_v in verts:
 
-            if next_v[1] == 0: next_v += vec(0, 0.01)
+            if cur_v[1] == 0: cur_v += vec(0, 0.00001)
+            if next_v[1] == 0: next_v += vec(0, 0.00001)
 
             if cur_v[1] * next_v[1] < 0:
-
-                _, b, _ = Geom2.lines_intersect((cur_v, next_v - cur_v), (vec(0, 0), vec(1, 0)))
+                _, b, _ = Geom2.lines_intersect((cur_v, next_v - cur_v), x_ray)
                 if b > 0: num_inters += 1
 
-        return num_inters % 2 > 0
+            cur_v = next_v
 
+        return num_inters % 2 > 0
 
 
 
@@ -386,6 +387,7 @@ class Polygon2d(object):
         if index_1 == index_2:
             raise ValueError("split indices must not be equal to each other")
 
+        # TODO: this check is hard, remove it
         if index_1 not in indices or index_2 not in indices:
             raise ValueError("split indices must both be present in the index buffer")
 
@@ -546,15 +548,11 @@ class Mesh2d(Polygon2d):
 
     def break_into_convex(self, threshold = 0.0, cv=None):
         portals = self.get_portals(threshold=threshold)
-        '''
-        For all the portals that require creating new vertices, create new vertices.
-        Multiple portals may have the same endpoint. If we have 5 portals that converge
-        to the same endpoint, we only want to create the endpoint once.
-        This is why some portals have a 'parent_portal' attribute - we create the endpoint
-        for the parent portal only, and all the other portals use its index.
-        '''
 
+        # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
         for portal in portals:
+            print(portal.kind)
+
             if portal.kind == Portal.ToSegment:
                 segment, para, dist = portal.end_info
                 end_idx = self.add_vertex_to_border(segment, para)
@@ -571,28 +569,35 @@ class Mesh2d(Polygon2d):
                     cv.create_oval(vrt[0] - 3, vrt[1] - 3, vrt[0] + 3, vrt[1] + 3, fill='blue')
 
 
-        # now go through portals again to set child portals' end indexes
-        for portal in portals:
+        def resolve_chain(portal):
             if portal.kind == Portal.ToPortal:
-                other_portal, para = portal.end_info
-                if other_portal.kind != Portal.ToVertex:
-                    raise RuntimeError("Why does this portal have no ending vertex created??")
+                next_portal, para = portal.end_info
+                resolve_chain(next_portal)
+
+                if next_portal.kind != Portal.ToVertex:
+                    # this should never happen
+                    raise RuntimeError("resolve_chain did not succeed")
+
                 portal.kind = Portal.ToVertex
-
-                # attach to start of other portal
                 if para == 0:
-                    portal.end_info = other_portal.start_index, 0
-
-                # attach to end of other portal
+                    portal.end_info = next_portal.start_index, 0
                 elif para == 1:
-                    portal.end_info = other_portal.end_info
-
+                    portal.end_info = next_portal.end_info
                 else:
-                    raise RuntimeError("{} - what is this parameter value? It should be either 0 or 1".format(para))
+                    raise RuntimeError(
+                        "{} - what is this parameter value?"
+                        " It should be either 0 or 1".format(para))
+
+
+        # convert all 'ToPortal' portals to 'ToVertex' portals
+        for portal in portals:
+            # travel down the chain of linked portals until arrive to 'ToVertex' portal
+            resolve_chain(portal)
+
+        # now all portals are 'ToVertex'
 
 
         # Now break the mesh border into convex rooms
-
         # queue of rooms
         room_q = deque()
 
@@ -626,9 +631,7 @@ class Mesh2d(Polygon2d):
             # if this portal has already been created, skip it
             if portal.created: continue
 
-            room1 = []
-            room2 = []
-
+            room1, room2 = [], []
             start_i = portal.start_index
             end_i, _ = portal.end_info
 
@@ -726,6 +729,8 @@ class Mesh2d(Polygon2d):
         TODO This function is slightly less complex right now
         """
         spikes = self.find_spikes(threshold)
+        print("{} spikes".format(len(spikes)))
+
         portals = []
 
         for spike in spikes:
@@ -749,14 +754,6 @@ class Mesh2d(Polygon2d):
             # find closest portal
             closest_portal, closest_portal_para, closest_portal_dst = \
                 self.find_closest_portal_inside_sector(sector, spike_i, portals)
-
-
-            # # remove tiny difference between points
-            # if closest_portal is not None:
-            #     if closest_portal_dst < tolerance:
-            #         closest_portal_point.snap_to(tip)
-            #         closest_portal_dst = 0.0
-
 
 
             # closest edge always exists
@@ -785,26 +782,10 @@ class Mesh2d(Polygon2d):
             if closest_portal_dst is not None and closest_portal_dst < closest_dst:
                 closest_dst = closest_portal_dst
 
-                # portal_start_i = closest_portal.start_index
-                # portal_start_p = self.vertices[portal_start_i]
-
-                # portal_end_i = closest_portal.end_index # might be None
-                # portal_end_p = closest_portal.end_point
-
-                # now we know:
-                # position of starting point of other portal (portal_start_p)
-                # index of starting point of other portal (portal_start_i)
-                # position of ending point of other portal (portal_end_p)
-                # (possibly) index of ending point of other portal (portal_end_i)
-
                 # figure out if we want to create one or two portals
 
-                # closest_portal_point can either be one of the endpoints,
-                # or a middle point of the portal
-
                 # we only want to connect to one or two endpoints,
-                # not to the middle of the portal
-
+                # not to an intermediate point of the portal
                 portal.kind = Portal.ToPortal
 
                 if closest_portal_para == 0:
