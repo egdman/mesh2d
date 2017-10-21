@@ -97,12 +97,14 @@ class Polygon2d(object):
 
 
     def _segments_cross_helper(self, seg1, seg2):
-        seg11 = self.vertices[seg1[0]]
-        seg12 = self.vertices[seg1[1]]
-        seg21 = self.vertices[seg2[0]]
-        seg22 = self.vertices[seg2[1]]
-        return Vector2.where_segments_cross_exclusive(
-                    seg11, seg12, seg21, seg22)
+        seg1 = (self.vertices[seg1[0]], self.vertices[seg1[1]])
+        seg2 = (self.vertices[seg2[0]], self.vertices[seg2[1]])
+        seg_x = Polygon2d._segments_intersect(seg1, seg2)
+        # if segments intersect at endpoints, ignore
+        if seg_x in chain(seg1, seg2):
+            return None
+        else:
+            return seg_x
 
 
 
@@ -221,7 +223,7 @@ class Polygon2d(object):
 
             # sort vertices by distance from smaller-index end of edge
             sorted_pos_verts = sorted(enumerate(vertices),
-                key = lambda elem: Vector2.distance(elem[1], self.vertices[edge[0]]))
+                key = lambda elem: (elem[1] - self.vertices[edge[0]]).norm())
 
             new_ids = [0]*len(vertices)
 
@@ -372,13 +374,10 @@ class Polygon2d(object):
 
             if cur_v.y * next_v.y < 0:
 
-                inters = Vector2.lines_intersect(
-                    cur_v, next_v,
-                    Vector2(0, 0), Vector2(1, 0)).intersection
+                _, b = Geom2.lines_intersect((cur_v, next_v - cur_v), (vec(0, 0), vec(1, 0)))
+                if b > 0: num_inters += 1
 
-                if inters.x > 0: num_inters += 1
-
-        return num_inters%2 > 0
+        return num_inters % 2 > 0
 
 
 
@@ -452,7 +451,7 @@ class Polygon2d(object):
 
     @staticmethod
     def signed_area(vertices, indices):
-        return Vector2.poly_signed_area((vertices[idx] for idx in indices))
+        return Geom2.poly_signed_area((vertices[idx] for idx in indices))
 
 
 
@@ -472,6 +471,22 @@ class Polygon2d(object):
         middle = indices[start_loc+1:end_loc]
         after = indices[end_loc:]
         return before + middle[::-1] + after
+
+
+    @staticmethod
+    def _segments_intersect(seg1, seg2):
+        if seg1[0] in seg2:
+            return seg1
+        if seg1[1] in seg2:
+            return seg2
+
+        line1 = (seg1[0], seg1[1] - seg1[0])
+        line2 = (seg2[0], seg2[1] - seg2[0])
+        a, b = Geom2.lines_intersect(line1, line2)
+        if 0 < a and a < 1 and 0 < b and b < 1:
+            return line1[0] + (a * line[1])
+        else:
+            return None
 
 
 
@@ -625,7 +640,7 @@ class Mesh2d(Polygon2d):
             cur_ind = indices[cur_pos]
             next_ind = indices[next_pos]
             nnext_ind = indices[nnext_pos]
-            if Vector2.double_signed_area(vrt[cur_ind], vrt[next_ind], vrt[nnext_ind]) < 0:
+            if Geom2.signed_area(vrt[cur_ind], vrt[next_ind], vrt[nnext_ind]) < 0:
                 is_convex = False
                 break
 
@@ -688,32 +703,29 @@ class Mesh2d(Polygon2d):
         portals = []
 
         for spike in spikes:
+            (prev_i, spike_i, next_i) = spike
 
-            prev_i = spike[0]
-            spike_i = spike[1]
-            next_i = spike[2]
-
-            sectorvec1, sectorvec2 = self.get_sector(prev_i, spike_i, next_i, threshold)
+            right_dir, left_dir = self.get_sector(prev_i, spike_i, next_i, threshold)
             tip = self.vertices[spike_i]
-            left = tip + sectorvec2
-            right = tip + sectorvec1
 
             # find closest edge
             closest_seg, closest_seg_point, closest_seg_dst = \
-                self.find_closest_edge(left, tip, right)
+                self.find_closest_edge_inside_sector((right_dir, tip, left_dir), spike_i)
 
             # find closest vertex
-            closest_vert_i, closest_vert_dst = self.find_closest_vert(left, tip, right)
+            closest_vert_i, closest_vert_dst = \
+                self.find_closest_vert_inside_sector((right_dir, tip, left_dir), spike_i)
 
             # find closest portal
             closest_portal, closest_portal_point, closest_portal_dst = \
-                self.find_closest_portal(left, tip, right, portals)
+                self.find_closest_portal_inside_sector((right_dir, tip, left_dir), spike_i, portals)
 
-            # remove tiny difference between points
-            if closest_portal is not None:
-                if closest_portal_dst < tolerance:
-                    closest_portal_point.snap_to(tip)
-                    closest_portal_dst = 0.0
+
+            # # remove tiny difference between points
+            # if closest_portal is not None:
+            #     if closest_portal_dst < tolerance:
+            #         closest_portal_point.snap_to(tip)
+            #         closest_portal_dst = 0.0
 
 
 
@@ -779,15 +791,19 @@ class Mesh2d(Polygon2d):
                 # we still create the portal(s) to one or two endpoints.
                 
                 else:
+                    def pt_inside_sector(sector, pt):
+                        dir1, tip, dir2 = sector
+                        rel_pt = pt - tip
+                        return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
 
                     portal_endpoints = (
                         (portal_start_i, portal_start_p),
                         (portal_end_i, portal_end_p)
                     )
 
-                    endpt_dists = tuple((idx, pos, Vector2.distance(pos, tip)) \
-                        for (idx, pos) in portal_endpoints \
-                        if self._inside_sector(pos, left, tip, right))
+                    endpt_dists = tuple((idx, point, (point - tip).normSq()) \
+                        for (idx, point) in portal_endpoints \
+                        if pt_inside_sector((left, tip, right), point))
 
                     # if 1 or 2 points are inside sector, pick the closest one
                     if len(endpt_dists) > 0:
@@ -824,35 +840,32 @@ class Mesh2d(Polygon2d):
 
 
 
-    def find_closest_vert(self, left, tip, right):
-        vrt = self.vertices
+    def find_closest_vert_inside_sector(self, sector, tip_idx):
+        borders = chain([self.outline], self.holes)
+        closest_idx, closest_distSq = None, None
 
-        borders = [self.outline] + self.holes
+        right_dir, tip, left_dir = sector
 
-        closest_ind = None
-        closest_dst = None
+        for idx in chain(*borders):
+            if tip_idx == idx: continue
 
-        for cur_i in chain(*borders):
-            cur_v = vrt[cur_i]
+            relative_pt = self.vertices[idx] - tip
+            # check if current point is inside sector
+            if vec.cross2(right_dir, relative_pt) > 0 and vec.cross2(left_dir, relative_pt) < 0:
+                distSq = relative_pt.normSq()
+                if closest_distSq is None or distSq < closest_distSq:
+                    closest_distSq = distSq
+                    closest_idx = idx
 
-            if cur_v == tip: continue
-
-            if self._inside_sector_inclusive(vrt[cur_i], left, tip, right):
-                dst = Vector2.distance(vrt[cur_i], tip)
-                if closest_dst is None or dst < closest_dst:
-                    closest_dst = dst
-                    closest_ind = cur_i
-
-        return closest_ind, closest_dst
+        return closest_idx, closest_distSq
 
 
 
-    def find_closest_edge_inside_sector(self, tip_idx, opening_cosine):
+
+    def find_closest_edge_inside_sector(self, sector, tip_idx):
         segments = Polygon2d.get_segments(chain([self.outline], self.holes))
 
-        closest_pt = None
-        closest_dist = None
-        closest_edge = None
+        closest_pt, closest_distSq, closest_edge = None, None, None
 
         for (seg_i1, seg_i2) in segments:
 
@@ -860,63 +873,36 @@ class Mesh2d(Polygon2d):
             if tip_idx in (seg_i1, seg_i2):
                 continue
 
-            candid_pt, candid_dist = self.segment_closest_point_inside_sector(seg1, seg2, left, tip, right)
-            if candid_pt is None: continue
+            segment = (self.vertices[seg_i1], self.vertices[seg_i2])
+            pt, distSq = self._segment_closest_point_inside_sector(segment, sector)
+            if pt is None: raise RuntimeError("Could not find a single edge inside sector")
 
-            if closest_dist is None or candid_dist < closest_dist:
-                closest_dist = candid_dist
-                closest_pt = candid_pt
+            if closest_distSq is None or distSq < closest_distSq:
+                closest_distSq = distSq
+                closest_pt = pt
                 closest_edge = (seg_i1, seg_i2)
 
-        return closest_edge, closest_pt, closest_dist
+        return closest_edge, closest_pt, closest_distSq
 
 
 
-    def find_closest_portal(self, left, tip, right, portals):
-
-        closest_portal = None
-        closest_dist = None
-        closest_pt = None
+    def find_closest_portal_inside_sector(self, sector, tip_idx, portals):
+        closest_portal, closest_distSq, closest_pt = None, None, None
 
         for portal in portals:
+            if tip_idx == portal.start_index: continue
 
-            port1 = self.vertices[portal.start_index]
-            port2 = portal.end_point
-
-            candid_pt, candid_dist = self.segment_closest_point_inside_sector(port1, port2, left, tip, right)
-            if candid_pt is None: continue
+            portal_seg = (self.vertices[portal.start_index], portal.end_point)
+            pt, distSq = self._segment_closest_point_inside_sector(portal_seg, sector)
+            if pt is None: continue
 
             # update closest portal
-            if closest_dist is None or candid_dist < closest_dist:
-                closest_dist = candid_dist
-                closest_pt = candid_pt
+            if closest_distSq is None or distSq < closest_distSq:
+                closest_distSq = distSq
+                closest_pt = pt
                 closest_portal = portal
 
-        return closest_portal, closest_pt, closest_dist
-
-
-
-    def _inside_sector(self, vert, left_v, tip_v, right_v):
-        '''
-        Check if vert is inside sector defined by left_v, tip_v, right_v.
-        Exclusive.
-        If vert is on the border of the sector, method returns False.
-        If vert == the sector tip, method returns False
-        '''
-        right_area = Vector2.double_signed_area(tip_v, right_v, vert)
-        left_area = Vector2.double_signed_area(tip_v, left_v, vert)
-        if right_area == 0 or left_area == 0: return False
-        return right_area > 0 and left_area < 0
-
-
-
-    def _inside_sector_inclusive(self, vert, left_v, tip_v, right_v):
-        right_area = Vector2.double_signed_area(tip_v, right_v, vert)
-        left_area = Vector2.double_signed_area(tip_v, left_v, vert)
-
-        if left_area == 0 and right_area >= 0: return True
-        if right_area == 0 and left_area <= 0: return True
-        return right_area > 0 and left_area < 0
+        return closest_portal, closest_pt, closest_distSq
 
 
 
@@ -933,8 +919,11 @@ class Mesh2d(Polygon2d):
         vec1 = (spike_v - prev_v).normalized()
         vec2 = (spike_v - next_v).normalized()
 
-        sector_angle = math.acos(vec1.dot_product(vec2))
-        
+        cosine = Geom2.cos_angle(vec1, vec2)
+        sine = Geom2.sin_angle(vec1, vec2)
+
+        sector_angle = 2 * math.pi - math.acos(cosine) if sine < 0 else math.acos(cosine)
+
         # degrees to radian
         clearance = math.pi * threshold / 180.0
         sector_angle_plus = sector_angle + clearance
@@ -947,51 +936,55 @@ class Mesh2d(Polygon2d):
 
         cosine = math.cos(clearance)
         sine = math.sin(clearance)
+
+        # rotate sector vectors to increase angle for clearance
         return (
-            vec1 = Geom2.mul_mtx((cosine, sine, -sine, cosine), vec1),
-            vec2 = Geom2.mul_mtx((cosine, -sine, sine, cosine), vec2)
+            Geom2.mul_mtx_2x2((cosine, sine, -sine, cosine), vec1),
+            Geom2.mul_mtx_2x2((cosine, -sine, sine, cosine), vec2)
         )
 
 
 
-    def trace_ray(self, ray1, ray2):
-        vrt = self.vertices
-        borders = [self.outline] + self.holes
-        segments = Polygon2d.get_segments(borders)
+    # def trace_ray(self, ray1, ray2):
+    #     vrt = self.vertices
+    #     borders = [self.outline] + self.holes
+    #     segments = Polygon2d.get_segments(borders)
 
-        intersections = []
-        for seg in segments:
-            seg_i1 = seg[0]
-            seg_i2 = seg[1]
+    #     intersections = []
+    #     for seg in segments:
+    #         seg_i1 = seg[0]
+    #         seg_i2 = seg[1]
 
-            seg1 = vrt[seg_i1]
-            seg2 = vrt[seg_i2]
-            # ignore edges that are adjacent to the ray's starting point
-            if seg1 == ray1 or seg2 == ray1:
-                continue
+    #         seg1 = vrt[seg_i1]
+    #         seg2 = vrt[seg_i2]
+    #         # ignore edges that are adjacent to the ray's starting point
+    #         if seg1 == ray1 or seg2 == ray1:
+    #             continue
 
-            inter_pt = Vector2.where_segment_crosses_ray(seg1, seg2, ray1, ray2)
-            if inter_pt is not None:
-                # append a tuple of a vertex and an edge
-                intersections.append((inter_pt, (seg_i1, seg_i2)))
+    #         ray_para, seg_para = Geom2.lines_intersect((ray1, ray))
+    #         inter_pt = Vector2.where_segment_crosses_ray(seg1, seg2, ray1, ray2)
+    #         if inter_pt is not None:
+    #             # append a tuple of a vertex and an edge
+    #             intersections.append((inter_pt, (seg_i1, seg_i2)))
 
 
-        if len(intersections) == 0:
-            return None
+    #     if len(intersections) == 0:
+    #         return None
 
-        # find closest intersection:
-        inter_dist = ((inter, Vector2.distance(ray1, inter[0])) for inter in intersections)
-        res = min(inter_dist, key=itemgetter(1))[0]
-        return res
+    #     # find closest intersection:
+    #     inter_dist = ((inter, (ray1 - inter[0]).normSq()) for inter in intersections)
+    #     res = min(inter_dist, key=itemgetter(1))[0]
+    #     return res
 
 
 
     @staticmethod
-    def segment_closest_point_inside_sector(sector, segment):
-        tip, dir1, dir2 = sector
+    def _segment_closest_point_inside_sector(segment, sector):
+        dir1, tip, dir2 = sector
 
         def pt_inside(pt):
-            return vec.cross2(dir1, pt) > 0 and vec.cross2(dir2, pt) < 0
+            rel_pt = pt - tip
+            return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
 
         # make ray-like line
         line = (segment[0], segment[1] - segment[0])
@@ -1031,6 +1024,7 @@ class Mesh2d(Polygon2d):
             else:
                 return None, None
 
+        # find point on line closest to tip
         projpara = Geom2.project_to_line(tip, line)
 
         if candid_params[0] < projpara and projpara < candid_params[1]:
@@ -1044,56 +1038,7 @@ class Mesh2d(Polygon2d):
             else:
                 return line[0] + (para * line[1])
 
-        candid_pts = (para_to_pt(p) for p in candid_params)
+        candid_pts = (para_to_pt(para) for para in candid_params)
         distances = ((tip - pt).normSq() for pt in candid_pts)
 
-        (closest_pt, distSq) = min(izip(candid_pts, distances), key = itemgetter(1))
-        return (closest_pt, math.sqrt(distSq))
-
-
-
-    # def segment_closest_point_inside_sector(self, seg1, seg2, left, tip, right):
-    #     '''
-    #     Find point on the segment that lies inside the sector that is closest to the sector tip.
-    #     Returns (Vector2, distance).
-    #     If the segment is entirely outside the sector, returns (None, None)
-    #     '''
-
-    #     '''
-    #     Need to find closest point that is both inside sector and inside segment
-    #     Points of interest:
-    #     - proj point (check if inside sector AND inside segment)
-    #     - endpoint1 (check if inside sector)
-    #     - endpoint2 (check if inside sector)
-    #     - intersect1 (check if not None)
-    #     - intersect2 (check if not None)
-    #     '''
-    #     pts_of_interest = []
-    #     proj_pt = Vector2.project_to_line(tip, seg1, seg2)
-
-    #     if Vector2.point_between(proj_pt, seg1, seg2) and \
-    #         self._inside_sector(proj_pt, left, tip, right):
-    #         pts_of_interest.append(proj_pt)
-
-    #     if self._inside_sector(seg1, left, tip, right):
-    #         pts_of_interest.append(seg1)
-    #     if self._inside_sector(seg2, left, tip, right):
-    #         pts_of_interest.append(seg2)
-
-    #     inters_left = Vector2.where_segment_crosses_ray(seg1, seg2, tip, left)
-    #     inters_right = Vector2.where_segment_crosses_ray(seg1, seg2, tip, right)
-
-    #     if inters_left is not None:
-    #         pts_of_interest.append(inters_left)
-    #     if inters_right is not None:
-    #         pts_of_interest.append(inters_right)
-
-    #     if len(pts_of_interest) == 0: return None, None
-
-    #     pts_of_interest = list((poi, Vector2.distance(poi, tip)) for poi in pts_of_interest)
-
-    #     # if all dists are 0, the segment is outside but touches the tip of the sector
-    #     if sum((dist for (poi, dist) in pts_of_interest)) == 0: return None, None
-
-    #     (closest_pt, dist) = min(pts_of_interest, key=itemgetter(1))
-    #     return closest_pt, dist
+        return min(izip(candid_pts, distances), key = itemgetter(1))

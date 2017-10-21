@@ -167,33 +167,29 @@ class Geom2:
         return math.sqrt(Geom2.point_to_line_distSq(point, line))
 
 
-    # segment must be a Ray-like object
-    @staticmethod
-    def point_to_segment_dist(point, segment):
-        proj_coef = Geom2.project_to_line(point, segment)
-        if proj_coef <= 0:
-            return (segment[0] - point).norm(), 0
+    # # segment must be a Ray-like object
+    # @staticmethod
+    # def point_to_segment_dist(point, segment):
+    #     proj_coef = Geom2.project_to_line(point, segment)
+    #     if proj_coef <= 0:
+    #         return (segment[0] - point).norm(), 0
 
-        else if proj_coef >= 1:
-            return (segment[0] + segment[1] - point).norm(), 1
+    #     else if proj_coef >= 1:
+    #         return (segment[0] + segment[1] - point).norm(), 1
 
-        else:
-            return (segment[0] + (proj_coef * segment[1]) - point).norm(), proj_coef
+    #     else:
+    #         return (segment[0] + (proj_coef * segment[1]) - point).norm(), proj_coef
 
 
     @staticmethod
     def cos_angle(vect1, vect2):
-        cosine = vect1.dot(vect2) / (vect1.norm() * vect2.norm())
-        cosine = min(cosine, 1.0)
-        cosine = max(cosine, -1.0)
-        return cosine
+        cosine = vect1.normalized().dot(vect2.normalized())
+        return min(max(cosine, -1.), 1.)
 
 
-    @staticmethod
-    def signed_angle(vect1, vect2):
-        sine = vec.cross2(v1.normalized(), v2.normalized())
-        sine = min(max(sine, -1.), 1.)
-        return math.asin(sine)
+    def sin_angle(vect1, vect2):
+        sine = vec.cross2(vect1.normalized(), vect2.normalized())
+        return min(max(sine, -1.), 1.)
 
 
     @staticmethod
@@ -204,84 +200,13 @@ class Geom2:
 
 
 
-    @staticmethod
-    def get_polar_angle(point):
-        norm = point.norm()
-        cosine = min(max(point[0] / norm, -1.), 1.)
-        sine   = min(max(point[1] / norm, -1.), 1.)
-        angle = math.acos(cosine)
-        return 2 * math.pi - angle if sine < 0 else angle
-
-
-    
-
-
-
-
-        def seg_x_ray(lpara, rpara):
-            return 0 < lpara and lpara < 1 and 0 < rpara
-
-        x1 = seg_x_ray(inter1[0], inter1[1])
-        x2 = seg_x_ray(inter2[0], inter2[1])
-
-        candidates = []
-
-        if x1:
-            candidates.append(tip + (inter1[1] * dir1))
-        if x2:
-            candidates.append(tip + (inter2[1] * dir2))
-
-        # find param bounds of segment part inside sector
-        bounds = sorted((inter1[0], inter2[0]))
-
-
-        # project tip to line
-        projpara = Geom2.project_to_line(tip, line)
-
-        if bounds[0] < projpara and projpara < bounds[1] and 0 < projpara and projpara < 1:
-            candidates.append(line[0] + (projpara * line[1]))
-
-
-        
-
-
-
-    # tip is the tip of the sector
-    # polar_start is the polar angle in radians of the sector start
-    # polar_size is the angular size in radians of the sector
-    # segment is a pair of points
-    # returns closest point of the segment and the distance to it
-    # if segment is entirely outside sector, returns (None, None)
-    @staticmethod
-    def segment_closest_point_inside_sector(tip, polar_start, polar_size, segment):
-        if tip in segment:
-            return tip, 0
-
-        s_angle = Geom2.signed_angle(segment[0] - tip, segment[1] - tip)
-        if s_angle == 0:
-            return tip, 0
-        else if s_angle < 0:
-            return None, None
-
-
-
-        polar_end = polar_start + polar_size
-        if polar_end >= 2 * math.pi: polar_end -= 2 * math.pi
-
-
-        def in_sector(start, size, a):
-            if a > start:
-                return a - start < size
-            else if a < start:
-                return a < polar_end
-            else:
-                return False
-
-        a0 = Geom2.get_polar_angle(segment[0] - tip)
-        a1 = Geom2.get_polar_angle(segment[1] - tip)
-
-
-        angles = [Geom2.get_polar_angle(segment[0] - tip), Geom2.get_polar_angle(segment[1] - tip)]
+    # @staticmethod
+    # def get_polar_angle(point):
+    #     norm = point.norm()
+    #     cosine = min(max(point[0] / norm, -1.), 1.)
+    #     sine   = min(max(point[1] / norm, -1.), 1.)
+    #     angle = math.acos(cosine)
+    #     return 2 * math.pi - angle if sine < 0 else angle
 
 
 
