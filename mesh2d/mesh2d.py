@@ -165,8 +165,11 @@ class Polygon2d(object):
             nv2 = seg_x - pull_dir * .5
 
             # insert 2 new vertices at the intersection
-            new_idx1 = self.add_vertex_to_outline(nv1, seg1)
-            new_idx2 = self.add_vertex_to_outline(nv2, seg2)
+            new_idx1 = self.add_vertex_to_outline(.5, seg1)
+            new_idx2 = self.add_vertex_to_outline(.5, seg2)
+
+            self.vertices[new_idx1] = nv1
+            self.vertices[new_idx2] = nv2
 
             # reverse indices:
             self.outline = self._mirror_indices(self.outline, new_idx1, new_idx2)
@@ -221,7 +224,7 @@ class Polygon2d(object):
             # sort vertices by distance from smaller-index end of edge
             sorted_pos_params = sorted(enumerate(locations), key = itemgetter(1))
 
-            new_ids = [0]*len(vertices)
+            new_ids = [0]*len(locations)
 
             last_added_idx = edge[0]
             for (pos, param) in sorted_pos_params:
@@ -736,6 +739,9 @@ class Mesh2d(Polygon2d):
             closest_seg, closest_seg_para, closest_seg_dst = \
                 self.find_closest_edge_inside_sector(sector, spike_i)
 
+            if closest_seg is None:
+                raise RuntimeError("Could not find a single edge inside sector")
+
             # find closest vertex
             closest_vert_i, closest_vert_dst = \
                 self.find_closest_vert_inside_sector(sector, spike_i)
@@ -875,7 +881,7 @@ class Mesh2d(Polygon2d):
 
             segment = (self.vertices[seg_i1], self.vertices[seg_i2])
             para, distSq = self._segment_closest_point_inside_sector(segment, sector)
-            if para is None: raise RuntimeError("Could not find a single edge inside sector")
+            if para is None: continue
 
             if closest_distSq is None or distSq < closest_distSq:
                 closest_distSq = distSq
@@ -956,10 +962,6 @@ class Mesh2d(Polygon2d):
         line = (segment[0], segment[1] - segment[0])
         (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
         (linepara2, raypara2, _)= Geom2.lines_intersect(line, (tip, dir2))
-
-        print(line)
-        print(linepara1, raypara1)
-        print(linepara2, raypara2)
         
         # check whether line containing segment passes through sector:
         line_through_sector = raypara1 > 0 or raypara2 > 0
@@ -1013,5 +1015,4 @@ class Mesh2d(Polygon2d):
                 return line[0] + (para * line[1])
 
         distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
-
         return min(izip(candid_params, distances), key = itemgetter(1))
