@@ -2,7 +2,7 @@ from itertools import izip, chain
 from collections import deque
 
 from .mesh2d import Polygon2d
-from .vector2 import Vector2
+from .vector2 import vec
 from .utils import debug_draw_bool
 
 class Union       : pass
@@ -82,7 +82,7 @@ def _add_intersections_to_polys(A, B):
     # Find all intersections of A and B borders.
     for A_edge in A_edges:
         for B_edge in B_edges:
-            seg_x = Vector2.where_segments_cross_inclusive(
+            seg_x = vec.where_segments_cross_inclusive(
                 A.vertices[A_edge[0]],
                 A.vertices[A_edge[1]],
                 B.vertices[B_edge[0]],
@@ -265,7 +265,7 @@ def _bool_do(A, B, op, canvas=None):
     for loop in A_closed:
         verts = list(A.vertices[idx] for idx in loop[:-1])
         # if CCW
-        if Vector2.poly_signed_area(verts) > 0:
+        if vec.poly_signed_area(verts) > 0:
             new_polys.append(Polygon2d(verts, range(len(verts))))
         else:
             new_holes.append(verts)
@@ -277,7 +277,7 @@ def _bool_do(A, B, op, canvas=None):
     for loop in B_closed:
         verts = list(B.vertices[idx] for idx in loop[:-1])
         # if CW
-        if flip * Vector2.poly_signed_area(verts) > 0:
+        if flip * vec.poly_signed_area(verts) > 0:
             new_polys.append(Polygon2d(verts, range(len(verts))))
         else:
             new_holes.append(verts)

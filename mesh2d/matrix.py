@@ -116,6 +116,17 @@ class Matrix(object):
 
 
 
+    @staticmethod
+    def column_vec(vector):
+        size = len(vector)
+        return Matrix((size, 1), (vector[i] for i in range(size)))
+
+
+    @staticmethod
+    def row_vec(vector):
+        size = len(vector)
+        return Matrix((1, size), (vector[i] for i in range(size)))
+
 
     @staticmethod
     def identity(size):

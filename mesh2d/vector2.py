@@ -42,12 +42,12 @@ class vec(object):
         return vec(*(c0 + c1 for (c0, c1) in izip(self.comps, right.comps)))
 
     # subtract vector
-    def __sub__(self, right)
+    def __sub__(self, right):
         return self + (-right)
 
     # scalar division
     def __div__(self, right_scalar):
-        return (1. / right_operator) * self
+        return (1. / right_scalar) * self
 
     # [] getter
     def __getitem__(self, key):
@@ -65,6 +65,12 @@ class vec(object):
     def __hash__(self):
         return hash(self.comps)
 
+    def __len__(self):
+        return len(self.comps)
+
+    def __repr__(self):
+        return self.comps.__repr__()
+
     def normalized(self):
         return self / self.norm()
 
@@ -74,7 +80,7 @@ class vec(object):
     def prepend(self, *head):
         return vec(*chain(head, self.comps))
 
-    def is_closer(self, other, dist = vec.tolerance):
+    def is_closer(self, other, dist = tolerance):
         return (self - other).norm() < dist
 
 
@@ -174,7 +180,7 @@ class Geom2:
     #     if proj_coef <= 0:
     #         return (segment[0] - point).norm(), 0
 
-    #     else if proj_coef >= 1:
+    #     elif proj_coef >= 1:
     #         return (segment[0] + segment[1] - point).norm(), 1
 
     #     else:
@@ -186,7 +192,7 @@ class Geom2:
         cosine = vect1.normalized().dot(vect2.normalized())
         return min(max(cosine, -1.), 1.)
 
-
+    @staticmethod
     def sin_angle(vect1, vect2):
         sine = vec.cross2(vect1.normalized(), vect2.normalized())
         return min(max(sine, -1.), 1.)
@@ -316,9 +322,9 @@ class Geom2:
         if c1 == c1: # c1 not NaN
             if seg1[0] == seg2[0] or seg1[0] == seg2_end:
                 return seg1[0] if is_inclusive else None
-            else if seg1_end == seg2[0] or seg1_end == seg2_end:
+            elif seg1_end == seg2[0] or seg1_end == seg2_end:
                 return seg1_end if is_inclusive else None
-            else if \
+            elif \
             vec.tolerance <= c1 and c1 <= 1. - vec.tolerance and \
             vec.tolerance <= c2 and c2 <= 1. - vec.tolerance:
                 return seg1[0] + (c1 * seg1[1])
@@ -326,7 +332,7 @@ class Geom2:
                 return None
 
         # if segments are on same line
-        else if distSq < vec.tolerance:
+        elif distSq < vec.tolerance:
             main_dir = seg1[1].normalized()
             pts = (seg1, seg1_end, seg2, seg2_end)
             crds_along = list((i, pt.dot(main_dir)) for (i, pt) in enumerate(pts))

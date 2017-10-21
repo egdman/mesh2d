@@ -1,4 +1,4 @@
-from mesh2d import Vector2, Matrix
+from mesh2d import vec, Matrix
 import random
 import numpy as np
 import uuid
@@ -46,7 +46,7 @@ class ObjectView(object):
                 self.coord_fences.append(len(crd_buf) + len(curr_obj_crds))
                 crd_buf.extend(curr_obj_crds)
 
-            # convert crd_buf to list of Vector2's
+            # convert crd_buf to list of vec's
             for loc in range(len(crd_buf) / 2):
                 # store coords as flat array including the 3rd coord which is 1.0
                 self.world_vertices.extend([
@@ -76,7 +76,7 @@ class ObjectView(object):
         '''
         for vnum in range(len(self.world_vertices) / 3):
             vhead = vnum*3
-            old_vec = Vector2(self.world_vertices[vhead], self.world_vertices[vhead+1])
+            old_vec = vec(self.world_vertices[vhead], self.world_vertices[vhead+1])
             self.set_vector(vnum, old_vec + vec)
 
 
@@ -134,7 +134,7 @@ class ObjectView(object):
 
     @staticmethod
     def apply_transform(transform, vertices):
-        return list(transform.multiply(Vector2(vert[0], vert[1])).values[:-1] \
+        return list(transform.multiply(Matrix.column_vec((vert[0], vert[1]))).values[:-1] \
             for vert in vertices)
 
 
@@ -168,7 +168,7 @@ class WallHelperView(ObjectView):
     def find_corners(self):
         wd = self.width
         axis = self.v2 - self.v1
-        perp = Vector2(axis.y, -axis.x)
+        perp = vec(axis[1], -axis[0])
         perp /= perp.length()
         c1 = self.v1 + wd*perp
         c2 = self.v1 - wd*perp
@@ -182,16 +182,16 @@ class WallHelperView(ObjectView):
     def first_time_draw(self, canvas):
         (c1, c2, c3, c4) = self.find_corners()
 
-        id1 = canvas.create_line((c1.x, c1.y, c2.x, c2.y),
+        id1 = canvas.create_line((c1[0], c1[1], c2[0], c2[1]),
             fill = self.color, width=1)
 
-        id2 = canvas.create_line((c2.x, c2.y, c3.x, c3.y),
+        id2 = canvas.create_line((c2[0], c2[1], c3[0], c3[1]),
             fill = self.color, width=1)
 
-        id3 = canvas.create_line((c3.x, c3.y, c4.x, c4.y),
+        id3 = canvas.create_line((c3[0], c3[1], c4[0], c4[1]),
             fill = self.color, width=1)
 
-        id4 = canvas.create_line((c4.x, c4.y, c1.x, c1.y),
+        id4 = canvas.create_line((c4[0], c4[1], c1[0], c1[1]),
             fill = self.color, width=1)
 
         self.element_ids.append(id1)
@@ -298,10 +298,10 @@ class PlusView(ObjectView):
     def __init__(self, size, loc=None, color='#2f2f2f'):
         self.size = size
         self.color = color
-        self.loc = loc if loc is not None else Vector2(0, 0)
+        self.loc = loc if loc is not None else vec(0, 0)
 
-        self.down = Vector2(0, self.size)
-        self.right = Vector2(self.size, 0)
+        self.down = vec(0, self.size)
+        self.right = vec(self.size, 0)
 
         super(PlusView, self).__init__()
 
@@ -318,7 +318,7 @@ class PlusView(ObjectView):
         sz = self.size
 
         vrt = [self.loc - self.down, self.loc + self.down, self.loc - self.right, self.loc + self.right]
-        # vrt = [Vector2(0, -sz),Vector2(0, sz),Vector2(-sz, 0),Vector2(sz, 0),]
+        # vrt = [vec(0, -sz),vec(0, sz),vec(-sz, 0),vec(sz, 0),]
         # trans_vrt = list(self.apply_transform(camera_transform, vrt))
         crds = self.get_open_crds(vrt, (0, 1))
         id1 = canvas.create_line(crds, fill=self.color, width=1)

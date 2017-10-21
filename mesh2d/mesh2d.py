@@ -3,7 +3,7 @@ import random
 
 from collections import deque
 from operator import itemgetter
-from itertools import chain
+from itertools import chain, izip
 from copy import deepcopy
 from rtree import index
 
@@ -35,7 +35,7 @@ class Polygon2d(object):
         # insert vertices into spatial index
         for vid in self.outline:
             vert = self.vertices[vid]
-            self.rti.insert(vid, (vert.x, vert.y, vert.x, vert.y))
+            self.rti.insert(vid, (vert[0], vert[1], vert[0], vert[1]))
 
         # resolve self-intersections (sinters)
         self._resolve_sinters()
@@ -57,10 +57,9 @@ class Polygon2d(object):
         crds = []
 
         for ind in indices:
-            crds.append(self.vertices[ind].x)
-            crds.append(self.vertices[ind].y)
-        crds.append(self.vertices[indices[0]].x)
-        crds.append(self.vertices[indices[0]].y)
+            crds.extend(self.vertices[ind].comps)
+
+        crds.extend(self.vertices[indices[0]].comps)
         return crds
 
 
@@ -74,7 +73,7 @@ class Polygon2d(object):
 
 
     def find_verts_in_bbox(self, vect_min, vect_max):
-        return self.rti.intersection((vect_min.x, vect_min.y, vect_max.x, vect_max.y))
+        return self.rti.intersection((vect_min[0], vect_min[1], vect_max[0], vect_max[1]))
 
 
 
@@ -86,7 +85,7 @@ class Polygon2d(object):
             hole.append(new_idx)
 
             # add vertex to spatial index:
-            self.rti.insert(new_idx, (vert.x, vert.y, vert.x, vert.y))
+            self.rti.insert(new_idx, (vert[0], vert[1], vert[0], vert[1]))
 
         # Holes must be CW
         if Polygon2d.check_ccw(self.vertices, hole):
@@ -135,17 +134,14 @@ class Polygon2d(object):
         e11 = self.vertices[edge1[0]]
         e21 = self.vertices[edge2[0]]
 
-        vec1 = e11 - intersect_vector
-        vec2 = e21 - intersect_vector
-
-        vec1 /= vec1.length()
-        vec2 /= vec2.length()
+        vec1 = (e11 - intersect_vector).normalized()
+        vec2 = (e21 - intersect_vector).normalized()
 
         dir1 = vec1 + vec2
         dir2 = vec1 - vec2
 
-        ldir1 = dir1.length()
-        ldir2 = dir2.length()
+        ldir1 = dir1.norm()
+        ldir2 = dir2.norm()
 
         if ldir1 > ldir2:
             return dir1 / ldir1
@@ -189,28 +185,29 @@ class Polygon2d(object):
 
 
 
-    def add_vertex_to_outline(self, vertex, edge):
-        return self.add_vertex_to_loop(vertex, edge, self.outline)
+    def add_vertex_to_outline(self, location, edge):
+        return self.add_vertex_to_loop(location, edge, self.outline)
 
 
 
-    def add_vertex_to_border(self, vertex, edge):
+    def add_vertex_to_border(self, edge, location):
         '''
-        Add the given vertex to the given edge of the polygon border.
+        Add a new vertex to the given edge of the polygon border.
+        'location' is the interpolation parameter between edge vertices.
         The exact loop that contains the edge is determined automatically.
         '''
         wanted_loop = next((loop for loop in chain([self.outline], self.holes) \
                 if edge[0] in loop and edge[1] in loop), None)
 
         if wanted_loop is not None:
-            return self.add_vertex_to_loop(vertex, edge, wanted_loop)
+            return self.add_vertex_to_loop(location, edge, wanted_loop)
 
         raise ValueError("Adding vertex to borders: invalid edge")
 
 
 
 
-    def add_vertices_to_border(self, vertices, edge):
+    def add_vertices_to_border(self, locations, edge):
         '''
         Add given list of vertices to the given edge of the polygon border.
         The exact loop that contains the edge is determined automatically.
@@ -222,14 +219,13 @@ class Polygon2d(object):
         if wanted_loop is not None:
 
             # sort vertices by distance from smaller-index end of edge
-            sorted_pos_verts = sorted(enumerate(vertices),
-                key = lambda elem: (elem[1] - self.vertices[edge[0]]).norm())
+            sorted_pos_params = sorted(enumerate(locations), key = itemgetter(1))
 
             new_ids = [0]*len(vertices)
 
             last_added_idx = edge[0]
-            for (pos, vert) in sorted_pos_verts:
-                last_added_idx = self.add_vertex_to_loop(vert, (last_added_idx, edge[1]), wanted_loop)
+            for (pos, param) in sorted_pos_params:
+                last_added_idx = self.add_vertex_to_loop(param, (last_added_idx, edge[1]), wanted_loop)
                 new_ids[pos] = last_added_idx
 
             return new_ids 
@@ -239,13 +235,11 @@ class Polygon2d(object):
 
 
 
-    def add_vertex_to_loop(self, vertex, edge, loop):
+    def add_vertex_to_loop(self, location, edge, loop):
         '''
         Add vertex to the index buffer passed as 'loop' argument.
         '''
-        e1_idx = edge[0]
-        e2_idx = edge[1]
-
+        e1_idx, e2_idx = edge
         e1_pos = loop.index(e1_idx)
         e2_pos = loop.index(e2_idx)
 
@@ -263,16 +257,17 @@ class Polygon2d(object):
             insert_at = e2_pos
 
         # check if this vertex is too close to a segment endpoint
-        if vertex == self.vertices[e1_idx]: return e1_idx
-        if vertex == self.vertices[e2_idx]: return e2_idx
+        if location == 0: return e1_idx
+        if location == 1: return e2_idx
 
         new_vert_index = len(self.vertices)
-        self.vertices.append(vertex)
+        new_vertex = self.vertices[e1_pos] + location * (self.vertices[e2_pos] - self.vertices[e1_pos])
+        self.vertices.append(new_vertex)
         loop.insert(insert_at, new_vert_index)
 
         # add new vertex to spatial index:
         self.rti.insert(new_vert_index,
-            (vertex.x, vertex.y, vertex.x, vertex.y))
+            (new_vertex[0], new_vertex[1], new_vertex[0], new_vertex[1]))
 
         return new_vert_index
 
@@ -368,13 +363,13 @@ class Polygon2d(object):
             cur_v = verts[loc]
             next_v = verts[(loc+1) % nverts]
 
-            if cur_v.y == 0: cur_v.y += 0.01
+            if cur_v[1] == 0: cur_v += vec(0, 0.01)
 
-            if next_v.y == 0: next_v.y += 0.01
+            if next_v[1] == 0: next_v += vec(0, 0.01)
 
-            if cur_v.y * next_v.y < 0:
+            if cur_v[1] * next_v[1] < 0:
 
-                _, b = Geom2.lines_intersect((cur_v, next_v - cur_v), (vec(0, 0), vec(1, 0)))
+                _, b, _ = Geom2.lines_intersect((cur_v, next_v - cur_v), (vec(0, 0), vec(1, 0)))
                 if b > 0: num_inters += 1
 
         return num_inters % 2 > 0
@@ -482,9 +477,9 @@ class Polygon2d(object):
 
         line1 = (seg1[0], seg1[1] - seg1[0])
         line2 = (seg2[0], seg2[1] - seg2[0])
-        a, b = Geom2.lines_intersect(line1, line2)
+        a, b, _ = Geom2.lines_intersect(line1, line2)
         if 0 < a and a < 1 and 0 < b and b < 1:
-            return line1[0] + (a * line[1])
+            return line1[0] + (a * line1[1])
         else:
             return None
 
@@ -506,16 +501,16 @@ class Portal(object):
         if self.kind == Portal.ToVertex:
             return vertices[self.end_info[0]]
 
-        else if self.kind == Portal.ToSegment:
+        elif self.kind == Portal.ToSegment:
             idx1, idx2 = self.end_info[0]
             para = self.end_info[1]
             return vertices[idx1] + (para * (vertices[idx2] - vertices[idx1]))
 
-        else if self.kind == Portal.ToPortal:
+        elif self.kind == Portal.ToPortal:
             other_portal, para = self.end_info
             if para == 0:
                 return vertices[other_portal.start_index]
-            else if para == 1:
+            elif para == 1:
                 return other_portal.calc_endpoint(vertices)
             else:
                 raise RuntimeError("{} - what is this parameter value? It should be either 0 or 1".format(para))
@@ -567,7 +562,7 @@ class Mesh2d(Polygon2d):
                     vrt = self.vertices[end_idx]
                     cv.create_oval(vrt[0] - 3, vrt[1] - 3, vrt[0] + 3, vrt[1] + 3, fill='green')
 
-            else if portal.kind == Portal.ToVertex:
+            elif portal.kind == Portal.ToVertex:
                 if cv:
                     vrt = self.vertices[portal.end_info[0]]
                     cv.create_oval(vrt[0] - 3, vrt[1] - 3, vrt[0] + 3, vrt[1] + 3, fill='blue')
@@ -586,7 +581,7 @@ class Mesh2d(Polygon2d):
                     portal.end_info = other_portal.start_index, 0
 
                 # attach to end of other portal
-                else if para == 1:
+                elif para == 1:
                     portal.end_info = other_portal.end_info
 
                 else:
@@ -808,7 +803,7 @@ class Mesh2d(Polygon2d):
 
                 if closest_portal_para == 0:
                     portal.end_info = closest_portal, 0
-                else if closest_portal_para == 1:
+                elif closest_portal_para == 1:
                     portal.end_info = closest_portal, 1
 
                 # If closest point is not one of the endpoints,
@@ -832,7 +827,7 @@ class Mesh2d(Polygon2d):
                         second_portal.end_info = closest_portal, 1
                         new_portals.append(second_portal)
 
-                    else if start_inside:
+                    elif start_inside:
                         portal.end_info = closest_portal, 0
                     else:
                         portal.end_info = closest_portal, 1
@@ -959,11 +954,16 @@ class Mesh2d(Polygon2d):
 
         # make ray-like line
         line = (segment[0], segment[1] - segment[0])
-        (linepara1, raypara1) = Geom2.lines_intersect(line, (tip, dir1))
-        (linepara2, raypara2)= Geom2.lines_intersect(line, (tip, dir2))
+        (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
+        (linepara2, raypara2, _)= Geom2.lines_intersect(line, (tip, dir2))
 
+        print(line)
+        print(linepara1, raypara1)
+        print(linepara2, raypara2)
+        
         # check whether line containing segment passes through sector:
-        line_through_sector = raypara1[1] > 0 or raypara1[1] > 0
+        line_through_sector = raypara1 > 0 or raypara2 > 0
+        print("line through sector? {}".format(line_through_sector))
 
         if not line_through_sector:
             return None, None
@@ -978,6 +978,7 @@ class Mesh2d(Polygon2d):
         if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
             intersect_params.append(linepara2)
 
+        print("intersect params = {}".format(intersect_params))
         # one intersection => one endpoint inside, other outside
         if len(intersect_params) == 1:
             if pt_inside(segment[0]):
@@ -985,7 +986,7 @@ class Mesh2d(Polygon2d):
             else:
                 candid_params = [intersect_params[0], 1]
         # two intersections => middle section passes through sector
-        else if len(intersect_params) == 2:
+        elif len(intersect_params) == 2:
             candid_params = list(sorted(intersect_params))
 
         # no intersections => entirely inside or outside
@@ -1001,10 +1002,12 @@ class Mesh2d(Polygon2d):
         if candid_params[0] < projpara and projpara < candid_params[1]:
             candid_params.append(projpara)
 
+        print("candid params = {}".format(candid_params))
+
         def para_to_pt(para):
             if para == 0:
                 return segment[0]
-            else if para == 1:
+            elif para == 1:
                 return segment[1]
             else:
                 return line[0] + (para * line[1])
