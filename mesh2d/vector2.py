@@ -3,12 +3,7 @@ from itertools import izip, chain
 from operator import itemgetter
 
 
-class LineRelation(object):
-    def __init__(self, intersection, identical):
-        self.intersection = intersection
-        self.identical = identical
-
-
+# vector af arbitrary size
 class vec(object):
     tolerance = 1e-8
     tolSq = tolerance * tolerance
@@ -111,6 +106,7 @@ class vec(object):
         return u[0] * v[1] - u[1] * v[0]
 
 
+# some functions for 2d geometry
 class Geom2:
 
     @staticmethod
@@ -163,7 +159,7 @@ class Geom2:
     # line must be a Ray-like object
     @staticmethod
     def point_to_line_distSq(point, line):
-        coef = Geom2.project_to_line(vert, line)
+        coef = Geom2.project_to_line(point, line)
         return (line[0] + (coef * line[1]) - point).normSq()
 
 
@@ -171,20 +167,6 @@ class Geom2:
     @staticmethod
     def point_to_line_dist(point, line):
         return math.sqrt(Geom2.point_to_line_distSq(point, line))
-
-
-    # # segment must be a Ray-like object
-    # @staticmethod
-    # def point_to_segment_dist(point, segment):
-    #     proj_coef = Geom2.project_to_line(point, segment)
-    #     if proj_coef <= 0:
-    #         return (segment[0] - point).norm(), 0
-
-    #     elif proj_coef >= 1:
-    #         return (segment[0] + segment[1] - point).norm(), 1
-
-    #     else:
-    #         return (segment[0] + (proj_coef * segment[1]) - point).norm(), proj_coef
 
 
     @staticmethod
@@ -203,66 +185,6 @@ class Geom2:
         return vec(
             mtx[0]*vector[0] + mtx[1]*vector[1],
             mtx[2]*vector[0] + mtx[3]*vector[1])
-
-
-
-    # @staticmethod
-    # def get_polar_angle(point):
-    #     norm = point.norm()
-    #     cosine = min(max(point[0] / norm, -1.), 1.)
-    #     sine   = min(max(point[1] / norm, -1.), 1.)
-    #     angle = math.acos(cosine)
-    #     return 2 * math.pi - angle if sine < 0 else angle
-
-
-
-    # @staticmethod
-    # def point_between(vert, vert1, vert2):
-    #     '''
-    #     Tells whether vert is between vert1 and vert2.
-    #     Assumes they are on the same straight line.
-    #     This is exclusive version:
-    #     if vert == vert1 or vert == vert2, returns False.
-    #     '''
-    #     if abs(vert1.x - vert2.x) > abs(vert1.y - vert2.y):
-    #         xmin = min(vert1.x, vert2.x)
-    #         xmax = max(vert1.x, vert2.x)
-    #         return vert.x > xmin and vert.x < xmax
-
-    #     else:
-    #         ymin = min(vert1.y, vert2.y)
-    #         ymax = max(vert1.y, vert2.y)
-    #         return vert.y > ymin and vert.y < ymax
-            
-
-
-
-    # @staticmethod
-    # def point_between_inclusive(vert, vert1, vert2):
-    #     '''
-    #     Tells whether vert is between vert1 and vert2.
-    #     Assumes they are on the same straight line.
-    #     This is inclusive version:
-    #     If vert == vert1 or vert == vert2, returns True.
-    #     '''
-    #     if abs(vert1.x - vert2.x) > abs(vert1.y - vert2.y):
-    #         xmin = min(vert1.x, vert2.x)
-    #         xmax = max(vert1.x, vert2.x)
-    #         return vert.x >= xmin and vert.x <= xmax
-
-    #     else:
-    #         ymin = min(vert1.y, vert2.y)
-    #         ymax = max(vert1.y, vert2.y)
-    #         return vert.y >= ymin and vert.y <= ymax
-
-
-
-
-    # @staticmethod
-    # def vertex_on_ray(vert, ray_tip, ray_target):
-    #     return Vector2.point_between_inclusive(vert, ray_tip, ray_target) or \
-    #     Vector2.point_between_inclusive(ray_target, ray_tip, vert)
-
 
 
     # returns a tuple (coef1, coef2, distSq)
@@ -308,107 +230,3 @@ class Geom2:
             a = (r2s2 - r2s1) / r2r1
             b = (r1s1 - r1s2) / r1r2
             return (a, b, 0)
-
-
-
-    # seg1 and seg2 must be Ray-like objects
-    @staticmethod
-    def where_segments_cross(seg1, seg2, is_inclusive):
-        (c1, c2, distSq) = Geom2.lines_intersect(seg1, seg2)
-        seg1_end = seg1[0] + seg1[1]
-        seg2_end = seg2[0] + seg2[1]
-
-        # if segments are non-parallel
-        if c1 == c1: # c1 not NaN
-            if seg1[0] == seg2[0] or seg1[0] == seg2_end:
-                return seg1[0] if is_inclusive else None
-            elif seg1_end == seg2[0] or seg1_end == seg2_end:
-                return seg1_end if is_inclusive else None
-            elif \
-            vec.tolerance <= c1 and c1 <= 1. - vec.tolerance and \
-            vec.tolerance <= c2 and c2 <= 1. - vec.tolerance:
-                return seg1[0] + (c1 * seg1[1])
-            else:
-                return None
-
-        # if segments are on same line
-        elif distSq < vec.tolerance:
-            main_dir = seg1[1].normalized()
-            pts = (seg1, seg1_end, seg2, seg2_end)
-            crds_along = list((i, pt.dot(main_dir)) for (i, pt) in enumerate(pts))
-
-            _, a, b, _ = sorted(crds_along, key = itemgetter(1))
-
-            # if segments only touch at endpoints
-            if abs(b[1] - a[1]) < vec.tolerance:
-                return pts[a[0]] if is_inclusive else None
-
-            # otherwise they either overlap or don't touch at all
-            else:
-                return None
-
-        # if segments are on separate parallel lines
-        else:
-            return None
-
-
-
-    # seg1 and seg2 must be Ray-like objects
-    @staticmethod
-    def where_segments_cross_inclusive(seg1, seg2):
-        return Geom2.where_segments_cross(seg1, seg2, True)
-
-
-    # seg1 and seg2 must be Ray-like objects
-    @staticmethod
-    def where_segments_cross_exclusive(seg1, seg2):
-        return Geom2.where_segments_cross(seg1, seg2, False)
-
-
-
-    # @staticmethod
-    # def where_segment_crosses_ray(seg1, seg2, ray1, ray2):
-    #     line_rel = Vector2.lines_intersect(seg1, seg2, ray1, ray2)
-
-    #     line_x = line_rel.intersection
-    #     lines_overlap =  line_rel.identical
-
-    #     # if lines intersect
-    #     if line_x is not None:
-    #         # first check if X is inside the segment
-    #         if Vector2.point_between_inclusive(line_x, seg1, seg2):
-
-    #             # then check if X is on the ray
-    #             if Vector2.vertex_on_ray(line_x, ray1, ray2):
-    #                 return line_x
-    #             else:
-    #                 return None
-
-    #         # if the X is outside the segment
-    #         else:
-    #             return None
-
-    #     # if no intersection
-    #     else:
-    #         # if lines overlap (are identical)
-    #         if lines_overlap:
-
-    #             '''
-    #             There is only one case in which single-point intersection happens:
-    #             when they overlap exactly at the tip and nowhere else.
-    #             '''
-    #             if seg1 == ray1 and \
-    #                 Vector2.point_between_inclusive(ray1, seg2, ray2):
-    #                 return ray1.copy()
-
-    #             if seg2 == ray1 and \
-    #                 Vector2.point_between_inclusive(ray1, seg1, ray2):
-    #                 return ray1.copy()
-
-
-    #             # In all other cases they either overlap too much or not at all
-    #             return None
-
-    #         # if lines are parallel
-    #         else:
-    #             return None

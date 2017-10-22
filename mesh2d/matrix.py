@@ -7,8 +7,7 @@ class MatrixIndexer(object):
 
 
     def __getitem__(self, location):
-        row = location[0]
-        col = location[1]
+        row, col = location
         if row >= self.mtx.shape[0] or col >= self.mtx.shape[1]:
             raise IndexError("Index out of range: {}".format(location))
 
@@ -16,8 +15,7 @@ class MatrixIndexer(object):
     
 
     def __setitem__(self, location, value):
-        row = location[0]
-        col = location[1]
+        row, col = location
         if row >= self.mtx.shape[0] or col >= self.mtx.shape[1]:
             raise IndexError("Index out of range: {}".format(location))
 

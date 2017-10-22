@@ -2,7 +2,7 @@ from itertools import izip, chain
 from collections import deque
 
 from .mesh2d import Polygon2d
-from .vector2 import vec
+from .vector2 import vec, Geom2
 from .utils import debug_draw_bool
 
 class Union       : pass
@@ -62,7 +62,7 @@ def _get_pieces_outside_inside(this_poly, intersect_ids, other_poly):
         h_o, h_i = _bool_cut_loop(hole, this_poly, intersect_ids, other_poly)
         outside.extend(h_o)
         inside.extend(h_i)
-    return outside, inside        
+    return outside, inside
 
 
 
@@ -82,7 +82,7 @@ def _add_intersections_to_polys(A, B):
     # Find all intersections of A and B borders.
     for A_edge in A_edges:
         for B_edge in B_edges:
-            seg_x = vec.where_segments_cross_inclusive(
+            seg_x = Geom2.where_segments_cross_inclusive(
                 A.vertices[A_edge[0]],
                 A.vertices[A_edge[1]],
                 B.vertices[B_edge[0]],
