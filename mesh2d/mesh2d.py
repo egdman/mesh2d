@@ -1,7 +1,7 @@
 import math
 import random
 
-from collections import deque
+from collections import deque, defaultdict
 from operator import itemgetter
 from itertools import chain, izip, cycle, tee
 from copy import deepcopy
@@ -25,8 +25,10 @@ class Polygon2d(object):
 
         # need to find self-intersections
         if Polygon2d.check_ccw(vertices, indices):
+            print("CCW")
             self.outline = indices[:]
         else:
+            print("CW")
             self.outline = indices[::-1]
 
         self.vertices = vertices[:]
@@ -112,17 +114,26 @@ class Polygon2d(object):
         self.holes.append(hole)
 
 
+    def _get_segment_helper(self, seg_ids):
+        return tuple(self.vertices[idx] for idx in seg_ids)
+
 
     def _segments_cross_helper(self, seg1, seg2):
-        seg1 = (self.vertices[seg1[0]], self.vertices[seg1[1]])
-        seg2 = (self.vertices[seg2[0]], self.vertices[seg2[1]])
-        seg_x = Polygon2d._segments_intersect(seg1, seg2)
-        # if segments intersect at endpoints, ignore
-        if seg_x in chain(seg1, seg2):
-            return None
-        else:
-            return seg_x
+        seg1 = self._get_segment_helper(seg1)
+        seg2 = self._get_segment_helper(seg2)
 
+        # if segment endpoints match, ignore intersection
+        if seg1[0] in seg2 or seg1[1] in seg2:
+            return None, None
+
+        line1 = (seg1[0], seg1[1] - seg1[0])
+        line2 = (seg2[0], seg2[1] - seg2[0])
+
+        a, b, _ = Geom2.lines_intersect(line1, line2)
+        if 0 < a and a < 1 and 0 < b and b < 1:
+            return a, b
+        else:
+            return None, None
 
 
     def _find_first_sinter(self, segments):
@@ -131,29 +142,30 @@ class Polygon2d(object):
         num_seg = len(segments)
         for j in range(2, num_seg - 1):
             seg2 = segments[j]
-            seg_x = self._segments_cross_helper(seg1, seg2)
-            if seg_x is not None:
-                return (seg1, seg2, seg_x)
+            p1, p2 = self._segments_cross_helper(seg1, seg2)
+            if p1 is not None:
+                return (seg1, seg2, p1, p2)
 
         # remaining segments
         for i in range(1, num_seg - 2):
             for j in range(i+2, num_seg):
                 seg1 = segments[i]
                 seg2 = segments[j]
-                seg_x = self._segments_cross_helper(seg1, seg2)
-                if seg_x is not None:
-                    return (seg1, seg2, seg_x)
+                p1, p2 = self._segments_cross_helper(seg1, seg2)
+                if p1 is not None:
+                    return (seg1, seg2, p1, p2)
 
-        return (None, None, None)
+        return (None, None, None, None)
 
 
 
-    def _pull_direction(self, edge1, edge2, intersect_vector):
-        e11 = self.vertices[edge1[0]]
-        e21 = self.vertices[edge2[0]]
+    def _pull_direction(self, edge1, edge2, intersect_param1):
+        edge1 = self._get_segment_helper(edge1)
+        edge2 = self._get_segment_helper(edge2)
+        intersect_crds = edge1[0] + intersect_param1 * (edge1[1] - edge1[0])
 
-        vec1 = (e11 - intersect_vector).normalized()
-        vec2 = (e21 - intersect_vector).normalized()
+        vec1 = (edge1[0] - intersect_crds).normalized()
+        vec2 = (edge2[0] - intersect_crds).normalized()
 
         dir1 = vec1 + vec2
         dir2 = vec1 - vec2
@@ -167,53 +179,69 @@ class Polygon2d(object):
             return dir2 / ldir2
 
 
+    # def _pull_direction(self, edge1, edge2, intersect_vector):
+    #     e11 = self.vertices[edge1[0]]
+    #     e21 = self.vertices[edge2[0]]
+
+    #     vec1 = (e11 - intersect_vector).normalized()
+    #     vec2 = (e21 - intersect_vector).normalized()
+
+    #     dir1 = vec1 + vec2
+    #     dir2 = vec1 - vec2
+
+    #     ldir1 = dir1.norm()
+    #     ldir2 = dir2.norm()
+
+    #     if ldir1 > ldir2:
+    #         return dir1 / ldir1
+    #     else:
+    #         return dir2 / ldir2
+
+
 
     def _resolve_sinters(self):
         while True:
             segments = Polygon2d.get_segments([self.outline])
-            (seg1, seg2, seg_x) = self._find_first_sinter(segments)
+            (seg1, seg2, p1, p2) = self._find_first_sinter(segments)
 
             # stop when there are no more sinters
-            if seg_x is None: break
+            if seg1 is None: break
 
             # pull vertices apart:
             # determine direction:
-            pull_dir = self._pull_direction(seg1, seg2, seg_x)
-            nv1 = seg_x + pull_dir * .5
-            nv2 = seg_x - pull_dir * .5
+            pull_dir = self._pull_direction(seg1, seg2, p1)
 
             # insert 2 new vertices at the intersection
+            new_idx1 = self.add_vertices_to_loop(self.outline, self.outline.index(seg1[0]), [p1])[0]
+            new_idx2 = self.add_vertices_to_loop(self.outline, self.outline.index(seg2[0]), [p2])[0]
 
-            new_idx1 = self.add_vertices_to_loop(self.outline, self.outline.index(seg1[0]), [.5])[0]
-            new_idx2 = self.add_vertices_to_loop(self.outline, self.outline.index(seg2[0]), [.5])[0]
-            self.vertices[new_idx1] = nv1
-            self.vertices[new_idx2] = nv2
+            # pull new vertices apart
+            self.vertices[new_idx1] += .5 * pull_dir
+            self.vertices[new_idx2] -= .5 * pull_dir
 
             # reverse indices:
             self.outline = self._mirror_indices(self.outline, new_idx1, new_idx2)
 
 
             # flip new verts if necessary:
-            if self._segments_cross_helper((seg1[0], new_idx1), (new_idx2, seg2[1])):
+            para, _ = self._segments_cross_helper((seg1[0], new_idx1), (new_idx2, seg2[1]))
+            if para is not None:
                 self.vertices[new_idx1], self.vertices[new_idx2] = \
                 self.vertices[new_idx2], self.vertices[new_idx1]
-
 
         # check that points are ccw, if not - reverse
         if not Polygon2d.check_ccw(self.vertices, self.outline):
             self.outline = self.outline[::-1]
 
-    # def add_vertex_to_loop(self, loop, edge, param):
 
 
-
-    def add_vertices_to_border(self, start_from_idx, distances):
+    def add_vertices_to_border(self, segment, vertex_params):
         '''
         Add given list of vertices to the given edge of the polygon border.
         The exact loop that contains the edge is determined automatically.
         This function returns a list of new indices for the list of vertices in the same order.
         '''
-        wanted_idx = start_from_idx
+        wanted_idx = segment[0]
 
         # find loop that contains wanted_idx
 
@@ -227,67 +255,43 @@ class Polygon2d(object):
             where, wanted_loop = next(in_loop_finder(loop), None), loop
             if where is not None: break
 
-        if wanted_loop is None:
-            raise RuntimeError("add_vertices_to_border: could not find loop")
+        if where is None:
+            raise RuntimeError(
+                "add_vertices_to_border:"
+                " could not find loop that has segment {}".format(segment))
+
+        if wanted_loop[(where + 1) % len(wanted_loop)] != segment[1]:
+            raise RuntimeError(
+                "add_vertices_to_border:"
+                " none of the loops have the segment {}".format(segment))
+
+        return self.add_vertices_to_loop(wanted_loop, where, vertex_params)
 
 
-        return self.add_vertices_to_loop(wanted_loop, where, distances)
+    def add_vertices_to_loop(self, loop, segment_position_in_loop, vertex_params):
+        where_to_insert = (segment_position_in_loop + 1) % len(loop)
+        idx0 = loop[segment_position_in_loop]
+        idx1 = loop[where_to_insert]
+        v0 = self.vertices[idx0]
+        v1 = self.vertices[idx1]
 
+        new_ids = [None] * len(vertex_params)
+        ascend_params = sorted(enumerate(vertex_params), key = itemgetter(1))
 
+        for (position_before_sorted, param) in reversed(ascend_params):
+            new_crds = v0 + param * (v1 - v0)
+            new_idx = len(self.vertices)
 
-    def add_vertices_to_loop(self, loop, where_in_loop, distances):
-        # print("adding to {}, {} units away from idx {} which is at position {} in loop"
-        #     .format(loop, distance, loop[where_in_loop], where_in_loop))
-
-        # need to find all the places where to add new vertices
-        new_distances = sorted(enumerate(distances), key = itemgetter(1))
-        last_dist = new_distances[-1][1]
-
-
-        # rotate loop enumerator to start from where_in_loop
-        loop_enumerator = range(len(loop))
-        loop_enumerator = chain(loop_enumerator[where_in_loop:], loop_enumerator[:where_in_loop])
-        cycle_loop_enum = cycle(loop_enumerator)
-
-        # calc distances of next vertices in the loop from the starting vertex
-        acc_dist = 0
-        vertex_distances = [(where_in_loop, 0)]
-        print("last_dist = {}".format(last_dist))
-
-        for cur_idx, next_idx in pairwise(cycle_loop_enum):
-            acc_dist += (self.vertices[loop[next_idx]] - self.vertices[loop[cur_idx]]).norm()
-            vertex_distances.append((next_idx, acc_dist))
-            if acc_dist >= last_dist: break
-
-
-        print(vertex_distances)
-        # calc new vertices and where to insert them in the loop
-        new_verts = []
-        for orig_pos, distance in new_distances:
-            f, s = next(((f, s) for (f, s) in pairwise(vertex_distances) \
-                if f[1] < distance and distance <= s[1]), (None, None))
-
-            where_insert = s[0]
-            edge1, edge2 = loop[f[0]], loop[s[0]]
-            new_vertex = self.vertices[edge1] + \
-                (self.vertices[edge2] - self.vertices[edge1]).normalized() * (distance - f[1])
-            new_verts.append((new_vertex, where_insert, orig_pos))
-
-        # add vertices in order from max to min distance
-        newly_inserted_ids = [None] * len(distances)
-        for new_vertex, where_insert, orig_pos in reversed(new_verts):
-            print("where_insert = {}".format(where_insert))
-
-            new_vertex_idx = len(self.vertices)
-            self.vertices.append(new_vertex)
-            loop.insert(where_insert, new_vertex_idx)
-            newly_inserted_ids[orig_pos] = new_vertex_idx
+            self.vertices.append(new_crds)
+            loop.insert(where_to_insert, new_idx)
 
             # add new vertex to spatial index:
-            self.rti.insert(new_vertex_idx,
-                (new_vertex[0], new_vertex[1], new_vertex[0], new_vertex[1]))
+            self.rti.insert(new_idx,
+                (new_crds[0], new_crds[1], new_crds[0], new_crds[1]))
 
-        return newly_inserted_ids
+            new_ids[position_before_sorted] = new_idx
+
+        return new_ids
 
 
 
@@ -475,7 +479,7 @@ class Polygon2d(object):
         output: [0, 1, 2, 5, 4, 3, 6, 7]
         '''
 
-        print("ids = {}, start_after = {} ,edd_before = {}".format(indices, start_after, end_before))
+        print("ids = {}, start_after = {}, end_before = {}".format(indices, start_after, end_before))
         start_loc = indices.index(start_after)
         end_loc = indices.index(end_before)
 
@@ -486,24 +490,6 @@ class Polygon2d(object):
         middle = indices[start_loc+1:end_loc]
         after = indices[end_loc:]
         return before + middle[::-1] + after
-
-
-    @staticmethod
-    def _segments_intersect(seg1, seg2):
-        if seg1[0] in seg2:
-            return seg1
-        if seg1[1] in seg2:
-            return seg2
-
-        line1 = (seg1[0], seg1[1] - seg1[0])
-        line2 = (seg2[0], seg2[1] - seg2[0])
-        a, b, _ = Geom2.lines_intersect(line1, line2)
-        if 0 < a and a < 1 and 0 < b and b < 1:
-            return line1[0] + (a * line1[1])
-        else:
-            return None
-
-
 
 
 
@@ -562,30 +548,25 @@ class Mesh2d(Polygon2d):
 
 
     def break_into_convex(self, threshold = 0.0, cv=None):
-        def seg_len(seg):
-            return (self.vertices[seg[0]] - self.vertices[seg[1]]).norm()
-
-
         portals = self.get_portals(threshold=threshold)
 
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
+        segments_to_split = defaultdict(list)
         for portal in portals:
             print(portal.kind)
 
             if portal.kind == Portal.ToSegment:
-                segment, para = portal.end_info
-                end_idx = self.add_vertices_to_border(segment[0], [para * seg_len(segment)])[0]
+                segment, _ = portal.end_info
+                segments_to_split[segment].append(portal)
+
+        for segment, seg_portals in segments_to_split.items():
+            end_params = list(portal.end_info[1] for portal in seg_portals)
+            end_ids = self.add_vertices_to_border(segment, end_params)
+
+            for end_idx, portal in izip(end_ids, seg_portals):
                 portal.kind = Portal.ToVertex
                 portal.end_info = end_idx
 
-                if cv:
-                    vrt = self.vertices[end_idx]
-                    cv.create_oval(vrt[0] - 3, vrt[1] - 3, vrt[0] + 3, vrt[1] + 3, fill='green')
-
-            elif portal.kind == Portal.ToVertex:
-                if cv:
-                    vrt = self.vertices[portal.end_info]
-                    cv.create_oval(vrt[0] - 3, vrt[1] - 3, vrt[0] + 3, vrt[1] + 3, fill='blue')
 
 
         def resolve_chain(portal):
