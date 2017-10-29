@@ -621,6 +621,7 @@ class Application(tk.Frame):
 
 
     def _add_polygon(self, event):
+        self._new_vertices = remove_duplicates(self._new_vertices)
         if len(self._new_vertices) < 3: return
 
         mode = self.get_bool_mode()
@@ -628,29 +629,28 @@ class Application(tk.Frame):
         # remove helper views
         self.remove_draw_objects_glob('obj_creation_helpers/*')
 
-        # # delete all polygon views (we'll add them after boolean operation)
-        # self.remove_draw_objects_glob('polys/*')
+        # delete all polygon views (we'll add them after boolean operation)
+        self.remove_draw_objects_glob('polys/*')
 
         # new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
-        self._new_vertices = remove_duplicates(self._new_vertices)
         new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
 
         del self._new_vertices[:]
 
-        new_polys = [new_poly]
+        # new_polys = [new_poly]
 
-        # if mode == 'subtract' and len(self._polygons) > 0:
-        #     new_polys = bool_subtract(self._polygons[-1], new_poly)
+        if mode == 'subtract' and len(self._polygons) > 0:
+            new_polys = bool_subtract(self._polygons[-1], new_poly)
             
 
-        # elif mode == 'add':
-        #     if len(self._polygons) == 0:
-        #         new_polys = [new_poly]
-        #     else:
-        #         new_polys = bool_add(self._polygons[-1], new_poly)
+        elif mode == 'add':
+            if len(self._polygons) == 0:
+                new_polys = [new_poly]
+            else:
+                new_polys = bool_add(self._polygons[-1], new_poly)
 
-        # else:
-        #     return
+        else:
+            return
 
         del self._polygons[:]
         for poly in new_polys:

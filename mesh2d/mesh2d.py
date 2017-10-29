@@ -238,7 +238,6 @@ class Polygon2d(object):
 
 
     def add_vertices_to_loop(self, loop, segment_position_in_loop, vertex_params):
-        # print("segment_position_in_loop = {}".format(segment_position_in_loop))
         where_to_insert = (segment_position_in_loop + 1) % len(loop)
         idx0 = loop[segment_position_in_loop]
         idx1 = loop[where_to_insert]
@@ -441,6 +440,7 @@ class Polygon2d(object):
         return Geom2.poly_signed_area(list(vertices[idx] for idx in indices))
 
 
+
     @staticmethod
     def _mirror_indices(indices, start_after, end_before):
         '''
@@ -570,12 +570,8 @@ class Mesh2d(Polygon2d):
 
         # convert all 'ToPortal' portals to 'ToVertex' portals
         for portal in portals:
-            print(portal.kind)
             # travel down the chain of linked portals until arrive to 'ToVertex' portal
             resolve_chain(portal)
-            print("{} -> {} :: {}".format(portal.start_index, portal.end_info,
-                "!!!!!" if portal.start_index == portal.end_info else "Ok"))
-
 
         # now all portals are 'ToVertex'
         # remove degenerate portals
@@ -856,13 +852,6 @@ class Mesh2d(Polygon2d):
 
             if para is None: continue
 
-            # if distSq == 0:
-            #     print("distSq to closest portal = {}, portal = {}".format(distSq, portal))
-            #     print("portal kind: {}, start_index = {}, end_info = {}".format(
-            #         portal.kind, portal.start_index, portal.end_info))
-            #     print("para = {}".format(para))
-
-
             # update closest portal
             if closest_distSq is None or distSq < closest_distSq:
                 closest_distSq = distSq
@@ -926,7 +915,6 @@ class Mesh2d(Polygon2d):
         
         # check whether line containing segment passes through sector:
         line_through_sector = raypara1 > 0 or raypara2 > 0
-        # print("line through sector? {}".format(line_through_sector))
 
         if not line_through_sector:
             return None, None
@@ -941,7 +929,6 @@ class Mesh2d(Polygon2d):
         if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
             intersect_params.append(linepara2)
 
-        # print("intersect params = {}".format(intersect_params))
         # one intersection => one endpoint inside, other outside
         if len(intersect_params) == 1:
             if pt_inside(segment[0]):
@@ -965,7 +952,6 @@ class Mesh2d(Polygon2d):
         if candid_params[0] < projpara and projpara < candid_params[1]:
             candid_params.append(projpara)
 
-        # print("candid params = {}".format(candid_params))
 
         def para_to_pt(para):
             if para == 0:
