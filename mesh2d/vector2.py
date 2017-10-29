@@ -1,6 +1,7 @@
 import math
 from itertools import izip, chain
 from operator import itemgetter
+from .utils import pairs
 
 
 # vector af arbitrary size
@@ -116,19 +117,13 @@ class Geom2:
 
     @staticmethod
     def poly_signed_area(vertices):
-        area = 0.0
-        vertices = iter(vertices)
-        begin_vrt = next(vertices)
-        vert1 = begin_vrt
-        for vert2 in vertices:
+        area = 0.
+        vertices = chain(vertices, vertices[:1])
+
+        for vert1, vert2 in pairs(vertices):
             area += (vert1[0] - vert2[0]) * (vert1[1] + vert2[1])
-            vert1 = vert2
 
-        # wrap for last segment:
-        vert2 = begin_vrt
-        area += (vert1[0] - vert2[0]) * (vert1[1] + vert2[1])
         return .5 * area
-
 
 
     @staticmethod

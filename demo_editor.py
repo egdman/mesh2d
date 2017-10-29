@@ -139,6 +139,15 @@ class Select(Tool):
         #   if poly.point_inside(pointer): 
 
 
+def remove_duplicates(vertices):
+    added = set()
+    cleaned = []
+    for v in vertices:
+        if v in added: continue
+        added.add(v)
+        cleaned.append(v)
+    return cleaned
+
 
 class Application(tk.Frame):
     def __init__(self, master=None, db_mode = False):
@@ -623,6 +632,7 @@ class Application(tk.Frame):
         # self.remove_draw_objects_glob('polys/*')
 
         # new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
+        self._new_vertices = remove_duplicates(self._new_vertices)
         new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
 
         del self._new_vertices[:]

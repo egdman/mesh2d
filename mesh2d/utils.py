@@ -1,7 +1,19 @@
 import Tkinter as tk
 from tkFont import Font as font
-from itertools import chain, izip
+from itertools import chain, izip, tee
 
+
+def pairs(iterable):
+    a, b = tee(iterable, 2)
+    next(b, None)
+    return izip(a, b)
+
+def triples(iterable):
+    a, b, c = tee(iterable, 3)
+    next(b, None)
+    next(c, None)
+    next(c, None)
+    return izip(a, b, c)
 
 
 def get_crds(poly, loop, closed=True):

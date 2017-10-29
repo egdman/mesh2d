@@ -3,18 +3,13 @@ import random
 
 from collections import deque, defaultdict
 from operator import itemgetter
-from itertools import chain, izip, cycle, tee
+from itertools import chain, izip, cycle
 from copy import deepcopy
 from rtree import index
 
 from .vector2 import vec, Geom2
-from .utils import debug_draw_room
+from .utils import pairs, triples, debug_draw_room
 
-
-def pairwise(iterable):
-    a, b = tee(iterable)
-    next(b, None)
-    return izip(a, b)
 
 
 class Polygon2d(object):
@@ -23,12 +18,9 @@ class Polygon2d(object):
 
     def __init__(self, vertices, indices):
 
-        # need to find self-intersections
         if Polygon2d.check_ccw(vertices, indices):
-            print("CCW")
             self.outline = indices[:]
         else:
-            print("CW")
             self.outline = indices[::-1]
 
         self.vertices = vertices[:]
@@ -37,9 +29,9 @@ class Polygon2d(object):
         self.rti.interleaved = True
 
         # insert vertices into spatial index
-        for vid in self.outline:
-            vert = self.vertices[vid]
-            self.rti.insert(vid, (vert[0], vert[1], vert[0], vert[1]))
+        for idx in self.outline:
+            vert = self.vertices[idx]
+            self.rti.insert(idx, (vert[0], vert[1], vert[0], vert[1]))
 
         # resolve self-intersections (sinters)
         self._resolve_sinters()
@@ -49,10 +41,10 @@ class Polygon2d(object):
 
 
     def copy(self):
-        res = Polygon2d(self.vertices, self.outline)
+        clone = Polygon2d(self.vertices, self.outline)
         for hole in self.holes:
-            res.add_hole((self.vertices[idx] for idx in hole))
-        return res
+            clone.add_hole((self.vertices[idx] for idx in hole))
+        return clone
 
 
 
@@ -68,27 +60,27 @@ class Polygon2d(object):
 
 
 
-    def find_loop_containing_idx(self, wanted_index):
-        def loop_finder(loop):
-            return (i for (i, idx) in enumerate(loop) if idx == wanted_index)
+    # def find_loop_containing_idx(self, wanted_index):
+    #     def loop_finder(loop):
+    #         return (i for (i, idx) in enumerate(loop) if idx == wanted_index)
 
-        where = next(loop_finder(self.outline), None)
-        if where is not None:
-            return self.outline, where, Polygon2d.Outline
+    #     where = next(loop_finder(self.outline), None)
+    #     if where is not None:
+    #         return self.outline, where, Polygon2d.Outline
 
-        for hole in self.holes:
-            where = next(loop_finder(hole), None)
-            if where is not None:
-                return hole, where, Polygon2d.Hole
-        return None, None, None
+    #     for hole in self.holes:
+    #         where = next(loop_finder(hole), None)
+    #         if where is not None:
+    #             return hole, where, Polygon2d.Hole
+    #     return None, None, None
 
 
 
-    def get_adjacent_edges(self, index):
-        vert_loc = self.outline.index(index)
-        prev_idx = self.outline[(vert_loc - 1)]
-        next_idx = self.outline[(vert_loc + 1) % len(self.outline)]
-        return (prev_idx, index), (index, next_idx)
+    # def get_adjacent_edges(self, index):
+    #     vert_loc = self.outline.index(index)
+    #     prev_idx = self.outline[(vert_loc - 1)]
+    #     next_idx = self.outline[(vert_loc + 1) % len(self.outline)]
+    #     return (prev_idx, index), (index, next_idx)
 
 
 
@@ -179,25 +171,6 @@ class Polygon2d(object):
             return dir2 / ldir2
 
 
-    # def _pull_direction(self, edge1, edge2, intersect_vector):
-    #     e11 = self.vertices[edge1[0]]
-    #     e21 = self.vertices[edge2[0]]
-
-    #     vec1 = (e11 - intersect_vector).normalized()
-    #     vec2 = (e21 - intersect_vector).normalized()
-
-    #     dir1 = vec1 + vec2
-    #     dir2 = vec1 - vec2
-
-    #     ldir1 = dir1.norm()
-    #     ldir2 = dir2.norm()
-
-    #     if ldir1 > ldir2:
-    #         return dir1 / ldir1
-    #     else:
-    #         return dir2 / ldir2
-
-
 
     def _resolve_sinters(self):
         while True:
@@ -244,7 +217,6 @@ class Polygon2d(object):
         wanted_idx = segment[0]
 
         # find loop that contains wanted_idx
-
         def in_loop_finder(loop):
             return (i for (i, idx) in enumerate(loop) if idx == wanted_idx)
 
@@ -255,12 +227,8 @@ class Polygon2d(object):
             where, wanted_loop = next(in_loop_finder(loop), None), loop
             if where is not None: break
 
-        if where is None:
-            raise RuntimeError(
-                "add_vertices_to_border:"
-                " could not find loop that has segment {}".format(segment))
-
-        if wanted_loop[(where + 1) % len(wanted_loop)] != segment[1]:
+        if where is None or \
+            wanted_loop[(where + 1) % len(wanted_loop)] != segment[1]:
             raise RuntimeError(
                 "add_vertices_to_border:"
                 " none of the loops have the segment {}".format(segment))
@@ -268,7 +236,9 @@ class Polygon2d(object):
         return self.add_vertices_to_loop(wanted_loop, where, vertex_params)
 
 
+
     def add_vertices_to_loop(self, loop, segment_position_in_loop, vertex_params):
+        # print("segment_position_in_loop = {}".format(segment_position_in_loop))
         where_to_insert = (segment_position_in_loop + 1) % len(loop)
         idx0 = loop[segment_position_in_loop]
         idx1 = loop[where_to_insert]
@@ -379,13 +349,13 @@ class Polygon2d(object):
     @staticmethod
     def point_inside_loop(vertices, indices, point):
         # transform vertices so that query point is at the origin, append start vertex at end to wrap
-        verts = (vertices[idx] - point for idx in chain(indices, [0]))
+        verts = (vertices[idx] - point for idx in chain(indices, indices[:1]))
         x_ray = (vec(0, 0), vec(1, 0)) # ray from origin along positive x axis
 
         num_inters = 0
 
         # iterate over pairs of vertices
-        for cur_v, next_v in pairwise(verts):
+        for cur_v, next_v in pairs(verts):
 
             if cur_v[1] == 0: cur_v += vec(0, 0.00001)
             if next_v[1] == 0: next_v += vec(0, 0.00001)
@@ -468,8 +438,7 @@ class Polygon2d(object):
 
     @staticmethod
     def signed_area(vertices, indices):
-        return Geom2.poly_signed_area((vertices[idx] for idx in indices))
-
+        return Geom2.poly_signed_area(list(vertices[idx] for idx in indices))
 
 
     @staticmethod
@@ -478,18 +447,29 @@ class Polygon2d(object):
         input: indices=[0, 1, 2, 3, 4, 5, 6, 7], start_after=2, end_before=6
         output: [0, 1, 2, 5, 4, 3, 6, 7]
         '''
-
         print("ids = {}, start_after = {}, end_before = {}".format(indices, start_after, end_before))
-        start_loc = indices.index(start_after)
-        end_loc = indices.index(end_before)
+        loop = cycle(indices)
+        mirrored = []
+        remainder = []
 
-        if start_loc >= end_loc:
-            raise ValueError("'start_after' must be to the left of 'end_before'")
+        for idx in loop:
+            if idx == start_after:
+                break
 
-        before = indices[:start_loc+1]
-        middle = indices[start_loc+1:end_loc]
-        after = indices[end_loc:]
-        return before + middle[::-1] + after
+        idx = next(loop)
+        while idx != end_before:
+            mirrored.append(idx)
+            idx = next(loop)
+
+        while idx != start_after:
+            remainder.append(idx)
+            idx = next(loop)
+
+        remainder.append(idx)
+
+        print("mirrored : {}".format(mirrored))
+        print("remainder : {}".format(remainder))
+        return mirrored[::-1] + remainder
 
 
 
@@ -553,7 +533,6 @@ class Mesh2d(Polygon2d):
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
         segments_to_split = defaultdict(list)
         for portal in portals:
-            print(portal.kind)
 
             if portal.kind == Portal.ToSegment:
                 segment, _ = portal.end_info
@@ -591,11 +570,16 @@ class Mesh2d(Polygon2d):
 
         # convert all 'ToPortal' portals to 'ToVertex' portals
         for portal in portals:
+            print(portal.kind)
             # travel down the chain of linked portals until arrive to 'ToVertex' portal
             resolve_chain(portal)
+            print("{} -> {} :: {}".format(portal.start_index, portal.end_info,
+                "!!!!!" if portal.start_index == portal.end_info else "Ok"))
+
 
         # now all portals are 'ToVertex'
-
+        # remove degenerate portals
+        portals = list(p for p in portals if p.start_index != p.end_info)
 
         # Now break the mesh border into convex rooms
         # queue of rooms
@@ -631,7 +615,6 @@ class Mesh2d(Polygon2d):
             # if this portal has already been created, skip it
             if portal.created: continue
 
-            room1, room2 = [], []
             start_i = portal.start_index
             end_i = portal.end_info
 
@@ -656,24 +639,15 @@ class Mesh2d(Polygon2d):
 
     @staticmethod
     def check_convex(indices, vertices):
+        indices_wrap = chain(indices, indices[:2])
 
-        vrt = vertices
-        num_indices = len(indices)
+        for idx0, idx1, idx2 in triples(indices_wrap):
+            if Geom2.signed_area(
+                vertices[idx0],
+                vertices[idx1],
+                vertices[idx2]) < 0: return False
 
-        is_convex = True
-
-        for cur_pos in range(num_indices):
-            next_pos = (cur_pos + 1) % num_indices
-            nnext_pos = (next_pos + 1) % num_indices
-
-            cur_ind = indices[cur_pos]
-            next_ind = indices[next_pos]
-            nnext_ind = indices[nnext_pos]
-            if Geom2.signed_area(vrt[cur_ind], vrt[next_ind], vrt[nnext_ind]) < 0:
-                is_convex = False
-                break
-
-        return is_convex
+        return True
 
 
 
@@ -823,7 +797,6 @@ class Mesh2d(Polygon2d):
 
 
 
-
     def find_closest_vert_inside_sector(self, sector, tip_idx):
         borders = chain([self.outline], self.holes)
         closest_idx, closest_distSq = None, None
@@ -877,8 +850,18 @@ class Mesh2d(Polygon2d):
             if tip_idx == portal.start_index: continue
 
             portal_seg = (self.vertices[portal.start_index], portal.calc_endpoint(self.vertices))
+            if portal_seg[0] == portal_seg[1]: continue
+
             para, distSq = self._segment_closest_point_inside_sector(portal_seg, sector)
+
             if para is None: continue
+
+            # if distSq == 0:
+            #     print("distSq to closest portal = {}, portal = {}".format(distSq, portal))
+            #     print("portal kind: {}, start_index = {}, end_info = {}".format(
+            #         portal.kind, portal.start_index, portal.end_info))
+            #     print("para = {}".format(para))
+
 
             # update closest portal
             if closest_distSq is None or distSq < closest_distSq:
@@ -939,7 +922,7 @@ class Mesh2d(Polygon2d):
         # make ray-like line
         line = (segment[0], segment[1] - segment[0])
         (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
-        (linepara2, raypara2, _)= Geom2.lines_intersect(line, (tip, dir2))
+        (linepara2, raypara2, _) = Geom2.lines_intersect(line, (tip, dir2))
         
         # check whether line containing segment passes through sector:
         line_through_sector = raypara1 > 0 or raypara2 > 0
