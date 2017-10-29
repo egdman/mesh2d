@@ -444,8 +444,12 @@ class Polygon2d(object):
     @staticmethod
     def _mirror_indices(indices, start_after, end_before):
         '''
-        input: indices=[0, 1, 2, 3, 4, 5, 6, 7], start_after=2, end_before=6
-        output: [0, 1, 2, 5, 4, 3, 6, 7]
+        Reverse the part of 'indices' between 'start_after' and 'end_before'
+        not including those.
+
+        Example:
+        input: indices=[9,55,16,32,8,7,83,233], start_after=83, end_before=16
+        output: [55,9,233,16,32,8,7,83]
         '''
         print("ids = {}, start_after = {}, end_before = {}".format(indices, start_after, end_before))
         loop = cycle(indices)
@@ -553,9 +557,9 @@ class Mesh2d(Polygon2d):
                 next_portal, para = portal.end_info
                 resolve_chain(next_portal)
 
-                if next_portal.kind != Portal.ToVertex:
-                    # this should never happen
-                    raise RuntimeError("resolve_chain did not succeed")
+                # if next_portal.kind != Portal.ToVertex:
+                #     # this should never happen
+                #     raise RuntimeError("resolve_chain did not succeed")
 
                 portal.kind = Portal.ToVertex
                 if para == 0:
