@@ -3,12 +3,113 @@ import random
 
 from collections import deque, defaultdict
 from operator import itemgetter
-from itertools import chain, izip, cycle
+from itertools import chain, izip, cycle, repeat
 from copy import deepcopy
 from rtree import index
 
 from .vector2 import vec, Geom2
 from .utils import pairs, triples, debug_draw_room
+
+
+class Loops(object):
+    def __init__(self):
+        self.loops = []
+        self.next = []
+        self.prev = []
+        self.which_loop = []
+
+
+    def add_loop(how_many_nodes):
+        loop_start = len(self.next)
+        ids = range(loop_start, loop_start + how_many_nodes)
+
+        loop_idx = len(self.loops)
+        self.loops.append(loop_start)
+        self.which_loop.extend(repeat(loop_idx, how_many_nodes))
+        self.next.extend(ids[1:] + ids[:1])
+        self.prev.extend(ids[-1:] + ids[:-1])
+
+
+    def loop_iterator(self, loop_start):
+        yield loop_start
+        idx = self.next[loop_start]
+        while idx != loop_start:
+            yield idx
+            idx = self.next[idx]
+
+
+    # def loop_iterator_reversed(self, loop_start):
+    #     yield loop_start
+    #     idx = self.prev[loop_start]
+    #     while idx !+ loop_start:
+    #         yield idx
+    #         idx = self.prev[idx]
+
+
+    def insert_node(self, edge_to_split):
+        new_idx = len(self.next)
+        e0, e1 = edge_to_split
+        assert self.next[e0] == e1 and self.prev[e1] == e0,
+        "insert_node: edge {} does not exist".format(edge_to_split)
+
+        self.next[e0] = self.prev[e1] = new_idx
+        self.next.append(e1)
+        self.prev.append(e0)
+        self.which_loop.append(self.which_loop[e0])
+        return new_idx
+
+
+
+class Polygon2d(object):
+    def __init__(self, vertices):
+        # ensure CCW order - outline must be CCW
+        if Geom2.poly_signed_area(vertices) > 0:
+            self.vertices = vertices[:]
+        else:
+            self.vertices = vertices[::-1]
+
+        self.graph = Loops()
+        self.graph.add_loop(len(vertices))
+
+
+
+    def add_hole(self, vertices):
+        # ensure CW order - holes must be CW
+        if Geom2.poly_signed_area(vertices) < 0:
+            vertices = vertices[:]
+        else:
+            vertices = vertices[::-1]
+
+        self.graph.add_loop(len(vertices))
+
+
+
+    def insert_vertex(self, vertex, edge_to_split):
+        new_idx = self.graph.insert_node(edge_to_split)
+        assert new_idx == len(self.vertices)
+        self.vertices.append(vertex)
+        return new_idx
+
+
+
+    def point_inside_loop(self, point, loop_start):
+        # transform vertices so that query point is at the origin, append start vertex at end to wrap
+        verts = (self.vertices[idx] - point for idx in \
+            chain(self.graph.loop_iterator(loop_start), [loop_start]))
+
+        # ray from origin along positive x axis
+        x_ray = (vec(0, 0), vec(1, 0))
+        num_inters = 0
+        # iterate over pairs of vertices
+        for curr_v, next_v in pairs(verts):
+            if curr_v[1] == 0: curr_v += vec(0, 1e-8)
+            if next_v[1] == 0: next_v += vec(0, 1e-8)
+
+            if curr_v[1] * next_v[1] < 0:
+                _, b, _ = Geom2.lines_intersect((curr_v, next_v - curr_v), x_ray)
+                if b > 0: num_inters += 1
+
+        return num_inters % 2 > 0
 
 
 
