@@ -464,10 +464,10 @@ class Application(tk.Frame):
         #     if num > 0: self.draw_all()
 
         ptr_over_poly_now = False
-        for poly in self._polygons:
-            if poly.point_inside(pointer_world):
-                ptr_over_poly_now = True
-                break
+        # for poly in self._polygons:
+        #     if poly.point_inside(pointer_world):
+        #         ptr_over_poly_now = True
+        #         break
 
         if ptr_over_poly_now and not self.pointer_over_poly:
             self.canvas.config(cursor='center_ptr')
@@ -633,7 +633,7 @@ class Application(tk.Frame):
         self.remove_draw_objects_glob('polys/*')
 
         # new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
-        new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
+        new_poly = Polygon2d(self._new_vertices[:])
 
         del self._new_vertices[:]
 
@@ -655,7 +655,7 @@ class Application(tk.Frame):
         del self._polygons[:]
         for poly in new_polys:
             poly = Mesh2d.from_polygon(poly)
-            poly.break_into_convex(10., self.debug_canvas)
+            # poly.break_into_convex(10., self.debug_canvas)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
                 NavMeshView(poly))
