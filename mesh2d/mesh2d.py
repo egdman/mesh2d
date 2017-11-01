@@ -72,19 +72,28 @@ class Loops(object):
 
         # one loop becomes two
         if l1 == l2:
-            ids1 = get_indices(idx1, idx2)
-            ids2 = get_indices(idx2, idx1)
+            # insert new nodes
+            end_idx2 = self.insert_node((self.prev[idx1], idx1))
+            end_idx1 = self.insert_node((self.prev[idx2], idx2))
+
+            ids1 = get_indices(idx1, end_idx1) + [end_idx1]
+            ids2 = get_indices(idx2, end_idx2) + [end_idx2]
             self.loops[self.loops.index(l1)] = ids1[0]
             self.loops.append(ids2[0])
             rewire(ids1)
             rewire(ids2)
+            return end_idx2, end_idx1
 
         # two loops become one
         else:
-            indices = get_indices(idx1, idx1) + get_indices(idx2, idx2)
+            # insert new nodes
+            end_idx1 = self.insert_node((self.prev[idx1], idx1))
+            end_idx2 = self.insert_node((self.prev[idx2], idx2))
+            indices = get_indices(idx1, end_idx1) + [end_idx1] + get_indices(idx2, end_idx2) + [end_idx2]
             self.loops[self.loops.index(l1)] = indices[0]
             del self.loops[self.loops.index(l2)]
             rewire(indices)
+            return end_idx1, end_idx2
 
 
 
@@ -611,12 +620,23 @@ class Mesh2d(object):
         # remove degenerate portals
         portals = list(p for p in portals if p.start_index != p.end_info)
 
+        index_layer = range(len(poly.vertices))
         for portal in portals:
-            poly.graph.split_loops(portal.start_index, portal.end_info)
+            p0, p1 = portal.start_index, portal.end_info
+            p2, p3 = poly.graph.split_loops(p0, p1)
+
+            print("portal: {}, {}".format((p0, p1), (p2, p3)))
+            assert p2 == len(index_layer)
+            index_layer.append(p0)
+            assert p3 == len(index_layer)
+            index_layer.append(p1)
 
 
         m = Mesh2d()
-        m.rooms = list(list(poly.graph.loop_iterator(l)) for l in poly.graph.loops)
+        m.rooms = list(list(index_layer[i] for i in poly.graph.loop_iterator(l)) \
+         for l in poly.graph.loops)
+
+        print("rooms: {}".format(m.rooms))
         m.portals = list((p.start_index, p.end_info) for p in portals)
         m.vertices = poly.vertices[:]
         return m
