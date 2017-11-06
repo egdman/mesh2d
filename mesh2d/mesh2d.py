@@ -612,13 +612,6 @@ class Mesh2d(object):
         portals = list(p for p in portals if p.start_index != p.end_info)
 
 
-        def angle(v0, v1):
-            # backtracking gives -180 degrees, not 180
-            cosine = Geom2.cos_angle(v0, v1)
-            sine = Geom2.sin_angle(v0, v1)
-            return math.acos(cosine) if sine > 0 else -math.acos(cosine)
-
-
         # for each portal add reversed portal
         portals = ((p.start_index, p.end_info) for p in portals)
         fwd, back = tee(portals, 2)
@@ -627,11 +620,6 @@ class Mesh2d(object):
         # we already had pairs of opposites among original portals
         portals = list(set(portals))
         print("{} portals".format(len(portals)))
-
-        # make list of edges including portals
-        all_edges = list(chain(
-            ((idx, poly.graph.next[idx]) for idx in poly.graph.all_nodes_iterator()),
-            portals))
 
 
         next_of_source = list(list() for _ in repeat(None, len(poly.graph.next)))
@@ -644,61 +632,48 @@ class Mesh2d(object):
 
         print(next_of_source)
 
-
-
-        # for each edge, select the "most counter-clockwise" edge as next in the chain
-        for src, tgt in all_edges:
-            in_edge = poly.vertices[tgt] - poly.vertices[src]
-            next_ids = next_of_source[tgt]
-            out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
-                for nxt in next_ids)
-            out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
-
-            next_idx, out_angle = max(izip(next_ids, out_angles), key = itemgetter(1))
-            print("edge {} -> {}, {}".format((src, tgt), next_idx, 180. * out_angle / math.pi))
-
-         # terminator = (None, None)
-
-
-        # rooms = []
-        # for e0 in next_edges.keys():
-        #     e1 = next_edges[e0]
-        #     if e1 is None: continue
-        #     room = [e0, e1]
-        #     rooms.append(room)
-
-        #     while e1 is not None:
-        #         next_edges[e0] = None
-        #         e1 = next_edges[e1]
-
-        # rooms = []
-        # for i, edge in enumerate(all_edges):
-        #     if edge is None: continue
-        #     room = []
-        #     rooms.append(room)
-
-        # make rooms
+        # make list of edges including portals
+        all_edges = list(chain(
+            ((idx, poly.graph.next[idx]) for idx in poly.graph.all_nodes_iterator()),
+            portals))
 
 
 
-################################################################
-        # index_layer = range(len(poly.vertices))
-        # for portal in portals:
-        #     p0, p1 = portal.start_index, portal.end_info
-        #     p2, p3 = poly.graph.split_loops(p0, p1)
+        def angle(v0, v1):
+            # backtracking gives -180 degrees, not 180
+            cosine = Geom2.cos_angle(v0, v1)
+            sine = Geom2.sin_angle(v0, v1)
+            return math.acos(cosine) if sine > 0 else -math.acos(cosine)
 
-        #     print("portal: {}, {}".format((p0, p1), (p2, p3)))
-        #     assert p2 == len(index_layer)
-        #     index_layer.append(p0)
-        #     assert p3 == len(index_layer)
-        #     index_layer.append(p1)
 
+        consumed = {e : False for e in all_edges}
+        rooms = []
+        for edge in all_edges:
+            if consumed[edge]: continue
+
+            room = []
+            rooms.append(room)
+
+            while not consumed[edge]:
+                consumed[edge] = True
+                src, tgt = edge
+                room.append(src)
+                in_edge = poly.vertices[tgt] - poly.vertices[src]
+                next_ids = next_of_source[tgt]
+                out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
+                    for nxt in next_ids)
+                out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
+
+                next_idx, out_angle = max(izip(next_ids, out_angles), key = itemgetter(1))
+                edge = (tgt, next_idx)
+                # print("edge {} -> {}, {}".format((src, tgt), next_idx, 180. * out_angle / math.pi))
+
+
+
+        for r in rooms: print(r)
 
         m = Mesh2d()
-        # m.rooms = list(list(index_layer[i] for i in poly.graph.loop_iterator(l)) \
-        #  for l in poly.graph.loops)
-
-        # print("rooms: {}".format(m.rooms))
+        m.rooms = rooms
         m.portals = portals
         m.vertices = poly.vertices[:]
         return m
