@@ -1,14 +1,12 @@
 import math
-import random
 
-from collections import deque, defaultdict
+from collections import defaultdict
 from operator import itemgetter
-from itertools import chain, izip, repeat
+from itertools import chain, izip, repeat, tee
 from copy import deepcopy
-from rtree import index
 
 from .vector2 import vec, Geom2
-from .utils import pairs, triples, debug_draw_room
+from .utils import pairs, triples
 
 
 class Loops(object):
@@ -27,6 +25,7 @@ class Loops(object):
         self.which_loop.extend(repeat(loop_start, how_many_nodes))
         self.next.extend(ids[1:] + ids[:1])
         self.prev.extend(ids[-1:] + ids[:-1])
+        return loop_start
 
 
     def loop_iterator(self, loop_start):
@@ -35,6 +34,10 @@ class Loops(object):
         while idx != loop_start:
             yield idx
             idx = self.next[idx]
+
+
+    def all_nodes_iterator(self):
+        return chain(*(self.loop_iterator(loop) for loop in self.loops))
 
 
     def insert_node(self, edge_to_split):
@@ -51,49 +54,51 @@ class Loops(object):
 
 
 
-    def split_loops(self, idx1, idx2):
-        def get_indices(i1, i2):
-            it = self.loop_iterator(i1)
-            indices = [next(it)]
-            for i in it:
-                if i == i2: break
-                indices.append(i)
-            return indices
-
-        def rewire(ids):
-            for src, tgt in pairs(chain(ids, ids[:1])):
-                self.next[src] = tgt
-                self.prev[tgt] = src
-                self.which_loop[src] = ids[0]
 
 
-        l1 = self.which_loop[idx1]
-        l2 = self.which_loop[idx2]
+    # def split_loops(self, idx1, idx2):
+    #     def get_indices(i1, i2):
+    #         it = self.loop_iterator(i1)
+    #         indices = [next(it)]
+    #         for i in it:
+    #             if i == i2: break
+    #             indices.append(i)
+    #         return indices
 
-        # one loop becomes two
-        if l1 == l2:
-            # insert new nodes
-            end_idx2 = self.insert_node((self.prev[idx1], idx1))
-            end_idx1 = self.insert_node((self.prev[idx2], idx2))
+    #     def rewire(ids):
+    #         for src, tgt in pairs(chain(ids, ids[:1])):
+    #             self.next[src] = tgt
+    #             self.prev[tgt] = src
+    #             self.which_loop[src] = ids[0]
 
-            ids1 = get_indices(idx1, end_idx1) + [end_idx1]
-            ids2 = get_indices(idx2, end_idx2) + [end_idx2]
-            self.loops[self.loops.index(l1)] = ids1[0]
-            self.loops.append(ids2[0])
-            rewire(ids1)
-            rewire(ids2)
-            return end_idx2, end_idx1
 
-        # two loops become one
-        else:
-            # insert new nodes
-            end_idx1 = self.insert_node((self.prev[idx1], idx1))
-            end_idx2 = self.insert_node((self.prev[idx2], idx2))
-            indices = get_indices(idx1, end_idx1) + [end_idx1] + get_indices(idx2, end_idx2) + [end_idx2]
-            self.loops[self.loops.index(l1)] = indices[0]
-            del self.loops[self.loops.index(l2)]
-            rewire(indices)
-            return end_idx1, end_idx2
+    #     l1 = self.which_loop[idx1]
+    #     l2 = self.which_loop[idx2]
+
+    #     # one loop becomes two
+    #     if l1 == l2:
+    #         # insert new nodes
+    #         end_idx2 = self.insert_node((self.prev[idx1], idx1))
+    #         end_idx1 = self.insert_node((self.prev[idx2], idx2))
+
+    #         ids1 = get_indices(idx1, end_idx1) + [end_idx1]
+    #         ids2 = get_indices(idx2, end_idx2) + [end_idx2]
+    #         self.loops[self.loops.index(l1)] = ids1[0]
+    #         self.loops.append(ids2[0])
+    #         rewire(ids1)
+    #         rewire(ids2)
+    #         return end_idx2, end_idx1
+
+    #     # two loops become one
+    #     else:
+    #         # insert new nodes
+    #         end_idx1 = self.insert_node((self.prev[idx1], idx1))
+    #         end_idx2 = self.insert_node((self.prev[idx2], idx2))
+    #         indices = get_indices(idx1, end_idx1) + [end_idx1] + get_indices(idx2, end_idx2) + [end_idx2]
+    #         self.loops[self.loops.index(l1)] = indices[0]
+    #         del self.loops[self.loops.index(l2)]
+    #         rewire(indices)
+    #         return end_idx1, end_idx2
 
 
 
@@ -352,9 +357,7 @@ class Mesh2d(object):
 
         right_dir, tip, left_dir = sector
 
-        all_ids = chain(*(poly.graph.loop_iterator(loop) for loop in poly.graph.loops))
-
-        for idx in chain(all_ids):
+        for idx in poly.graph.all_nodes_iterator():
             if tip_idx == idx: continue
 
             relative_pt = poly.vertices[idx] - tip
@@ -447,12 +450,7 @@ class Mesh2d(object):
 
 
         def para_to_pt(para):
-            if para == 0:
-                return segment[0]
-            elif para == 1:
-                return segment[1]
-            else:
-                return line[0] + (para * line[1])
+            return line[0] + (para * line[1])
 
         distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
         return min(izip(candid_params, distances), key = itemgetter(1))
@@ -498,7 +496,7 @@ class Mesh2d(object):
                 Mesh2d.find_closest_portal_inside_sector(poly, sector, spike_idx, portals)
 
 
-            # closest edge always exists
+            # closest edge always exists (unless something's horribly wrong)
             # closest vertex - not always (there might be no vertices inside the sector)
             # closest portal - not always (there might be no portals inside the sector
             # or no portals at all)
@@ -572,9 +570,6 @@ class Mesh2d(object):
     def from_polygon(poly, convex_relax_thresh = 0.0):
         portals = Mesh2d.find_portals(poly, convex_relax_thresh)
 
-        # TODO: construct mesh from portals and poly
-        # construct all rooms
-        
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
         segments_to_split = defaultdict(list)
         for portal in portals:
@@ -597,10 +592,6 @@ class Mesh2d(object):
                 next_portal, para = portal.end_info
                 resolve_chain(next_portal)
 
-                # if next_portal.kind != Portal.ToVertex:
-                #     # this should never happen
-                #     raise RuntimeError("resolve_chain did not succeed")
-
                 portal.kind = Portal.ToVertex
                 if para == 0:
                     portal.end_info = next_portal.start_index
@@ -620,23 +611,94 @@ class Mesh2d(object):
         # remove degenerate portals
         portals = list(p for p in portals if p.start_index != p.end_info)
 
-        index_layer = range(len(poly.vertices))
-        for portal in portals:
-            p0, p1 = portal.start_index, portal.end_info
-            p2, p3 = poly.graph.split_loops(p0, p1)
 
-            print("portal: {}, {}".format((p0, p1), (p2, p3)))
-            assert p2 == len(index_layer)
-            index_layer.append(p0)
-            assert p3 == len(index_layer)
-            index_layer.append(p1)
+        def angle(v0, v1):
+            # backtracking gives -180 degrees, not 180
+            cosine = Geom2.cos_angle(v0, v1)
+            sine = Geom2.sin_angle(v0, v1)
+            return math.acos(cosine) if sine > 0 else -math.acos(cosine)
+
+
+        # for each portal add reversed portal
+        portals = ((p.start_index, p.end_info) for p in portals)
+        fwd, back = tee(portals, 2)
+        portals = chain(fwd, (tuple(reversed(p)) for p in back))
+        # remove duplicates that might have occured if
+        # we already had pairs of opposites among original portals
+        portals = list(set(portals))
+        print("{} portals".format(len(portals)))
+
+        # make list of edges including portals
+        all_edges = list(chain(
+            ((idx, poly.graph.next[idx]) for idx in poly.graph.all_nodes_iterator()),
+            portals))
+
+
+        next_of_source = list(list() for _ in repeat(None, len(poly.graph.next)))
+        for src in poly.graph.all_nodes_iterator():
+            tgt = poly.graph.next[src]
+            next_of_source[src].append(tgt)
+
+        for src, tgt in portals:
+            next_of_source[src].append(tgt)
+
+        print(next_of_source)
+
+
+
+        # for each edge, select the "most counter-clockwise" edge as next in the chain
+        for src, tgt in all_edges:
+            in_edge = poly.vertices[tgt] - poly.vertices[src]
+            next_ids = next_of_source[tgt]
+            out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
+                for nxt in next_ids)
+            out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
+
+            next_idx, out_angle = max(izip(next_ids, out_angles), key = itemgetter(1))
+            print("edge {} -> {}, {}".format((src, tgt), next_idx, 180. * out_angle / math.pi))
+
+         # terminator = (None, None)
+
+
+        # rooms = []
+        # for e0 in next_edges.keys():
+        #     e1 = next_edges[e0]
+        #     if e1 is None: continue
+        #     room = [e0, e1]
+        #     rooms.append(room)
+
+        #     while e1 is not None:
+        #         next_edges[e0] = None
+        #         e1 = next_edges[e1]
+
+        # rooms = []
+        # for i, edge in enumerate(all_edges):
+        #     if edge is None: continue
+        #     room = []
+        #     rooms.append(room)
+
+        # make rooms
+
+
+
+################################################################
+        # index_layer = range(len(poly.vertices))
+        # for portal in portals:
+        #     p0, p1 = portal.start_index, portal.end_info
+        #     p2, p3 = poly.graph.split_loops(p0, p1)
+
+        #     print("portal: {}, {}".format((p0, p1), (p2, p3)))
+        #     assert p2 == len(index_layer)
+        #     index_layer.append(p0)
+        #     assert p3 == len(index_layer)
+        #     index_layer.append(p1)
 
 
         m = Mesh2d()
-        m.rooms = list(list(index_layer[i] for i in poly.graph.loop_iterator(l)) \
-         for l in poly.graph.loops)
+        # m.rooms = list(list(index_layer[i] for i in poly.graph.loop_iterator(l)) \
+        #  for l in poly.graph.loops)
 
-        print("rooms: {}".format(m.rooms))
-        m.portals = list((p.start_index, p.end_info) for p in portals)
+        # print("rooms: {}".format(m.rooms))
+        m.portals = portals
         m.vertices = poly.vertices[:]
         return m

@@ -4,8 +4,10 @@ from operator import itemgetter
 from .utils import pairs
 
 
-# vector af arbitrary size
 class vec(object):
+    """
+    vector of arbitrary size
+    """
     tolerance = 1e-8
     tolSq = tolerance * tolerance
 
@@ -80,9 +82,11 @@ class vec(object):
         return (self - other).norm() < dist
 
 
-    # returns min and max corners of the axis-aligned bounding box of points
     @staticmethod
     def aabb(*points):
+        """
+        returns min and max corners of the axis-aligned bounding box of points
+        """
         ndim = len(points[0].comps)
         min_corner, max_corner = [], []
         for dim in range(ndim):
@@ -91,24 +95,34 @@ class vec(object):
         return (vec(*min_corner), vec(*max_corner))
 
 
-    # returns 3d vector
-    # requires at least 3d vectors
+    
     @staticmethod
     def cross3(u, v):
+        """
+        returns 3d vector
+        requires at least 3d vectors
+        """
         return vec(
             u[1] * v[2] - u[2] * v[1],
             u[2] * v[0] - u[0] * v[2],
             u[0] * v[1] - u[1] * v[0])
 
-    # returns scalar
-    # requires at least 2d vectors
+
+
     @staticmethod
     def cross2(u, v):
+        """
+        returns scalar
+        requires at least 2d vectors
+        """
         return u[0] * v[1] - u[1] * v[0]
 
 
-# some functions for 2d geometry
+
 class Geom2:
+    """
+    some functions for 2d geometry
+    """
 
     @staticmethod
     def signed_area(v1, v2, v3):
@@ -142,25 +156,33 @@ class Geom2:
                (Geom2.are_points_ccw(v0, v3, v1) == triangle_ccw)
 
 
-    # returns scalar parameter of projected point
-    # line must be a Ray-like object
+
     @staticmethod
     def project_to_line(point, line):
+        """
+        returns scalar parameter of projected point
+        line must be a Ray-like object
+        """
         line_start = line[0]
         line_guide = line[1]
         return (point - line_start).dot(line_guide) / line_guide.dot(line_guide)
 
 
-    # line must be a Ray-like object
+
     @staticmethod
     def point_to_line_distSq(point, line):
+        """
+        line must be a Ray-like object
+        """
         coef = Geom2.project_to_line(point, line)
         return (line[0] + (coef * line[1]) - point).normSq()
 
 
-    # line must be a Ray-like object
     @staticmethod
     def point_to_line_dist(point, line):
+        """
+        line must be a Ray-like object
+        """
         return math.sqrt(Geom2.point_to_line_distSq(point, line))
 
 
@@ -182,14 +204,17 @@ class Geom2:
             mtx[2]*vector[0] + mtx[3]*vector[1])
 
 
-    # returns a tuple (coef1, coef2, distSq)
-    # coef1 and coef2 are scalars that define the intersection point on line1 and line2 respectively
-    # if lines are parallel, coef1 and coef2 are NaN, but distSq is still correct
-    # if lines are non-parallel, distSq is 0
-    # line1 and line2 must be Ray-like objects
+
     @staticmethod
     def lines_intersect(line1, line2, angle_tolerance = 1e-8):
-        '''
+        """
+        returns a tuple (coef1, coef2, distSq)
+        coef1 and coef2 are scalars that define the intersection point on line1 and line2 respectively
+        if lines are parallel, coef1 and coef2 are NaN, but distSq is still correct
+        if lines are non-parallel, distSq is 0
+        line1 and line2 must be Ray-like objects
+        
+
         s1 = line1[0]
         r1 = line1[1]
 
@@ -205,7 +230,7 @@ class Geom2:
 
         a = ([r2 x s2] - [r2 x s1]) / [r2 x r1]
         b = ([r1 x s1] - [r1 x s2]) / [r1 x r2]
-        '''
+        """
 
         r2s2 = vec.cross2(line2[1], line2[0])
         r2s1 = vec.cross2(line2[1], line1[0])
