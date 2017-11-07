@@ -54,55 +54,6 @@ class Loops(object):
 
 
 
-
-
-    # def split_loops(self, idx1, idx2):
-    #     def get_indices(i1, i2):
-    #         it = self.loop_iterator(i1)
-    #         indices = [next(it)]
-    #         for i in it:
-    #             if i == i2: break
-    #             indices.append(i)
-    #         return indices
-
-    #     def rewire(ids):
-    #         for src, tgt in pairs(chain(ids, ids[:1])):
-    #             self.next[src] = tgt
-    #             self.prev[tgt] = src
-    #             self.which_loop[src] = ids[0]
-
-
-    #     l1 = self.which_loop[idx1]
-    #     l2 = self.which_loop[idx2]
-
-    #     # one loop becomes two
-    #     if l1 == l2:
-    #         # insert new nodes
-    #         end_idx2 = self.insert_node((self.prev[idx1], idx1))
-    #         end_idx1 = self.insert_node((self.prev[idx2], idx2))
-
-    #         ids1 = get_indices(idx1, end_idx1) + [end_idx1]
-    #         ids2 = get_indices(idx2, end_idx2) + [end_idx2]
-    #         self.loops[self.loops.index(l1)] = ids1[0]
-    #         self.loops.append(ids2[0])
-    #         rewire(ids1)
-    #         rewire(ids2)
-    #         return end_idx2, end_idx1
-
-    #     # two loops become one
-    #     else:
-    #         # insert new nodes
-    #         end_idx1 = self.insert_node((self.prev[idx1], idx1))
-    #         end_idx2 = self.insert_node((self.prev[idx2], idx2))
-    #         indices = get_indices(idx1, end_idx1) + [end_idx1] + get_indices(idx2, end_idx2) + [end_idx2]
-    #         self.loops[self.loops.index(l1)] = indices[0]
-    #         del self.loops[self.loops.index(l2)]
-    #         rewire(indices)
-    #         return end_idx1, end_idx2
-
-
-
-
 class Polygon2d(object):
     def __init__(self, vertices):
         # ensure CCW order - outline must be CCW
@@ -229,7 +180,6 @@ class Portal(object):
     def __init__(self):
         self.start_index = None
         self.kind = None
-        self.created = False
 
     class ToSegment: pass
     class ToVertex: pass
@@ -608,7 +558,6 @@ class Mesh2d(object):
             resolve_chain(portal)
 
         # now all portals are 'ToVertex'
-        # remove degenerate portals
 
         # convert portals to edges (tuples)
         portals = ((p.start_index, p.end_info) for p in portals)
@@ -649,6 +598,7 @@ class Mesh2d(object):
             return math.acos(cosine) if sine > 0 else -math.acos(cosine)
 
 
+        # make rooms (a room is just a list of vertex ids)
         rooms = list()
         consumed = [False] * len(edge_buffer)
         for idx, _ in enumerate(edge_buffer):

@@ -372,7 +372,7 @@ class NavMeshView(ObjectView):
         for room in self.navmesh.rooms:
             # print ("room = {}".format(room))
             room_crds = self.get_open_crds(trans_vertices, room)
-            Id = canvas.create_polygon(room_crds, fill='#1A1A1A', activefill='#111111')
+            Id = canvas.create_polygon(room_crds, fill='#1E1E1E', activefill='#111111')
             self.element_ids.append(Id)
 
         # draw portals

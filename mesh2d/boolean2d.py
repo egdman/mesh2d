@@ -78,6 +78,12 @@ def raylike_to_seglike(raylike):
     return (raylike[0], raylike[0] + raylike[1])
 
 
+def get_segments(poly):
+    def loop_segs(loop):
+        return ((idx, poly.graph.next[idx]) for idx in poly.graph.loop_iterator(loop))
+    return chain(*(loop_segs(loop) for loop in poly.graph.loops))
+
+
 def _add_intersections_to_polys(A, B):
     # List of vertices on edge intersections.
     intersection_param_pairs = []
@@ -88,8 +94,8 @@ def _add_intersections_to_polys(A, B):
     A_new_vert_lists = defaultdict(list)
     B_new_vert_lists = defaultdict(list)
 
-    A_edges = Polygon2d.get_segments(chain([A.outline], A.holes))
-    B_edges = Polygon2d.get_segments(chain([B.outline], B.holes))
+    A_edges = get_segments(A)
+    B_edges = get_segments(B)
 
     # Find all intersections of A and B borders.
     for A_edge in A_edges:
@@ -208,9 +214,9 @@ def _bool_do(A, B, op, canvas=None):
      1 (add B to A)
     '''
 
-    # Copy the original polygons because they will be changed by this algorithm.
-    A = A.copy()
-    B = B.copy()
+    # # Copy the original polygons because they will be changed by this algorithm.
+    # A = A.copy()
+    # B = B.copy()
 
     A_intersection_ids, B_intersection_ids, idx_map = _add_intersections_to_polys(A, B)
 
