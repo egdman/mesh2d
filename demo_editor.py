@@ -626,8 +626,8 @@ class Application(tk.Frame):
 
         mode = self.get_bool_mode()
 
-        # # remove helper views
-        # self.remove_draw_objects_glob('obj_creation_helpers/*')
+        # remove helper views
+        self.remove_draw_objects_glob('obj_creation_helpers/*')
 
         # delete all polygon views (we'll add them after boolean operation)
         self.remove_draw_objects_glob('polys/*')

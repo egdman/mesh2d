@@ -609,34 +609,37 @@ class Mesh2d(object):
 
         # now all portals are 'ToVertex'
         # remove degenerate portals
-        portals = list(p for p in portals if p.start_index != p.end_info)
 
+        # convert portals to edges (tuples)
+        portals = ((p.start_index, p.end_info) for p in portals)
+
+        # remove degen portals
+        portals = list(p for p in portals if p[0] != p[1])
 
         # for each portal add reversed portal
-        portals = ((p.start_index, p.end_info) for p in portals)
         fwd, back = tee(portals, 2)
         portals = chain(fwd, (tuple(reversed(p)) for p in back))
         # remove duplicates that might have occured if
         # we already had pairs of opposites among original portals
         portals = list(set(portals))
+
         print("{} portals".format(len(portals)))
 
 
-        next_of_source = list(list() for _ in repeat(None, len(poly.graph.next)))
+        # list of edges
+        edge_buffer = list()
+
+        # lists of indices of outgoing edges for each vertex index
+        next_of_source = list(list() for _ in xrange(len(poly.graph.next)))
+
         for src in poly.graph.all_nodes_iterator():
             tgt = poly.graph.next[src]
-            next_of_source[src].append(tgt)
+            next_of_source[src].append(len(edge_buffer))
+            edge_buffer.append((src, tgt))
 
         for src, tgt in portals:
-            next_of_source[src].append(tgt)
-
-        print(next_of_source)
-
-        # make list of edges including portals
-        all_edges = list(chain(
-            ((idx, poly.graph.next[idx]) for idx in poly.graph.all_nodes_iterator()),
-            portals))
-
+            next_of_source[src].append(len(edge_buffer))
+            edge_buffer.append((src, tgt))
 
 
         def angle(v0, v1):
@@ -646,28 +649,26 @@ class Mesh2d(object):
             return math.acos(cosine) if sine > 0 else -math.acos(cosine)
 
 
-        consumed = {e : False for e in all_edges}
-        rooms = []
-        for edge in all_edges:
-            if consumed[edge]: continue
+        rooms = list()
+        consumed = [False] * len(edge_buffer)
+        for idx, _ in enumerate(edge_buffer):
+            if consumed[idx]: continue
 
-            room = []
+            room = list()
             rooms.append(room)
 
-            while not consumed[edge]:
-                consumed[edge] = True
-                src, tgt = edge
+            while not consumed[idx]:
+                consumed[idx] = True
+                src, tgt = edge_buffer[idx]
                 room.append(src)
+                options = next_of_source[tgt]
+
                 in_edge = poly.vertices[tgt] - poly.vertices[src]
-                next_ids = next_of_source[tgt]
                 out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
-                    for nxt in next_ids)
+                    for nxt in (edge_buffer[opt][1] for opt in options))
+
                 out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
-
-                next_idx, out_angle = max(izip(next_ids, out_angles), key = itemgetter(1))
-                edge = (tgt, next_idx)
-                # print("edge {} -> {}, {}".format((src, tgt), next_idx, 180. * out_angle / math.pi))
-
+                idx, _ = max(izip(options, out_angles), key = itemgetter(1))
 
 
         for r in rooms: print(r)
