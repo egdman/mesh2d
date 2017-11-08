@@ -54,6 +54,23 @@ class Loops(object):
 
 
 
+def is_origin_inside_polyline(polyline):
+    # ray from origin along positive x axis
+    x_ray = (vec(0, 0), vec(1, 0))
+    num_inters = 0
+    # iterate over pairs of vertices
+    for curr_v, next_v in pairs(polyline):
+        if curr_v[1] == 0: curr_v += vec(0, 1e-8)
+        if next_v[1] == 0: next_v += vec(0, 1e-8)
+
+        if curr_v[1] * next_v[1] < 0:
+            _, b, _ = Geom2.lines_intersect((curr_v, next_v - curr_v), x_ray)
+            if b > 0: num_inters += 1
+
+    return num_inters % 2 > 0
+
+
+
 class Polygon2d(object):
     def __init__(self, vertices):
         # ensure CCW order - outline must be CCW
@@ -82,20 +99,8 @@ class Polygon2d(object):
         # transform vertices so that query point is at the origin, append start vertex at end to wrap
         verts = (self.vertices[idx] - point for idx in \
             chain(self.graph.loop_iterator(loop_start), [loop_start]))
-
-        # ray from origin along positive x axis
-        x_ray = (vec(0, 0), vec(1, 0))
-        num_inters = 0
-        # iterate over pairs of vertices
-        for curr_v, next_v in pairs(verts):
-            if curr_v[1] == 0: curr_v += vec(0, 1e-8)
-            if next_v[1] == 0: next_v += vec(0, 1e-8)
-
-            if curr_v[1] * next_v[1] < 0:
-                _, b, _ = Geom2.lines_intersect((curr_v, next_v - curr_v), x_ray)
-                if b > 0: num_inters += 1
-
-        return num_inters % 2 > 0
+        return is_origin_inside_polyline(verts)
+        
 
 
     def _get_segment_helper(self, seg_ids):
@@ -516,8 +521,8 @@ class Mesh2d(object):
 
 
 
-    @staticmethod
-    def from_polygon(poly, convex_relax_thresh = 0.0):
+    def __init__(self, poly, convex_relax_thresh = 0.0):
+        poly = deepcopy(poly)
         portals = Mesh2d.find_portals(poly, convex_relax_thresh)
 
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
@@ -623,8 +628,8 @@ class Mesh2d(object):
 
         for r in rooms: print(r)
 
-        m = Mesh2d()
-        m.rooms = rooms
-        m.portals = portals
-        m.vertices = poly.vertices[:]
-        return m
+        self.rooms = rooms
+        self.portals = portals
+        self.vertices = poly.vertices
+        self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
+        self.holes = list(list(poly.graph.loop_iterator(h) for h in poly.graph.loops[1:]))

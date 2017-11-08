@@ -653,14 +653,14 @@ class Application(tk.Frame):
             return
 
         del self._polygons[:]
+
         for poly in new_polys:
-            poly = Mesh2d.from_polygon(poly)
+            self._polygons.append(poly)
+            navmesh = Mesh2d(poly)
             # poly.break_into_convex(10., self.debug_canvas)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
-                NavMeshView(poly))
-
-            self._polygons.append(poly)
+                NavMeshView(navmesh))
 
         # set current tool on 'Select'
         # self.active_tool = self.select_tool
