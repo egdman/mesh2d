@@ -31,10 +31,9 @@ def draw_poly(poly, cv, no_draw_these=None):
     if no_draw_these is None: no_draw_these = []
     outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
 
-    outl = get_crds(poly, outline)
-    cv.create_line(outl, fill='cyan')
+    cv.create_line(get_crds(poly, outline), fill='cyan')
 
-    holes = list(list(poly.graph.loop_iterator(h) for h in poly.graph.loops[1:]))
+    holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
     for hole in holes:
         cv.create_line(get_crds(poly, hole), fill='orange')
 

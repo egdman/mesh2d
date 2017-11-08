@@ -469,10 +469,10 @@ class Application(tk.Frame):
         #     if num > 0: self.draw_all()
 
         ptr_over_poly_now = False
-        for poly in self._polygons:
-            if poly.point_inside(pointer_world):
-                ptr_over_poly_now = True
-                break
+        # for poly in self._polygons:
+        #     if poly.point_inside(pointer_world):
+        #         ptr_over_poly_now = True
+        #         break
 
         if ptr_over_poly_now and not self.pointer_over_poly:
             self.canvas.config(cursor='center_ptr')

@@ -87,9 +87,9 @@ class Polygon2d(object):
     def add_hole(self, vertices):
         # ensure CW order - holes must be CW
         if Geom2.poly_signed_area(vertices) < 0:
-            vertices = vertices[:]
+            self.vertices.extend(vertices)
         else:
-            vertices = vertices[::-1]
+            self.vertices.extend(vertices[::-1])
 
         self.graph.add_loop(len(vertices))
 
@@ -627,4 +627,4 @@ class Mesh2d(object):
         self.portals = portals
         self.vertices = poly.vertices
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
-        self.holes = list(list(poly.graph.loop_iterator(h) for h in poly.graph.loops[1:]))
+        self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])

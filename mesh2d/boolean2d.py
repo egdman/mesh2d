@@ -60,7 +60,7 @@ def _get_pieces_outside_inside(this_poly, intersect_ids, other_poly):
     this_poly_outline = list(this_poly.graph.loop_iterator(this_poly.graph.loops[0]))
     outside, inside = _bool_cut_loop(this_poly_outline, this_poly, intersect_ids, other_poly)
 
-    this_poly_holes = list(list(his_poly.graph.loop_iterator(h)) for h in this_poly.graph.loops[1:])
+    this_poly_holes = list(list(this_poly.graph.loop_iterator(h)) for h in this_poly.graph.loops[1:])
     for hole in this_poly_holes:
         h_o, h_i = _bool_cut_loop(hole, this_poly, intersect_ids, other_poly)
         outside.extend(h_o)
