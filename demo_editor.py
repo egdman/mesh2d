@@ -2,6 +2,7 @@ import os
 import random
 import yaml
 import fnmatch
+import platform
 import Tkinter as tk
 from argparse import ArgumentParser
 
@@ -227,24 +228,28 @@ class Application(tk.Frame):
 
         self.canvas.config(xscrollincrement=1, yscrollincrement=1)
 
-        self.debug_canvas.bind('<Button-1>', lambda ev: self.debug_canvas.scan_mark(ev.x, ev.y))
-        self.debug_canvas.bind('<Motion>', self._debug_pan_mouse)
+        self.debug_canvas.bind_all('<Button-1>', lambda ev: self.debug_canvas.scan_mark(ev.x, ev.y))
+        self.debug_canvas.bind_all('<Motion>', self._debug_pan_mouse)
 
         # bind right and left mouse clicks
-        self.canvas.bind('<ButtonRelease-1>', self._left_up)
-        self.canvas.bind('<ButtonRelease-3>', self._right_up)
+        self.canvas.bind_all('<ButtonRelease-1>', self._left_up)
+        self.canvas.bind_all('<ButtonRelease-3>', self._right_up)
 
 
         # bind camera controls
-        self.canvas.bind('<Control-Button-1>', self._ctrl_left_down)
-        self.canvas.bind('<Control-Button-3>', self._ctrl_right_down)
-        self.canvas.bind('<Motion>', self._mouse_moved)
+        self.canvas.bind_all('<Control-Button-1>', self._ctrl_left_down)
+        self.canvas.bind_all('<Control-Button-3>', self._ctrl_right_down)
+        self.canvas.bind_all('<Motion>', self._mouse_moved)
 
 
         # mouse wheel
-        self.canvas.bind('<Button-4>', self._mousewheel_up)
-        self.canvas.bind('<Button-5>', self._mousewheel_down)
+        if "windows" in platform.system().lower():
+            self.canvas.bind_all('<MouseWheel>', self._windows_mousewheel)
+        else:
+            self.canvas.bind_all('<Button-4>', self._mousewheel_up)
+            self.canvas.bind_all('<Button-5>', self._mousewheel_down)
 
+        
 
         self.canvas.pack(side = tk.RIGHT, expand = True, fill = tk.BOTH)
 
@@ -508,7 +513,11 @@ class Application(tk.Frame):
             self.draw_all()
 
 
-
+    def _windows_mousewheel(self, event):
+        if event.delta > 0:
+            self._mousewheel_up(event)
+        else:
+            self._mousewheel_down(event)
 
 
     def _mousewheel_up(self, event):
