@@ -451,28 +451,11 @@ class Application(tk.Frame):
         self.last_y = event.y
 
 
-        # find polygon vertices near the mouse pointer
-        # self.remove_draw_objects_glob("highlight_points/*")
-        # if len(self._polygons) > 0:
-        #     ptr_world = self.get_world_crds(event.x, event.y)
-        #     vect_nw = ptr_world - vec(20., 20.)
-        #     vect_se = ptr_world + vec(20., 20.)
-
-        #     num = 0
-        #     for poly in self._polygons:
-        #         idxs = poly.find_verts_in_bbox(vect_nw, vect_se)
-        #         for idx in idxs:
-        #             vect = poly.vertices[idx]
-        #             self.add_draw_object("highlight_points/{}".format(num),
-        #                 PointHelperView(loc = vect, color = 'green'))
-        #             num += 1
-        #     if num > 0: self.draw_all()
-
         ptr_over_poly_now = False
-        # for poly in self._polygons:
-        #     if poly.point_inside(pointer_world):
-        #         ptr_over_poly_now = True
-        #         break
+        for poly in self._polygons:
+            if poly.point_inside(pointer_world):
+                ptr_over_poly_now = True
+                break
 
         if ptr_over_poly_now and not self.pointer_over_poly:
             self.canvas.config(cursor='center_ptr')
@@ -505,7 +488,7 @@ class Application(tk.Frame):
                 self.camera_rot += angle
 
                 # make camera rotate around the marker rather than screen center
-                rot_center_world = vec(self.rot_marker_world[0], self.rot_marker_world[0])
+                rot_center_world = vec(self.rot_marker_world[0], self.rot_marker_world[1])
                 rot_mtx = Matrix.rotate2d(rot_center_world, angle)
                 camera_new_pos = rot_mtx.multiply(v2col(self.camera_pos)).values
                 self.camera_pos = vec(camera_new_pos[0], camera_new_pos[1])
