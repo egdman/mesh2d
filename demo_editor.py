@@ -228,18 +228,18 @@ class Application(tk.Frame):
 
         self.canvas.config(xscrollincrement=1, yscrollincrement=1)
 
-        self.debug_canvas.bind_all('<Button-1>', lambda ev: self.debug_canvas.scan_mark(ev.x, ev.y))
-        self.debug_canvas.bind_all('<Motion>', self._debug_pan_mouse)
+        self.debug_canvas.bind('<Button-1>', lambda ev: self.debug_canvas.scan_mark(ev.x, ev.y))
+        self.debug_canvas.bind('<Motion>', self._debug_pan_mouse)
 
         # bind right and left mouse clicks
-        self.canvas.bind_all('<ButtonRelease-1>', self._left_up)
-        self.canvas.bind_all('<ButtonRelease-3>', self._right_up)
+        self.canvas.bind('<ButtonRelease-1>', self._left_up)
+        self.canvas.bind('<ButtonRelease-3>', self._right_up)
 
 
         # bind camera controls
-        self.canvas.bind_all('<Control-Button-1>', self._ctrl_left_down)
-        self.canvas.bind_all('<Control-Button-3>', self._ctrl_right_down)
-        self.canvas.bind_all('<Motion>', self._mouse_moved)
+        self.canvas.bind('<Control-Button-1>', self._ctrl_left_down)
+        self.canvas.bind('<Control-Button-3>', self._ctrl_right_down)
+        self.canvas.bind('<Motion>', self._mouse_moved)
 
 
         # mouse wheel
@@ -479,19 +479,17 @@ class Application(tk.Frame):
                     .multiply(v2col(vec(delta_x, delta_y))).values
                 )
 
-                self.camera_pos -= vec(delta[0], delta[1])
+                self.camera_pos -= vec(*delta[:2])
 
 
             elif self.rotate_mode:
                 angle = 0.008*delta_x
-
                 self.camera_rot += angle
 
                 # make camera rotate around the marker rather than screen center
-                rot_center_world = vec(self.rot_marker_world[0], self.rot_marker_world[1])
-                rot_mtx = Matrix.rotate2d(rot_center_world, angle)
+                rot_mtx = Matrix.rotate2d(self.rot_marker_world, angle)
                 camera_new_pos = rot_mtx.multiply(v2col(self.camera_pos)).values
-                self.camera_pos = vec(camera_new_pos[0], camera_new_pos[1])
+                self.camera_pos = vec(*camera_new_pos[:2])
 
             self.draw_all()
 
@@ -519,8 +517,7 @@ class Application(tk.Frame):
             Matrix.scale2d(scale_cntr_world, (rate, rate))
             .multiply(v2col(self.camera_pos)).values
         )
-        self.camera_pos = vec(camera_new_pos[0], camera_new_pos[1])
-
+        self.camera_pos = vec(*camera_new_pos[:2])
         self.draw_all()
 
 
