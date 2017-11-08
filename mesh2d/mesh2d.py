@@ -214,11 +214,6 @@ class Portal(object):
 
 
 class Mesh2d(object):
-    def __init__(self):
-        self.rooms = []
-        self.portals = []
-        self.vertices = []
-
 
     @staticmethod
     def find_spikes(poly, threshold):

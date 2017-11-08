@@ -20,27 +20,29 @@ def get_crds(poly, loop, closed=True):
     crds = []
     for idx in loop:
         vrt = poly.vertices[idx]
-        crds.append(vrt.x)
-        crds.append(vrt.y)
+        crds.extend(vrt.comps)
     if closed:
-        crds.append(poly.vertices[loop[0]].x)
-        crds.append(poly.vertices[loop[0]].y)
+        crds.extend(poly.vertices[loop[0]].comps)
     return crds
 
 
 
 def draw_poly(poly, cv, no_draw_these=None):
     if no_draw_these is None: no_draw_these = []
-    outl = get_crds(poly, poly.outline)
+    outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
+
+    outl = get_crds(poly, outline)
     cv.create_line(outl, fill='cyan')
-    for hole in poly.holes:
+
+    holes = list(list(poly.graph.loop_iterator(h) for h in poly.graph.loops[1:]))
+    for hole in holes:
         cv.create_line(get_crds(poly, hole), fill='orange')
 
-    for idx in chain(poly.outline, *poly.holes):
+    for idx in chain(outline, *holes):
         if idx in no_draw_these: continue
 
         vrt = poly.vertices[idx]
-        cv.create_text(vrt.x, vrt.y, fill='white',
+        cv.create_text(vrt[0], vrt[1], fill='white',
             text=" " + str(idx), anchor=tk.NW)
 
 
@@ -58,7 +60,7 @@ def debug_draw_bool(A, B, A_pieces, B_pieces, x_map, cv):
     for B_int, A_int in x_map.iteritems():
         crds = A.vertices[A_int]
 
-        cv.create_text(crds.x, crds.y, fill='white',
+        cv.create_text(crds[0], crds[1], fill='white',
             text="{} = {}".format(A_int, B_int), anchor=tk.NW)
 
     if len(x_map) > 0:
@@ -87,7 +89,7 @@ def debug_draw_room(poly, loops, cv):
     anchors = (tk.SW, tk.NW)
     for idx in chain(*loops):
         vrt = poly.vertices[idx]
-        cv.create_text(vrt.x, vrt.y, fill='white',
+        cv.create_text(vrt[0], vrt[1], fill='white',
             # text = "{}: {}".format(idx, vrt), anchor=anchors[switch],
             # anchor=anchors[switch],
             text = "{}".format(idx),

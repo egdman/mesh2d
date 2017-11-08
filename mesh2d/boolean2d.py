@@ -1,5 +1,6 @@
-from itertools import izip, chain
+from itertools import izip, chain, tee
 from collections import deque, defaultdict
+from copy import deepcopy
 
 from .mesh2d import Polygon2d
 from .vector2 import Geom2
@@ -56,9 +57,11 @@ def _get_pieces_outside_inside(this_poly, intersect_ids, other_poly):
     1) all pieces of the border oth this_poly outside other_poly, and
     2) all pieces of the border oth this_poly inside other_poly.
     '''
-    outside, inside = _bool_cut_loop(this_poly.outline, this_poly, intersect_ids, other_poly)
+    this_poly_outline = list(this_poly.graph.loop_iterator(this_poly.graph.loops[0]))
+    outside, inside = _bool_cut_loop(this_poly_outline, this_poly, intersect_ids, other_poly)
 
-    for hole in this_poly.holes:
+    this_poly_holes = list(list(his_poly.graph.loop_iterator(h)) for h in this_poly.graph.loops[1:])
+    for hole in this_poly_holes:
         h_o, h_i = _bool_cut_loop(hole, this_poly, intersect_ids, other_poly)
         outside.extend(h_o)
         inside.extend(h_i)
@@ -94,23 +97,21 @@ def _add_intersections_to_polys(A, B):
     A_new_vert_lists = defaultdict(list)
     B_new_vert_lists = defaultdict(list)
 
-    A_edges = get_segments(A)
-    B_edges = get_segments(B)
-
     # Find all intersections of A and B borders.
-    for A_edge in A_edges:
-        for B_edge in B_edges:
+    for A_edge in get_segments(A):
+        for B_edge in get_segments(B):
             seg_A = seglike_to_raylike(get_segment_crds(A_edge, A.vertices))
             seg_B = seglike_to_raylike(get_segment_crds(B_edge, B.vertices))
 
             a, b, _ = Geom2.lines_intersect(seg_A, seg_B)
-            if 0 < a and a < 1 and 0 < b and b < 1:
+            if 0 <= a and a < 1 and 0 <= b and b < 1:
                 pair_index = len(intersection_param_pairs)
                 intersection_param_pairs.append((a, b))
 
                 A_new_vert_lists[A_edge].append(pair_index)
                 B_new_vert_lists[B_edge].append(pair_index)
 
+    print("{} intersection points".format(len(intersection_param_pairs)))
     # This list will hold indices into A's vertex buffer of all intersection verts that will be added to A.
     A_new_ids = []
 
@@ -215,8 +216,8 @@ def _bool_do(A, B, op, canvas=None):
     '''
 
     # # Copy the original polygons because they will be changed by this algorithm.
-    # A = A.copy()
-    # B = B.copy()
+    A = deepcopy(A)
+    B = deepcopy(B)
 
     A_intersection_ids, B_intersection_ids, idx_map = _add_intersections_to_polys(A, B)
 
@@ -271,7 +272,7 @@ def _bool_do(A, B, op, canvas=None):
         verts = list(A.vertices[idx] for idx in loop[:-1])
         # if CCW
         if Geom2.poly_signed_area(verts) > 0:
-            new_polys.append(Polygon2d(verts, range(len(verts))))
+            new_polys.append(Polygon2d(verts))
         else:
             new_holes.append(verts)
 
@@ -283,7 +284,7 @@ def _bool_do(A, B, op, canvas=None):
         verts = list(B.vertices[idx] for idx in loop[:-1])
         # if CW
         if flip * Geom2.poly_signed_area(verts) > 0:
-            new_polys.append(Polygon2d(verts, range(len(verts))))
+            new_polys.append(Polygon2d(verts))
         else:
             new_holes.append(verts)
 

@@ -464,10 +464,10 @@ class Application(tk.Frame):
         #     if num > 0: self.draw_all()
 
         ptr_over_poly_now = False
-        # for poly in self._polygons:
-        #     if poly.point_inside(pointer_world):
-        #         ptr_over_poly_now = True
-        #         break
+        for poly in self._polygons:
+            if poly.point_inside(pointer_world):
+                ptr_over_poly_now = True
+                break
 
         if ptr_over_poly_now and not self.pointer_over_poly:
             self.canvas.config(cursor='center_ptr')
@@ -640,14 +640,14 @@ class Application(tk.Frame):
         # new_polys = [new_poly]
 
         if mode == 'subtract' and len(self._polygons) > 0:
-            new_polys = bool_subtract(self._polygons[-1], new_poly)
+            new_polys = bool_subtract(self._polygons[-1], new_poly, self.debug_canvas)
             
 
         elif mode == 'add':
             if len(self._polygons) == 0:
                 new_polys = [new_poly]
             else:
-                new_polys = bool_add(self._polygons[-1], new_poly)
+                new_polys = bool_add(self._polygons[-1], new_poly, self.debug_canvas)
 
         else:
             return
@@ -656,8 +656,7 @@ class Application(tk.Frame):
 
         for poly in new_polys:
             self._polygons.append(poly)
-            navmesh = Mesh2d(poly)
-            # poly.break_into_convex(10., self.debug_canvas)
+            navmesh = Mesh2d(poly, 15)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
                 NavMeshView(navmesh))
@@ -670,53 +669,53 @@ class Application(tk.Frame):
 
 
 
-    def _add_navmesh(self, event):
-        if len(self._new_vertices) < 3: return
+    # def _add_navmesh(self, event):
+    #     if len(self._new_vertices) < 3: return
 
-        threshold = 10.0 # degrees
+    #     threshold = 10.0 # degrees
 
-        new_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
+    #     new_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
 
-        # to save in case of failure
-        self.last_created_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
+    #     # to save in case of failure
+    #     self.last_created_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
 
-        del self._new_vertices[:]
+    #     del self._new_vertices[:]
 
-        # break into convex parts:
+    #     # break into convex parts:
 
-        def error_dump(poly):
-            with open("debug_dump.yaml", 'w') as debf:
-                yaml.dump(poly, debf)           
+    #     def error_dump(poly):
+    #         with open("debug_dump.yaml", 'w') as debf:
+    #             yaml.dump(poly, debf)           
 
-        try:
-            new_poly.break_into_convex(threshold, self.debug_canvas)
+    #     try:
+    #         new_poly.break_into_convex(threshold, self.debug_canvas)
 
-            print ("number of portals      = {0}".format(len(new_poly.portals)))
-            print ("number of convex rooms = {0}".format(len(new_poly.rooms)))
+    #         print ("number of portals      = {0}".format(len(new_poly.portals)))
+    #         print ("number of convex rooms = {0}".format(len(new_poly.rooms)))
 
-            if len(new_poly.rooms) != len(new_poly.portals) + 1:
-                print ("Error!")
-                error_dump(new_poly)
+    #         if len(new_poly.rooms) != len(new_poly.portals) + 1:
+    #             print ("Error!")
+    #             error_dump(new_poly)
     
-        except ValueError as ve:
-            error_dump(self.last_created_poly)
-            raise ve
+    #     except ValueError as ve:
+    #         error_dump(self.last_created_poly)
+    #         raise ve
 
-        self._polygons.append(new_poly)
+    #     self._polygons.append(new_poly)
 
-        # add navmesh view
-        self.add_draw_object(
-            'navmesh_{}'.format(len(self._polygons)),
-            NavMeshView(new_poly)
-        )
+    #     # add navmesh view
+    #     self.add_draw_object(
+    #         'navmesh_{}'.format(len(self._polygons)),
+    #         NavMeshView(new_poly)
+    #     )
 
-        # remove helper views
-        self.remove_draw_objects_glob('obj_creation_helpers/*')
+    #     # remove helper views
+    #     self.remove_draw_objects_glob('obj_creation_helpers/*')
 
-        # set current tool on 'Select'
-        # self.active_tool = self.select_tool
+    #     # set current tool on 'Select'
+    #     # self.active_tool = self.select_tool
 
-        self.draw_all()
+    #     self.draw_all()
 
 
 
