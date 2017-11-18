@@ -170,8 +170,6 @@ class Application(tk.Frame):
 
         self.active_tool = self.create_tool
 
-        self.last_created_poly = None
-
         # camera control modes
         self.pan_mode = False
         self.rotate_mode = False
@@ -367,9 +365,9 @@ class Application(tk.Frame):
 
 
 
-    def _save_last(self):
-        with open("saved_poly.yaml", 'w') as savef:
-            yaml.dump(self.last_created_poly, savef)
+    def _save_last(self): pass
+        # with open("saved_poly.yaml", 'w') as savef:
+            # yaml.dump(self.last_created_poly, savef)
 
 
     def _create_wall_cb(self):
@@ -626,17 +624,20 @@ class Application(tk.Frame):
 
         del self._new_vertices[:]
 
-        # new_polys = [new_poly]
+
+        new_polys = []
 
         if mode == 'subtract' and len(self._polygons) > 0:
-            new_polys = bool_subtract(self._polygons[-1], new_poly, self.debug_canvas)
+            for old_poly in self._polygons:
+                new_polys.extend(bool_subtract(old_poly, new_poly, self.debug_canvas))
             
 
         elif mode == 'add':
             if len(self._polygons) == 0:
                 new_polys = [new_poly]
             else:
-                new_polys = bool_add(self._polygons[-1], new_poly, self.debug_canvas)
+                for old_poly in self._polygons:
+                    new_polys.extend(bool_add(old_poly, new_poly, self.debug_canvas))
 
         else:
             return

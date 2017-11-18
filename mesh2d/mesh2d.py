@@ -430,6 +430,7 @@ class Mesh2d(object):
 
             tip = poly.vertices[spike_idx]
             sector = (right_dir, tip, left_dir)
+
             # find closest edge
             closest_seg, closest_seg_para, closest_seg_dst = \
                 Mesh2d.find_closest_edge_inside_sector(poly, sector, spike_idx)
@@ -437,17 +438,11 @@ class Mesh2d(object):
             if closest_seg is None:
                 raise RuntimeError("Could not find a single edge inside sector")
 
-            # find closest vertex
-            closest_vert_i, closest_vert_dst = \
-                Mesh2d.find_closest_vert_inside_sector(poly, sector, spike_idx)
-
             # find closest portal
             closest_portal, closest_portal_para, closest_portal_dst = \
                 Mesh2d.find_closest_portal_inside_sector(poly, sector, spike_idx, portals)
 
-
             # closest edge always exists (unless something's horribly wrong)
-            # closest vertex - not always (there might be no vertices inside the sector)
             # closest portal - not always (there might be no portals inside the sector
             # or no portals at all)
             portal = Portal()
@@ -456,16 +451,15 @@ class Mesh2d(object):
             new_portals = [portal]
 
             portal.start_index = spike_idx
-            portal.kind = Portal.ToSegment
-            portal.end_info = closest_seg, closest_seg_para
+            if closest_seg_para == 0 or closest_seg_para == 1:
+                portal.kind = Portal.ToVertex
+                portal.end_info = closest_seg[int(closest_seg_para)]
+
+            else:
+                portal.kind = Portal.ToSegment
+                portal.end_info = closest_seg, closest_seg_para
 
             closest_dst = closest_seg_dst
-
-            # check if there is a vertex closer or equally close than the closest edge (prefer vertex)
-            if closest_vert_dst is not None and closest_vert_dst <= closest_dst:
-                closest_dst = closest_vert_dst
-                portal.kind = Portal.ToVertex
-                portal.end_info = closest_vert_i
 
             # check if there is a portal closer than the previous closest element
             # TODO When attaching to an existing portal, need to reconsider the necessity of the older portal
