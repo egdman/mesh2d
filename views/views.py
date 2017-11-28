@@ -2,6 +2,7 @@ from mesh2d import vec, Matrix
 import random
 import numpy as np
 import uuid
+from itertools import izip
 
 class ObjectView(object):
     '''
@@ -10,7 +11,7 @@ class ObjectView(object):
     as points, lines, polygons, navmeshes, various helpers etc.
     '''
     def __init__(self):
-        self.world_vertices = []
+        self.world_vertices_np = None # numpy array of vertex world coords
         self.element_ids = []
         self.coord_fences = []
         # generate unique tag for all canvas objects of this draw object
@@ -33,40 +34,38 @@ class ObjectView(object):
 
     
     def draw_self(self, camera_transform, canvas):
-        if len(self.world_vertices) == 0:
+        if self.world_vertices_np is None:
             self.first_time_draw(canvas)
 
-            crd_buf = []
+            np_buffer = []
+            verts_added = 0
             # add this tag to all canvas objects of this draw object
             for eid in self.element_ids:
                 canvas.addtag_withtag(self.tag, eid)
 
                 # remember all coordinates of all canvas objects of this draw object
                 curr_obj_crds = canvas.coords(eid)
-                self.coord_fences.append(len(crd_buf) + len(curr_obj_crds))
-                crd_buf.extend(curr_obj_crds)
+                for idx in range(len(curr_obj_crds) / 2):
+                    verts_added += 1
+                    np_buffer.extend((
+                        curr_obj_crds[2*idx],
+                        curr_obj_crds[2*idx + 1],
+                        1.0))
 
-            # convert crd_buf to list of vec's
-            for loc in range(len(crd_buf) / 2):
-                # store coords as flat array including the 3rd coord which is 1.0
-                self.world_vertices.extend([
-                    crd_buf[2*loc],
-                    crd_buf[2*loc+1],
-                    1.0
-                ])
+                self.coord_fences.append(verts_added)
 
-            # print("new object with {} vertices created".format(len(self.world_vertices)))
-            # print("fences: {}".format(self.coord_fences))
+            self.world_vertices_np = np.ndarray(
+                shape = (len(np_buffer) / 3, 3),
+                buffer=np.array(np_buffer))
 
         self.redraw(camera_transform, canvas)
 
 
 
     def set_vector(self, index, vector):
-        index *= 3
-        self.world_vertices[index] = vector[0]
-        self.world_vertices[index + 1] = vector[1]
-        self.world_vertices[index + 2] = vector[2]
+        self.world_vertices_np[index][0] = vector[0]
+        self.world_vertices_np[index][1] = vector[1]
+        self.world_vertices_np[index][2] = vector[2]
 
 
 
@@ -74,11 +73,9 @@ class ObjectView(object):
         '''
         move all coordinates in world_vertices by vec
         '''
-        for vnum in range(len(self.world_vertices) / 3):
-            vhead = vnum*3
-            old_vec = vec(self.world_vertices[vhead], self.world_vertices[vhead+1])
-            self.set_vector(vnum, old_vec + vec)
-
+        for vnum in range(self.world_vertices_np.shape[0]):
+            old_vec = vec(self.world_vertices_np[vnum][0], self.world_vertices_np[vnum][1])
+            self.set_vec(vnum, old_vec + vec)
 
 
     def cleanup(self, canvas):
@@ -87,27 +84,11 @@ class ObjectView(object):
 
 
     def redraw(self, camera_transform, canvas):
-        obj_view = camera_transform
-
-        # use numpy:
-        screen_vertices = self.apply_transform_np(obj_view, self.world_vertices)
-
-        # # do not use numpy:
-        # screen_vertices = self.apply_transform(obj_view, self.world_vertices)
-
-        screen_crd_buf = []
-        for screen_v in screen_vertices:
-            screen_crd_buf.append(screen_v[0])
-            screen_crd_buf.append(screen_v[1])
-
+        screen_coords = self.apply_transform_np(camera_transform, self.world_vertices_np)
         notch = 0
-
-        for (loc, eid) in enumerate(self.element_ids):
-            fence = self.coord_fences[loc]
-            new_crds = screen_crd_buf[notch:fence]
-            canvas.coords(eid, *new_crds)
+        for (elem_id, fence) in izip(self.element_ids, self.coord_fences):
+            canvas.coords(elem_id, *(screen_coords[notch:fence].flatten()))
             notch = fence
-
 
 
     @staticmethod
@@ -132,27 +113,19 @@ class ObjectView(object):
         return crds
 
 
-    @staticmethod
-    def apply_transform(transform, vertices):
-        return list(transform.multiply(Matrix.column_vec((vert[0], vert[1]))).values[:-1] \
-            for vert in vertices)
-
 
     @staticmethod
-    def apply_transform_np(transform, vertices): 
-        # np_verts = np.array(vertices).T
-        np_verts = np.ndarray(
-            shape = (len(vertices) / 3, 3),
-            buffer=np.array(vertices)
-        ).T
-
+    def apply_transform_np(transform, np_vertices):
+        # make transform matrix of shape
+        # |a d|
+        # |b e|
+        # |c f|
         transform = np.ndarray(
             shape = transform.shape,
             buffer = np.array(transform.values)
-        )[:-1] # chop off the last row of the matrix (we don't need it)
+        )[:-1].T # chop off the last column of the matrix (we don't need it)
 
-        # return np.array(transform).dot(np_verts).T[:, :-1]
-        return np.array(transform).dot(np_verts).T
+        return np_vertices.dot(transform)
 
 
 
