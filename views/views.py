@@ -257,10 +257,6 @@ class SegmentHelperView(ObjectView):
         delta2 = vec2 - self.v2
         self.v1 = vec1
         self.v2 = vec2
-
-        # self.world_vertices[0] = delta1.column(0)
-        # self.world_vertices[1] = delta2.column(0)
-
         self.set_vector(0, delta1)
         self.set_vector(1, delta2)
 
@@ -291,8 +287,6 @@ class PlusView(ObjectView):
         sz = self.size
 
         vrt = [self.loc - self.down, self.loc + self.down, self.loc - self.right, self.loc + self.right]
-        # vrt = [vec(0, -sz),vec(0, sz),vec(-sz, 0),vec(sz, 0),]
-        # trans_vrt = list(self.apply_transform(camera_transform, vrt))
         crds = self.get_open_crds(vrt, (0, 1))
         id1 = canvas.create_line(crds, fill=self.color, width=1)
         crds = self.get_open_crds(vrt, (2, 3))
@@ -331,7 +325,6 @@ class NavMeshView(ObjectView):
         rnd = lambda: random.randint(0,255)
         self.color = '#%02X%02X%02X' % (rnd(),rnd(),rnd())
         self.navmesh = navmesh
-        self.obj_trans = Matrix.identity(3)
 
         super(NavMeshView, self).__init__()
 

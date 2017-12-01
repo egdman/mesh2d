@@ -1,6 +1,5 @@
 import os
 import random
-import yaml
 import fnmatch
 import platform
 import Tkinter as tk
