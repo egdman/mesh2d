@@ -566,22 +566,24 @@ class Mesh2d(object):
         # we already had pairs of opposites among original portals
         portals = list(set(portals))
 
-        print("{} portals".format(len(portals)))
+        # print("{} portals".format(len(portals)))
 
 
         # list of edges
         edge_buffer = list()
 
-        # lists of indices of outgoing edges for each vertex index
-        next_of_source = list(list() for _ in xrange(len(poly.graph.next)))
+        # linked lists of indices of outgoing edges for each vertex index
+        ways_to_go = Loops()
+        first_way_ids = list(None for _ in xrange(len(poly.graph.next)))
 
         for src in poly.graph.all_nodes_iterator():
             tgt = poly.graph.next[src]
-            next_of_source[src].append(len(edge_buffer))
+            first_way_ids[src] = ways_to_go.add_loop(1)
             edge_buffer.append((src, tgt))
 
         for src, tgt in portals:
-            next_of_source[src].append(len(edge_buffer))
+            way_idx = first_way_ids[src]
+            ways_to_go.insert_node((way_idx, ways_to_go.next[way_idx]))
             edge_buffer.append((src, tgt))
 
 
@@ -605,17 +607,17 @@ class Mesh2d(object):
                 consumed[idx] = True
                 src, tgt = edge_buffer[idx]
                 room.append(src)
-                options = next_of_source[tgt]
+                ways0, ways1 = tee(ways_to_go.loop_iterator(first_way_ids[tgt]))
 
                 in_edge = poly.vertices[tgt] - poly.vertices[src]
                 out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
-                    for nxt in (edge_buffer[opt][1] for opt in options))
+                    for nxt in (edge_buffer[way][1] for way in ways0))
 
                 out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
-                idx, _ = max(izip(options, out_angles), key = itemgetter(1))
+                idx, _ = max(izip(ways1, out_angles), key = itemgetter(1))
 
 
-        for r in rooms: print(r)
+        # for r in rooms: print(r)
 
         self.rooms = rooms
         self.portals = portals
