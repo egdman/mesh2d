@@ -111,7 +111,7 @@ def _add_intersections_to_polys(A, B):
                 A_new_vert_lists[A_edge].append(pair_index)
                 B_new_vert_lists[B_edge].append(pair_index)
 
-    print("{} intersection points".format(len(intersection_param_pairs)))
+    # print("{} intersection points".format(len(intersection_param_pairs)))
     # This list will hold indices into A's vertex buffer of all intersection verts that will be added to A.
     A_new_ids = []
 
@@ -156,11 +156,11 @@ def _concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail):
 
     while True:
 
-        print("A:")
-        print (A_open)
-        print("B:")
-        print (list(list(idx_map.get(idx, str(idx)) for idx in loop) for loop in B_open))
-        print("")
+        # print("A:")
+        # print (A_open)
+        # print("B:")
+        # print (list(list(idx_map.get(idx, str(idx)) for idx in loop) for loop in B_open))
+        # print("")
 
         A_pos, A_piece = next(nonzero_pieces(A_open), (None, None))
         if A_pos is None: break

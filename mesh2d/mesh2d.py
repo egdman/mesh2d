@@ -182,10 +182,6 @@ class Polygon2d(object):
 
 
 class Portal(object):
-    def __init__(self):
-        self.start_index = None
-        self.kind = None
-
     class ToSegment: pass
     class ToVertex: pass
     class ToPortal: pass
@@ -298,27 +294,6 @@ class Mesh2d(object):
                     closest_edge = (seg_i1, seg_i2)
 
         return closest_edge, closest_para, closest_distSq
-
-
-
-    @staticmethod
-    def find_closest_vert_inside_sector(poly, sector, tip_idx):
-        closest_idx, closest_distSq = None, None
-
-        right_dir, tip, left_dir = sector
-
-        for idx in poly.graph.all_nodes_iterator():
-            if tip_idx == idx: continue
-
-            relative_pt = poly.vertices[idx] - tip
-            # check if current point is inside sector
-            if vec.cross2(right_dir, relative_pt) > 0 and vec.cross2(left_dir, relative_pt) < 0:
-                distSq = relative_pt.normSq()
-                if closest_distSq is None or distSq < closest_distSq:
-                    closest_distSq = distSq
-                    closest_idx = idx
-
-        return closest_idx, closest_distSq
 
 
 

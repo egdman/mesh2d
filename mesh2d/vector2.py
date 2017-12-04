@@ -163,8 +163,7 @@ class Geom2:
         returns scalar parameter of projected point
         line must be a Ray-like object
         """
-        line_start = line[0]
-        line_guide = line[1]
+        line_start, line_guide = line
         return (point - line_start).dot(line_guide) / line_guide.dot(line_guide)
 
 
