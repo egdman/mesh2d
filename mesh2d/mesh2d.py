@@ -214,6 +214,7 @@ class Mesh2d(object):
     @staticmethod
     def find_spikes(poly, threshold):
         spikes = []
+        accum_angle = 0.
         for loop_start in poly.graph.loops:
             indices = chain(poly.graph.loop_iterator(loop_start),
                 [loop_start, poly.graph.next[loop_start]])
@@ -228,12 +229,13 @@ class Mesh2d(object):
                     side1 = cand_v - prev_v
                     side2 = next_v - cand_v
 
+                    # positive external angle is concavity
                     external_angle = math.acos(Geom2.cos_angle(side1, side2))
                     external_angle = external_angle*180.0 / math.pi
-
-                    if external_angle > threshold:
+                    accum_angle = max(0., accum_angle + external_angle)
+                    if accum_angle > threshold:
                         spikes.append((i0, i1, i2))
-
+                        accum_angle = 0.
         return spikes
 
 
@@ -574,7 +576,6 @@ class Mesh2d(object):
         consumed = [False] * len(edge_buffer)
         for idx, _ in enumerate(edge_buffer):
             if consumed[idx]: continue
-
             room = list()
             rooms.append(room)
 
@@ -593,7 +594,6 @@ class Mesh2d(object):
 
 
         # for r in rooms: print(r)
-
         self.rooms = rooms
         self.portals = portals
         self.vertices = poly.vertices
