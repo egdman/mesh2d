@@ -53,7 +53,7 @@ class vec(object):
 
     # equality test
     def __eq__(self, right):
-        return hash(self) == hash(right)
+        return self.comps == right.comps
 
     # inequality test
     def __ne__(self, right):
