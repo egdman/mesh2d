@@ -149,6 +149,16 @@ def remove_duplicates(vertices):
     return cleaned
 
 
+def get_event_modifiers(event):
+    state = [
+        ('ctrl',  event.state & 0x0004),
+        ('ralt',  event.state & 0x0080),
+        ('lalt',  event.state & 0x0008),
+        ('shift', event.state & 0x0001),
+    ]
+    return set(modname for (modname, hit) in state if hit != 0)
+
+
 class Application(tk.Frame):
     def __init__(self, master=None, db_mode = False):
         tk.Frame.__init__(self, master)
@@ -379,22 +389,11 @@ class Application(tk.Frame):
     def _create_cb(self):
         self.active_tool = self.create_tool     
 
-
-    def _get_event_modifiers(self, event):
-        state = {
-            'ctrl': event.state & 0x0004 != 0,
-            'ralt': event.state & 0x0080 != 0,
-            'lalt': event.state & 0x0008 != 0,
-            'shift': event.state & 0x0001 != 0,
-        }
-        return set(modname for modname in state if state[modname])
-
-
     def _left_up(self, event):
         self.pan_mode = False
         self.remove_draw_object('pan_marker')
         
-        mods = self._get_event_modifiers(event)
+        mods = get_event_modifiers(event)
 
         # do something only if no modifiers
         if len(mods) == 0:
@@ -405,7 +404,7 @@ class Application(tk.Frame):
         self.rotate_mode = False
         self.remove_draw_object('rotate_marker')
 
-        mods = self._get_event_modifiers(event)
+        mods = get_event_modifiers(event)
 
         # do something only if no modifiers
         if len(mods) == 0:
