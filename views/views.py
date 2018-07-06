@@ -141,8 +141,7 @@ class WallHelperView(ObjectView):
     def find_corners(self):
         wd = self.width
         axis = self.v2 - self.v1
-        perp = vec(axis[1], -axis[0])
-        perp /= perp.length()
+        perp = vec(axis[1], -axis[0]).normalized()
         c1 = self.v1 + wd*perp
         c2 = self.v1 - wd*perp
 

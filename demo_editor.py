@@ -153,7 +153,6 @@ def get_event_modifiers(event):
     state = [
         ('ctrl',  event.state & 0x0004),
         ('ralt',  event.state & 0x0080),
-        ('lalt',  event.state & 0x0008),
         ('shift', event.state & 0x0001),
     ]
     return set(modname for (modname, hit) in state if hit != 0)
@@ -163,6 +162,7 @@ class Application(tk.Frame):
     def __init__(self, master=None, db_mode = False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
+        self.this_is_windows = "windows" in platform.system().lower()
 
         self.grid()
         self.createWidgets()
@@ -172,12 +172,7 @@ class Application(tk.Frame):
         self._dots_ids = []
         self.dot_size = 3
 
-        self.select_tool = Select(self)
-        self.create_tool = Create(self)
-        # ......
-        # ......
-
-        self.active_tool = self.create_tool
+        self.active_tool = Create(self)
 
         # camera control modes
         self.pan_mode = False
@@ -250,7 +245,7 @@ class Application(tk.Frame):
 
 
         # mouse wheel
-        if "windows" in platform.system().lower():
+        if self.this_is_windows:
             self.canvas.bind_all('<MouseWheel>', self._windows_mousewheel)
         else:
             self.canvas.bind_all('<Button-4>', self._mousewheel_up)
@@ -285,14 +280,14 @@ class Application(tk.Frame):
         self.createToolBtn.pack()
 
 
-        self.saveToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'save.gif'))
-        self.saveToolBtn = tk.Button(
-            self,
-            image=self.saveToolIcon,
-            height=31,
-            width=31,
-            command = self._save_last)
-        self.saveToolBtn.pack()
+        # self.saveToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'save.gif'))
+        # self.saveToolBtn = tk.Button(
+        #     self,
+        #     image=self.saveToolIcon,
+        #     height=31,
+        #     width=31,
+        #     command = self._save_last)
+        # self.saveToolBtn.pack()
 
 
         self.wallToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'wall.gif'))
@@ -380,14 +375,17 @@ class Application(tk.Frame):
 
 
     def _create_wall_cb(self):
+        print("wall tool")
         self.active_tool = CreateWall(self)
 
 
     def _select_cb(self):
-        self.active_tool = self.select_tool
+        print("select tool")
+        self.active_tool = Select(self)
 
     def _create_cb(self):
-        self.active_tool = self.create_tool     
+        print("free polygon tool")
+        self.active_tool = Create(self)
 
     def _left_up(self, event):
         self.pan_mode = False
