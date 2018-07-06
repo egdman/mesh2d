@@ -33,14 +33,13 @@ class Tool(object):
         pass
 
 
-
-class CreateWall(Tool):
+class CreateWallTool(Tool):
     def __init__(self, parent):
         self.width_mode = False
         self.start = None
         self.end = None
-        self.width = 1.
-        super(CreateWall, self).__init__(parent)
+        self.width = 25.
+        super(CreateWallTool, self).__init__(parent)
 
 
     # toggle width adjustment mode
@@ -62,9 +61,9 @@ class CreateWall(Tool):
     def left_click(self, event):
         app = self.parent
         if not self.width_mode:
-
             if self.start is not None:
-                app.add_wall(app.draw_objects['tool_helpers/wall'].find_corners())
+                c0, c1, c2, c3 = app.draw_objects['tool_helpers/wall'].find_corners()
+                app.add_polygon((c0, c1, c2, c3))
                 app.remove_draw_objects_glob('tool_helpers/wall')
                 self.width_mode = False
 
@@ -96,16 +95,44 @@ class CreateWall(Tool):
 
 
 
-class Create(Tool):
+class FreePolyTool(Tool):
+    def __init__(self, parent):
+        self.vertices = []
+        super(FreePolyTool, self).__init__(parent)
 
     def right_click(self, event):
-        self.parent._add_polygon(event)
+        app = self.parent
+        self.vertices = remove_duplicates(self.vertices)
+        if len(self.vertices) < 3: return
+
+        app.add_polygon(self.vertices)
+
+        del self.vertices[:]
+        # remove helper views
+        app.remove_draw_objects_glob('tool_helpers/free_poly/*')
+        app.draw_all()
+
 
     def left_click(self, event):
-        self.parent._add_vertex(event)
+        app = self.parent
+        new_vrt = app.get_world_crds(event.x, event.y)
+        app.add_draw_object(
+            'tool_helpers/free_poly/point_{}'.format(len(self.vertices)),
+            PointHelperView(loc=new_vrt))
+
+        self.vertices.append(new_vrt)
+
+        if len(self.vertices) > 1:
+            prev_vrt = self.vertices[-2]
+
+            app.add_draw_object(
+                'tool_helpers/free_poly/segment_{}'.format(len(self.vertices)),
+                SegmentHelperView(prev_vrt, new_vrt))
+
+        app.draw_all()
 
 
-class Select(Tool):
+class SelectTool(Tool):
 
     def right_click(self, event):
         print("SELECT: right click")
@@ -152,12 +179,11 @@ class Application(tk.Frame):
         self.grid()
         self.createWidgets()
 
-        self._new_vertices = []
         self._polygons = []
         self._dots_ids = []
         self.dot_size = 3
 
-        self.active_tool = Create(self)
+        self.active_tool = FreePolyTool(self)
 
         # camera control modes
         self.pan_mode = False
@@ -251,7 +277,7 @@ class Application(tk.Frame):
             image=self.selectToolIcon,
             height=31,
             width=31,
-            command = self._select_cb)
+            command = lambda: self.change_active_tool(SelectTool))
         self.selectToolBtn.pack()
 
 
@@ -261,27 +287,18 @@ class Application(tk.Frame):
             image=self.createToolIcon,
             height=31,
             width=31,
-            command = self._create_cb)
+            command = lambda: self.change_active_tool(FreePolyTool))
         self.createToolBtn.pack()
-
-
-        # self.saveToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'save.gif'))
-        # self.saveToolBtn = tk.Button(
-        #     self,
-        #     image=self.saveToolIcon,
-        #     height=31,
-        #     width=31,
-        #     command = self._save_last)
-        # self.saveToolBtn.pack()
 
 
         self.wallToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'wall.gif'))
         self.wallToolBtn = tk.Button(
             self,
             image=self.wallToolIcon,
-            command = self._create_wall_cb
+            command = lambda: self.change_active_tool(CreateWallTool)
         )
         self.wallToolBtn.pack()
+
 
         self.minusIcon = tk.PhotoImage(file=os.path.join(button_dir, 'minus.gif'))
         self.minusBtn = tk.Button(
@@ -341,7 +358,6 @@ class Application(tk.Frame):
             pass
 
 
-
     def remove_draw_objects_glob(self, pattern):
         for matched_name in self.find_draw_objects_glob(pattern):
             self.remove_draw_object(matched_name)
@@ -353,24 +369,10 @@ class Application(tk.Frame):
             if fnmatch.fnmatch(name, pattern))
 
 
+    def change_active_tool(self, tool):
+        self.remove_draw_objects_glob("tool_helpers/*")
+        self.active_tool = tool(self)
 
-    def _save_last(self): pass
-        # with open("saved_poly.yaml", 'w') as savef:
-            # yaml.dump(self.last_created_poly, savef)
-
-
-    def _create_wall_cb(self):
-        print("wall tool")
-        self.active_tool = CreateWall(self)
-
-
-    def _select_cb(self):
-        print("select tool")
-        self.active_tool = Select(self)
-
-    def _create_cb(self):
-        print("free polygon tool")
-        self.active_tool = Create(self)
 
     def _left_up(self, event):
         self.pan_mode = False
@@ -564,45 +566,8 @@ class Application(tk.Frame):
         return vec(screen_crds[0], screen_crds[1])
 
 
-
-    def _add_vertex(self, event):
-        x = event.x
-        y = event.y
-        new_vrt = self.get_world_crds(event.x, event.y)
-
-        self.add_draw_object(
-            'obj_creation_helpers/point_{}'.format(len(self._new_vertices)),
-            PointHelperView(loc=new_vrt))
-        
-        self._new_vertices.append(new_vrt)
-
-        if len(self._new_vertices) > 1:
-            prev_vrt = self._new_vertices[-2]
-
-            self.add_draw_object(
-                'obj_creation_helpers/segment_{}'.format(len(self._new_vertices)),
-                SegmentHelperView(prev_vrt, new_vrt)
-            )
-
-        self.draw_all()
-
-
-
-    def _add_polygon(self, _):
-        self._new_vertices = remove_duplicates(self._new_vertices)
-        if len(self._new_vertices) < 3: return
-
-        self._add_polygon_impl(self._new_vertices)
-
-        del self._new_vertices[:]
-        self.draw_all()
-
-
-    def _add_polygon_impl(self, vertices):
+    def add_polygon(self, vertices):
         mode = self.get_bool_mode()
-
-        # remove helper views
-        self.remove_draw_objects_glob('obj_creation_helpers/*')
 
         # delete all polygon views (we'll add them after boolean operation)
         self.remove_draw_objects_glob('polys/*')
@@ -634,14 +599,6 @@ class Application(tk.Frame):
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
                 NavMeshView(navmesh))
-
-
-
-    def add_wall(self, corners):
-        c0, c1, c2, c3 = corners
-        self._add_polygon_impl((c0, c1, c2, c3))
-        self.draw_all()
-
 
 
     def draw_all(self):
