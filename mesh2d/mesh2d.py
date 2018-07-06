@@ -75,12 +75,12 @@ class Polygon2d(object):
     def __init__(self, vertices):
         # ensure CCW order - outline must be CCW
         if Geom2.poly_signed_area(vertices) > 0:
-            self.vertices = vertices[:]
+            self.vertices = list(vertices)
         else:
-            self.vertices = vertices[::-1]
+            self.vertices = list(vertices[::-1])
 
         self.graph = Loops()
-        self.graph.add_loop(len(vertices))
+        self.graph.add_loop(len(self.vertices))
 
 
 

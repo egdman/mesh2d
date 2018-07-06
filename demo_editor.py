@@ -62,25 +62,18 @@ class CreateWall(Tool):
     def left_click(self, event):
         app = self.parent
         if not self.width_mode:
-            click_world = app.get_world_crds(event.x, event.y)
 
-            if self.start is None:
-                self.start = click_world
-                self.end = click_world + vec(1, 0)
-
-                app.add_draw_object('wall_tool_helpers/wall_helper',
-                    WallHelperView(self.start, self.end, self.width))
-
-                app.draw_all()
-
-            else:
-                self.end = click_world
-                app.add_wall(self.start, self.end, self.width)
-                # app.remove_draw_objects_glob('wall_tool_helpers/*')
+            if self.start is not None:
+                app.add_wall(app.draw_objects['tool_helpers/wall'].find_corners())
+                app.remove_draw_objects_glob('tool_helpers/wall')
                 self.width_mode = False
-                self.start = self.end
-                self.end = None
 
+            self.start = app.get_world_crds(event.x, event.y)
+            self.end = self.start + vec(1, 0)
+            app.add_draw_object('tool_helpers/wall',
+                WallHelperView(self.start, self.end, self.width))
+
+            app.draw_all()
 
 
     def mouse_moved(self, event, dx, dy):
@@ -97,7 +90,7 @@ class CreateWall(Tool):
     # draw temporary wall helpers
     def redraw(self):
         app = self.parent
-        app.draw_objects['wall_tool_helpers/wall_helper'].modify(
+        app.draw_objects['tool_helpers/wall'].modify(
             self.start, self.end, self.width)
         app.draw_all()
 
@@ -106,7 +99,6 @@ class CreateWall(Tool):
 class Create(Tool):
 
     def right_click(self, event):
-        # self.parent._add_navmesh(event)
         self.parent._add_polygon(event)
 
     def left_click(self, event):
@@ -130,13 +122,6 @@ class Select(Tool):
         print ("mouse at {}, {} from event".format(event.x, event.y))
         print ("mouse at {} in world".format(world_c))
         print ("mouse at {} on screen".format(screen_c))
-
-        # x = float( self.canvas.canvasx(event.x) )
-        # y = float( self.canvas.canvasy(event.y) )
-        # pointer = vec(x, y)
-
-        # for poly in parent._polygons:
-        #   if poly.point_inside(pointer): 
 
 
 def remove_duplicates(vertices):
@@ -603,10 +588,17 @@ class Application(tk.Frame):
 
 
 
-    def _add_polygon(self, event):
+    def _add_polygon(self, _):
         self._new_vertices = remove_duplicates(self._new_vertices)
         if len(self._new_vertices) < 3: return
 
+        self._add_polygon_impl(self._new_vertices)
+
+        del self._new_vertices[:]
+        self.draw_all()
+
+
+    def _add_polygon_impl(self, vertices):
         mode = self.get_bool_mode()
 
         # remove helper views
@@ -615,11 +607,7 @@ class Application(tk.Frame):
         # delete all polygon views (we'll add them after boolean operation)
         self.remove_draw_objects_glob('polys/*')
 
-        # new_poly = Polygon2d(self._new_vertices[:], range(len(self._new_vertices)))
-        new_poly = Polygon2d(self._new_vertices[:])
-
-        del self._new_vertices[:]
-
+        new_poly = Polygon2d(vertices[:])
 
         new_polys = []
 
@@ -647,117 +635,11 @@ class Application(tk.Frame):
             self.add_draw_object('polys/poly_{}'.format(num_polys),
                 NavMeshView(navmesh))
 
-        # set current tool on 'Select'
-        # self.active_tool = self.select_tool
-
-        self.draw_all()
 
 
-
-
-    # def _add_navmesh(self, event):
-    #     if len(self._new_vertices) < 3: return
-
-    #     threshold = 10.0 # degrees
-
-    #     new_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
-
-    #     # to save in case of failure
-    #     self.last_created_poly = Mesh2d(self._new_vertices[:], range(len(self._new_vertices)))
-
-    #     del self._new_vertices[:]
-
-    #     # break into convex parts:
-
-    #     def error_dump(poly):
-    #         with open("debug_dump.yaml", 'w') as debf:
-    #             yaml.dump(poly, debf)           
-
-    #     try:
-    #         new_poly.break_into_convex(threshold, self.debug_canvas)
-
-    #         print ("number of portals      = {0}".format(len(new_poly.portals)))
-    #         print ("number of convex rooms = {0}".format(len(new_poly.rooms)))
-
-    #         if len(new_poly.rooms) != len(new_poly.portals) + 1:
-    #             print ("Error!")
-    #             error_dump(new_poly)
-    
-    #     except ValueError as ve:
-    #         error_dump(self.last_created_poly)
-    #         raise ve
-
-    #     self._polygons.append(new_poly)
-
-    #     # add navmesh view
-    #     self.add_draw_object(
-    #         'navmesh_{}'.format(len(self._polygons)),
-    #         NavMeshView(new_poly)
-    #     )
-
-    #     # remove helper views
-    #     self.remove_draw_objects_glob('obj_creation_helpers/*')
-
-    #     # set current tool on 'Select'
-    #     # self.active_tool = self.select_tool
-
-    #     self.draw_all()
-
-
-
-    def add_wall(self, start_vec, end_vec, width):
-        # self.active_tool = self.select_tool
-        # print ("added wall {}, {}, {}".format(start, end, width))
-        class cc: pass
-        start, end = cc(), cc()
-        start.x, start.y = start_vec.comps
-        end.x, end.y = end_vec.comps
-
-        # add placeholder code to test polys with holes
-        if start.x > end.x: start.x, end.x = end.x, start.x
-        if start.y > end.y: start.y, end.y = end.y, start.y
-        v0 = vec(start.x, start.y)
-        v1 = vec(end.x, start.y)
-        v2 = vec(end.x, end.y)
-        v3 = vec(start.x, end.y)
-
-        width = end.x - start.x
-        height = end.y - start.y
-        cntr_x = start.x + width / 2.
-        cntr_y = start.y + height / 2.
-        cntr = vec(cntr_x, cntr_y)
-
-        sz = min(height, width) / 2.
-
-        h10 = (vec(.1, .9) - vec(.5, .5) )*sz + cntr
-        h11 = (vec(.1, .1) - vec(.5, .5) )*sz + cntr
-        h12 = (vec(.4, .1) - vec(.5, .5) )*sz + cntr
-        h13 = (vec(.4, .9) - vec(.5, .5) )*sz + cntr
-
-        h20 = (vec(.9, .9) - vec(.5, .5) )*sz + cntr
-        h21 = (vec(.5, .5) - vec(.5, .5) )*sz + cntr
-        h22 = (vec(.9, .1) - vec(.5, .5) )*sz + cntr
-
-        h30 = (vec(.55, .72) - vec(.5, .5) )*sz + cntr
-        h31 = (vec(.79, .92) - vec(.5, .5) )*sz + cntr
-        h32 = (vec(.60, .85) - vec(.5, .5) )*sz + cntr
-
-
-        new_poly = Mesh2d([v0, v1, v2, v3], range(4))
-        new_poly.add_hole([h10, h11, h12, h13])
-        new_poly.add_hole([h20, h21, h22])
-        new_poly.add_hole([h30, h31, h32])
-
-        cv = self.debug_canvas
-        for cid in cv.find_all(): cv.delete(cid)
-
-        new_poly.break_into_convex(10., self.debug_canvas)
-        self._polygons.append(new_poly)
-
-        num_polys = len(self.find_draw_objects_glob('polys/*'))
-        self.add_draw_object('polys/poly_{}'.format(num_polys),
-            NavMeshView(new_poly))
-
+    def add_wall(self, corners):
+        c0, c1, c2, c3 = corners
+        self._add_polygon_impl((c0, c1, c2, c3))
         self.draw_all()
 
 

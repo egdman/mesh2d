@@ -65,7 +65,7 @@ class ObjectView(object):
     def set_vector(self, index, vector):
         self.world_vertices_np[index][0] = vector[0]
         self.world_vertices_np[index][1] = vector[1]
-        self.world_vertices_np[index][2] = vector[2]
+        self.world_vertices_np[index][2] = 1
 
 
 
@@ -256,8 +256,8 @@ class SegmentHelperView(ObjectView):
         delta2 = vec2 - self.v2
         self.v1 = vec1
         self.v2 = vec2
-        self.set_vector(0, delta1)
-        self.set_vector(1, delta2)
+        self.set_vector(0, delta1.append(1))
+        self.set_vector(1, delta2.append(1))
 
 
 
