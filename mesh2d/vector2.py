@@ -1,21 +1,22 @@
 import math
-from itertools import izip, chain
+from itertools import chain
 from operator import itemgetter
 from .utils import pairs
 
+try:
+    from itertools import izip as zip
+except ImportError:
+    pass
 
 class vec(object):
     """
     vector of arbitrary size
     """
-    tolerance = 1e-8
-    tolSq = tolerance * tolerance
-
     def __init__(self, *comps):
         self.comps = tuple(float(c) for c in comps)
 
     def dot(self, right):
-        return sum((c0 * c1 for (c0, c1) in izip(self.comps, right.comps)))
+        return sum((c0 * c1 for (c0, c1) in zip(self.comps, right.comps)))
 
     def normSq(self):
         return self.dot(self)
@@ -37,7 +38,7 @@ class vec(object):
 
     # add vector
     def __add__(self, right):
-        return vec(*(c0 + c1 for (c0, c1) in izip(self.comps, right.comps)))
+        return vec(*(c0 + c1 for (c0, c1) in zip(self.comps, right.comps)))
 
     # subtract vector
     def __sub__(self, right):
@@ -77,10 +78,6 @@ class vec(object):
 
     def prepend(self, *head):
         return vec(*chain(head, self.comps))
-
-    def is_closer(self, other, dist = tolerance):
-        return (self - other).norm() < dist
-
 
     @staticmethod
     def aabb(*points):
