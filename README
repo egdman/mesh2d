@@ -1,0 +1,7 @@
+Place polygon points with left clicks, right click to finish creating the polygon. Self-intersections are not allowed.
+Press plus or minus button in lower left corner to switch between addition and subtraction mode.
+
+Camera controls:
+ctrl + left mouse to pan
+ctrl + right mouse to rotate
+mouse wheel to zoom
