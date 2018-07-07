@@ -57,7 +57,7 @@ class CreateWallTool(Tool):
         self.redraw()
 
 
-    # if not in window adj mode, set start- and end-points
+    # if not in width adjust mode, set start- and end-points
     def left_click(self, event):
         app = self.parent
         if not self.width_mode:
@@ -94,7 +94,6 @@ class CreateWallTool(Tool):
         app.draw_all()
 
 
-
 class FreePolyTool(Tool):
     def __init__(self, parent):
         self.vertices = []
@@ -102,7 +101,15 @@ class FreePolyTool(Tool):
 
     def right_click(self, event):
         app = self.parent
-        self.vertices = remove_duplicates(self.vertices)
+
+        def remove_duplicates(vertices):
+            seen = set()
+            for v in vertices:
+                if v not in seen:
+                    seen.add(v)
+                    yield v
+
+        self.vertices = list(remove_duplicates(self.vertices))
         if len(self.vertices) < 3: return
 
         app.add_polygon(self.vertices)
@@ -149,16 +156,6 @@ class SelectTool(Tool):
         print ("mouse at {}, {} from event".format(event.x, event.y))
         print ("mouse at {} in world".format(world_c))
         print ("mouse at {} on screen".format(screen_c))
-
-
-def remove_duplicates(vertices):
-    added = set()
-    cleaned = []
-    for v in vertices:
-        if v in added: continue
-        added.add(v)
-        cleaned.append(v)
-    return cleaned
 
 
 def get_event_modifiers(event):
