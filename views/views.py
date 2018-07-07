@@ -84,7 +84,7 @@ class ObjectView(object):
 
 
     def redraw(self, camera_transform, canvas):
-        screen_coords = self.apply_transform_np(camera_transform, self.world_vertices_np)
+        screen_coords = self.world_vertices_np.dot(camera_transform[:-1].T)
         notch = 0
         for (elem_id, fence) in izip(self.element_ids, self.coord_fences):
             canvas.coords(elem_id, *(screen_coords[notch:fence].flatten()))
@@ -111,21 +111,6 @@ class ObjectView(object):
         crds.append(vertices[indices[0]][0])
         crds.append(vertices[indices[0]][1])
         return crds
-
-
-
-    @staticmethod
-    def apply_transform_np(transform, np_vertices):
-        # make transform matrix of shape
-        # |a d|
-        # |b e|
-        # |c f|
-        transform = np.ndarray(
-            shape = transform.shape,
-            buffer = np.array(transform.values)
-        )[:-1].T # chop off the last column of the matrix (we don't need it)
-
-        return np_vertices.dot(transform)
 
 
 

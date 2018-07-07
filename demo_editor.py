@@ -15,8 +15,8 @@ button_dir = os.path.join(resource_dir, 'buttons')
 parser = ArgumentParser()
 parser.add_argument('-d', '--debug', action='store_true', help='Start in debug mode')
 
-def v2col(v):
-    return Matrix.column_vec(v.append(1))
+def v2col(x, y):
+    return Matrix.column_vec((x, y, 1.))
 
 class Tool(object):
 
@@ -453,11 +453,10 @@ class Application(tk.Frame):
 
             if self.pan_mode:
 
-                # rotate and zoom delta to get correct pan direction:
                 delta = (
                     Matrix.rotate2d((0,0), self.camera_rot)
-                    .multiply(Matrix.scale2d((0,0), (self.camera_size, self.camera_size)))
-                    .multiply(v2col(vec(delta_x, delta_y))).values
+                    .dot(Matrix.scale2d((0,0), (self.camera_size, self.camera_size)))
+                    .dot(v2col(delta_x, delta_y))
                 )
 
                 self.camera_pos -= vec(*delta[:2])
@@ -469,7 +468,7 @@ class Application(tk.Frame):
 
                 # make camera rotate around the marker rather than screen center
                 rot_mtx = Matrix.rotate2d(self.rot_marker_world, angle)
-                camera_new_pos = rot_mtx.multiply(v2col(self.camera_pos)).values
+                camera_new_pos = rot_mtx.dot(v2col(*self.camera_pos[:2]))
                 self.camera_pos = vec(*camera_new_pos[:2])
 
             self.draw_all()
@@ -496,7 +495,7 @@ class Application(tk.Frame):
         scale_cntr_world = self.get_world_crds(event.x, event.y)
         camera_new_pos = (
             Matrix.scale2d(scale_cntr_world, (rate, rate))
-            .multiply(v2col(self.camera_pos)).values
+            .dot(v2col(*self.camera_pos[:2]))
         )
         self.camera_pos = vec(*camera_new_pos[:2])
         self.draw_all()
@@ -518,11 +517,10 @@ class Application(tk.Frame):
 
         # un-zoom
         zoom_mtx = Matrix.scale2d((0,0), (1./self.camera_size, 1./self.camera_size))
-        # zoom_mtx = Matrix.identity(3)
 
         offset_mtx = Matrix.translate2d(self.canvas_center)
 
-        return offset_mtx.multiply(zoom_mtx).multiply(rot_mtx).multiply(tran_mtx)
+        return offset_mtx.dot(zoom_mtx).dot(rot_mtx).dot(tran_mtx)
 
 
 
@@ -548,21 +546,19 @@ class Application(tk.Frame):
         # translate
         tran_mtx = Matrix.translate2d(self.camera_pos)
 
-        return tran_mtx.multiply(rot_mtx).multiply(zoom_mtx).multiply(offset_mtx)
+        return tran_mtx.dot(rot_mtx).dot(zoom_mtx).dot(offset_mtx)
 
 
 
 
     def get_world_crds(self, screen_x, screen_y):
-        screen_crds = vec(screen_x, screen_y)
-        world_crds = self.get_screen_to_world_mtx().multiply(v2col(screen_crds)).values
+        world_crds = self.get_screen_to_world_mtx().dot(v2col(screen_x, screen_y))
         return vec(world_crds[0], world_crds[1])
 
 
 
     def get_screen_crds(self, world_x, world_y):
-        world_crds = vec(world_x, world_y)
-        screen_crds = self.get_world_to_screen_mtx().multiply(v2col(world_crds)).values
+        screen_crds = self.get_world_to_screen_mtx().dot(v2col(world_x, world_y))
         return vec(screen_crds[0], screen_crds[1])
 
 
