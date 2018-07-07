@@ -169,6 +169,10 @@ def get_event_modifiers(event):
     ]
     return set(modname for (modname, hit) in state if hit != 0)
 
+class Bool:
+    class Subtract: pass
+    class Add: pass
+
 
 class Application(tk.Frame):
     def __init__(self, master=None, db_mode = False):
@@ -318,11 +322,10 @@ class Application(tk.Frame):
         self.plusBtn.pack(side = tk.BOTTOM)
 
 
-
     def get_bool_mode(self):
         if self.plusBtn.cget('relief') == tk.SUNKEN:
-            return 'add'
-        return 'subtract'
+            return Bool.Add
+        return Bool.Subtract
 
 
 
@@ -570,27 +573,32 @@ class Application(tk.Frame):
 
         new_poly = Polygon2d(vertices[:])
 
+        # do boolean operations
         new_polys = []
 
-        if mode == 'subtract' and len(self._polygons) > 0:
+        if mode == Bool.Subtract:
             for old_poly in self._polygons:
                 new_polys.extend(bool_subtract(old_poly, new_poly, self.debug_canvas))
             
+        elif mode == Bool.Add:
+            while len(self._polygons):
+                old_poly = self._polygons.pop()
 
-        elif mode == 'add':
-            if len(self._polygons) == 0:
-                new_polys = [new_poly]
-            else:
-                for old_poly in self._polygons:
-                    new_polys.extend(bool_add(old_poly, new_poly, self.debug_canvas))
+                # add 2 polys, get either 1 or 2 polys
+                try:
+                    (new_poly,) = bool_add(old_poly, new_poly, self.debug_canvas)
+                except ValueError:
+                    new_polys.append(old_poly)
+
+            new_polys.append(new_poly)
 
         else:
             return
 
-        del self._polygons[:]
+        self._polygons = new_polys
 
-        for poly in new_polys:
-            self._polygons.append(poly)
+        # make navmeshes
+        for poly in self._polygons:
             navmesh = Mesh2d(poly, 15)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
@@ -600,8 +608,8 @@ class Application(tk.Frame):
     def draw_all(self):
         camera_trans = self.get_world_to_screen_mtx()
 
-        for obj_name in self.draw_objects:
-            self.draw_objects[obj_name].draw_self(camera_trans, self.canvas)
+        for draw_object in self.draw_objects.values():
+            draw_object.draw_self(camera_trans, self.canvas)
 
 
 
