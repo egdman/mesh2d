@@ -1,6 +1,11 @@
-from itertools import izip, chain, tee
+from itertools import chain, tee, cycle, repeat
 from collections import deque, defaultdict
 from copy import deepcopy
+
+try:
+    from itertools import izip as zip
+except ImportError:
+    pass
 
 from .mesh2d import Polygon2d
 from .vector2 import Geom2
@@ -9,6 +14,13 @@ from .utils import debug_draw_bool
 class Union       : pass
 class Subtraction : pass
 class Intersection: pass
+
+class Outline     : pass
+class Hole        : pass
+
+class Inside      : pass
+class Outside     : pass
+
 
 def _cut_to_pieces(array, cut_items):
     pieces = [[]]
@@ -54,8 +66,8 @@ def _bool_cut_loop(loop, this_poly, intersect_ids, other_poly):
 def _get_pieces_outside_inside(this_poly, intersect_ids, other_poly):
     '''
     Returns 2 lists:
-    1) all pieces of the border oth this_poly outside other_poly, and
-    2) all pieces of the border oth this_poly inside other_poly.
+    1) all pieces of the border of this_poly outside other_poly, and
+    2) all pieces of the border of this_poly inside other_poly.
     '''
     this_poly_outline = list(this_poly.graph.loop_iterator(this_poly.graph.loops[0]))
     outside, inside = _bool_cut_loop(this_poly_outline, this_poly, intersect_ids, other_poly)
@@ -68,6 +80,227 @@ def _get_pieces_outside_inside(this_poly, intersect_ids, other_poly):
     return outside, inside
 
 
+#### DO NOT APPEND START AT END ########
+def cut_loop_into_pieces(loop, cuts):
+    firstPiece = []
+    piece = []
+    wrap = True
+    for elem in loop:
+        if elem in cuts:
+            if wrap:
+                firstPiece = piece
+                wrap = False
+            else:
+                yield piece
+            piece = [elem]
+        else:
+            piece.append(elem)
+    piece.extend(firstPiece)
+    yield piece
+#######################################
+
+
+
+
+# def find_polygon_pieces(this_poly, intersect_ids):
+#     outline = this_poly.graph.loop_iterator(this_poly.graph.loops[0])
+#     holes = (this_poly.graph.loop_iterator(hole) for hole in this_poly.graph.loops[1:])
+
+#     for outline_piece in cut_loop_into_pieces(outline, intersect_ids):
+#         yield (outline_piece, Outline)
+
+#     for hole in holes:
+#         for hole_piece in cut_loop_into_pieces(hole, intersect_ids):
+#             yield (hole_piece, Hole)
+
+
+# def _bool_cut_loop(loop, this_poly, intersect_ids, other_poly):
+#     loop_pieces = _cut_to_pieces(loop, intersect_ids)
+
+#     # find first piece that contains a non-intersection vertex
+#     first_piece, start_num = next(((piece, num) for num, piece \
+#         in enumerate(loop_pieces) if len(piece) > 2))
+
+#     # put this piece at the start of list of pieces
+#     loop_pieces = deque(loop_pieces)
+#     loop_pieces.rotate(-start_num)
+#     loop_pieces = list(loop_pieces)
+
+#     inside = other_poly.point_inside(this_poly.vertices[first_piece[1]])
+#     if inside:
+#         pieces_inside = loop_pieces[0::2]
+#         pieces_outside = loop_pieces[1::2]
+#     else:
+#         pieces_inside = loop_pieces[1::2]
+#         pieces_outside = loop_pieces[0::2]
+
+#     return pieces_outside, pieces_inside
+
+
+def split_poly_boundaries(this_poly, intersect_ids, other_poly):
+    '''
+    returns 2 lists:
+    pieces of this_poly inside other_poly, and
+    pieces of this_poly outside other_poly
+    '''
+    def _cut_loop(loop):
+        pieces = list(cut_loop_into_pieces(loop, intersect_ids))
+        ref_idx, ref_piece = next((n, piece) for n, piece in enumerate(pieces) if len(piece) > 1)
+        ref_vertex = this_poly.vertices[ref_piece[1]]
+        ref_inside = other_poly.point_inside(ref_vertex)
+        ref_even = ref_idx & 1 == 0
+        if ref_inside == ref_even:
+            in_out_flags = cycle((Inside, Outside))
+        else:
+            in_out_flags = cycle((Outside, Inside))
+        return zip(pieces, in_out_flags)
+
+    outline = this_poly.graph.loop_iterator(this_poly.graph.loops[0])
+    holes = (this_poly.graph.loop_iterator(hole) for hole in this_poly.graph.loops[1:])
+
+    for piece, location in _cut_loop(outline):
+        yield piece, location, Outline
+
+    for hole in holes:
+        for piece, location in _cut_loop(hole):
+            yield piece, location, Hole
+
+
+
+
+
+
+
+
+
+def _bool_do(A, B, op, canvas=None):
+    '''
+    op values:
+    -1 (subtract B from A)
+     0 (intersect A and B)
+     1 (add B to A)
+    '''
+
+    # # Copy the original polygons because they will be changed by this algorithm.
+    A = deepcopy(A)
+    B = deepcopy(B)
+
+    A_intersection_ids, B_intersection_ids, idx_map = _add_intersections_to_polys(A, B)
+
+    A_pieces = list(split_poly_boundaries(A, A_intersection_ids, B))
+    B_pieces = list(split_poly_boundaries(B, B_intersection_ids, A))
+
+    # for each idx in intersection ids we have exactly 1 A-piece and 1 B-piece that start from it
+    # we need to choose one of 2 pieces
+
+    chosen_pieces = []
+    for B_idx, A_idx in idx_map.items():
+        A_piece = next(p for p in A_pieces if p[0] == A_idx)
+        B_piece = next(p for p in B_pieces if p[0] == B_idx)
+
+        A_piece, loc_rel_to_B, _ = A_piece
+        B_piece, loc_rel_to_A, _ = B_piece
+
+        if op == Subtraction:
+            if loc_rel_to_B == Outside:
+                chosen_pieces.append(A_piece)
+            elif loc_rel_to_A == Inside:
+                chosen_pieces.append(B_piece)
+
+        if op == Union:
+            if loc_rel_to_B == Outside:
+                chosen_pieces.append(A_piece)
+            elif loc_rel_to_A == Outside:
+                chosen_pieces.append(B_piece)
+
+        else:
+            raise RuntimeError("Unknown boolean operation")
+
+
+    if op == Subtraction:
+        # find pieces of A that are outside B
+        A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
+
+        # find pieces of B that are inside A
+        _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
+
+    # elif op == Intersection:
+    #     # find pieces of A that are inside B
+    #     _, A_border_pieces = _get_pieces_outside_inside(A, A_intersection_ids, B)
+
+    #     # find pieces of B that are inside A
+    #     _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
+
+    elif op == Union:
+        # find pieces of A that are outside B
+        A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
+
+        # find pieces of B that are outside A
+        B_border_pieces, _ = _get_pieces_outside_inside(B, B_intersection_ids, A)
+
+
+
+    # debug draw
+    if canvas:
+        for idx in canvas.find_all(): canvas.delete(idx)
+        debug_draw_bool(A, B, A_border_pieces, B_border_pieces, idx_map, canvas)
+
+
+    # divide into closed and open loops
+    A_closed = list(p for p in A_border_pieces if p[0] == p[-1])
+    B_closed = list(p for p in B_border_pieces if p[0] == p[-1])
+
+    A_open = list(p for p in A_border_pieces if p[0] != p[-1])
+    B_open = list(p for p in B_border_pieces if p[0] != p[-1])
+
+    A_closed.extend(_concat_border_pieces(A, B, A_open, B_open, idx_map, op == Subtraction))
+
+
+    new_polys = []
+    new_holes = []
+
+    # A_closed contains outlines and holes.
+    # Create new polygon for each loop that is CCW
+    # CW loops represent holes
+    for loop in A_closed:
+        verts = list(A.vertices[idx] for idx in loop[:-1])
+        # if CCW
+        if Geom2.poly_signed_area(verts) > 0:
+            new_polys.append(Polygon2d(verts))
+        else:
+            new_holes.append(verts)
+
+    # B_closed contains outlines and holes.
+    # Create new polygon for each loop that is CCW (CW if subtracting)
+    # CW (CCW if subtracting) loops represent holes
+    flip = -1 if op == Subtraction else 1
+    for loop in B_closed:
+        verts = list(B.vertices[idx] for idx in loop[:-1])
+        # if CW
+        if flip * Geom2.poly_signed_area(verts) > 0:
+            new_polys.append(Polygon2d(verts))
+        else:
+            new_holes.append(verts)
+
+    # Try to add new holes to new polygons. Ignore holes that are outside all polys.
+    for verts in new_holes:
+        which_poly = next((poly for poly in new_polys if poly.point_inside(verts[0])), None)
+        if which_poly is not None: which_poly.add_hole(verts)
+
+    return new_polys
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def get_segment_crds(seg, verts):
     return tuple(verts[idx] for idx in seg)
@@ -77,14 +310,10 @@ def seglike_to_raylike(seglike):
     return (seglike[0], seglike[1] - seglike[0])
 
 
-def raylike_to_seglike(raylike):
-    return (raylike[0], raylike[0] + raylike[1])
-
-
 def get_segments(poly):
-    def loop_segs(loop):
+    def loop_segments(loop):
         return ((idx, poly.graph.next[idx]) for idx in poly.graph.loop_iterator(loop))
-    return chain(*(loop_segs(loop) for loop in poly.graph.loops))
+    return chain(*(loop_segments(loop) for loop in poly.graph.loops))
 
 
 def _add_intersections_to_polys(A, B):
@@ -125,7 +354,7 @@ def _add_intersections_to_polys(A, B):
     for (A_edge, pair_ids) in A_new_vert_lists.iteritems():
         params = list(intersection_param_pairs[idx][0] for idx in pair_ids)
         inserted_ids = A.add_vertices_to_border(A_edge, params)
-        A_inserted_ids.update(dict(izip(pair_ids, inserted_ids)))
+        A_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
         A_new_ids.extend(inserted_ids)
 
 
@@ -133,7 +362,7 @@ def _add_intersections_to_polys(A, B):
     for (B_edge, pair_ids) in B_new_vert_lists.iteritems():
         params = list(intersection_param_pairs[idx][1] for idx in pair_ids)
         inserted_ids = B.add_vertices_to_border(B_edge, params)
-        B_inserted_ids.update(dict(izip(pair_ids, inserted_ids)))
+        B_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
         B_new_ids.extend(inserted_ids)
 
 
@@ -258,8 +487,7 @@ def _bool_do(A, B, op, canvas=None):
     A_open = list(p for p in A_border_pieces if p[0] != p[-1])
     B_open = list(p for p in B_border_pieces if p[0] != p[-1])
 
-    tail_to_tail = True if op == Subtraction else False
-    A_closed.extend(_concat_border_pieces(A, B, A_open, B_open, idx_map, tail_to_tail))
+    A_closed.extend(_concat_border_pieces(A, B, A_open, B_open, idx_map, op == Subtraction))
 
 
     new_polys = []

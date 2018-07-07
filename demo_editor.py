@@ -582,8 +582,9 @@ class Application(tk.Frame):
                 old_poly = self._polygons.pop()
 
                 # add 2 polys, get either 1 or 2 polys
+                added = bool_add(old_poly, new_poly, self.debug_canvas)
                 try:
-                    (new_poly,) = bool_add(old_poly, new_poly, self.debug_canvas)
+                    (new_poly,) = added
                 except ValueError:
                     new_polys.append(old_poly)
 
