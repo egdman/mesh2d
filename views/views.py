@@ -283,21 +283,20 @@ class PlusView(ObjectView):
 
 class PolygonView(ObjectView):
     def __init__(self, poly):
-        self.poly = poly
-        self.color = '#4A4A4A'
+        self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
+        self.holes = list(list(poly.graph.loop_iterator(hole)) for hole in poly.graph.loops[1:])
+        self.vertices = poly.vertices
         super(PolygonView, self).__init__()
 
 
     def first_time_draw(self, canvas):
-        verts = self.poly.vertices
-
-        outline_crds = self.get_closed_crds(verts, self.poly.outline)
+        outline_crds = self.get_closed_crds(self.vertices, self.outline)
         Id = canvas.create_line(outline_crds, fill='#a0a0a0', width=1)
         self.element_ids.append(Id)
 
-        for hole in self.poly.holes:
-            outline_crds = self.get_closed_crds(verts, hole)
-            Id = canvas.create_line(outline_crds, fill='#a0a0a0', width=1)
+        for hole in self.holes:
+            outline_crds = self.get_closed_crds(self.vertices, hole)
+            Id = canvas.create_line(outline_crds, fill='#a0a0ff', width=1)
             self.element_ids.append(Id)            
 
 

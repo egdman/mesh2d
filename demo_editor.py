@@ -583,9 +583,9 @@ class Application(tk.Frame):
 
                 # add 2 polys, get either 1 or 2 polys
                 added = bool_add(old_poly, new_poly, self.debug_canvas)
-                try:
+                if len(added) == 1:
                     (new_poly,) = added
-                except ValueError:
+                else:
                     new_polys.append(old_poly)
 
             new_polys.append(new_poly)
@@ -595,12 +595,17 @@ class Application(tk.Frame):
 
         self._polygons = new_polys
 
-        # make navmeshes
+        # # make navmeshes
+        # for poly in self._polygons:
+        #     navmesh = Mesh2d(poly, 15)
+        #     num_polys = len(self.find_draw_objects_glob('polys/*'))
+        #     self.add_draw_object('polys/poly_{}'.format(num_polys),
+        #         NavMeshView(navmesh))
+
         for poly in self._polygons:
-            navmesh = Mesh2d(poly, 15)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
-                NavMeshView(navmesh))
+                PolygonView(poly))
 
 
     def draw_all(self):
