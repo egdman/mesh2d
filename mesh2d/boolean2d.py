@@ -66,14 +66,7 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly):
 
 
 def _bool_do(A, B, op, canvas=None):
-    '''
-    op values:
-    -1 (subtract B from A)
-     0 (intersect A and B)
-     1 (add B to A)
-    '''
-
-    # # Copy the original polygons because they will be changed by this algorithm.
+    # Copy the original polygons because they will be changed by this algorithm.
     A = deepcopy(A)
     B = deepcopy(B)
 
@@ -82,24 +75,11 @@ def _bool_do(A, B, op, canvas=None):
     A_pieces = list(split_poly_boundaries(A, A_intersection_ids, B))
     B_pieces = list(split_poly_boundaries(B, B_intersection_ids, A))
 
-    print("A:")
-    for p in A_pieces: print(p[:3])
-
-    print("B:")
-    for p in B_pieces: print(p[:3])
-
     def next_idx(poly, idx):
         return poly.graph.next[idx]
 
-
     closed_A_loops = list((piece, loc, kind) for piece, loc, kind in A_pieces if next_idx(A, piece[-1]) == piece[0])
     closed_B_loops = list((piece, loc, kind) for piece, loc, kind in B_pieces if next_idx(B, piece[-1]) == piece[0])
-
-    print("closed A:")
-    for p in closed_A_loops: print(p[:3])
-
-    print("closed B:")
-    for p in closed_B_loops: print(p[:3])
 
     if op == Union:
         # for each idx in intersection ids we have exactly 1 A-piece and 1 B-piece that start from it
@@ -116,10 +96,7 @@ def _bool_do(A, B, op, canvas=None):
         for idx, _ in enumerate(A_contacts):
             if consumed[idx]: continue
 
-            # loop_kind = Hole
             loop = []
-            loops.append(loop)
-
             while not consumed[idx]:
                 consumed[idx] = True
 
@@ -144,19 +121,20 @@ def _bool_do(A, B, op, canvas=None):
                     loop.extend((A.vertices[idx] for idx in A_piece))
                     idx = A_contacts.index(next_idx(A, A_piece[-1]))
 
+            loop_kind = Outline if Geom2.poly_signed_area(loop) > 0 else Hole
+            loops.append( (loop, loop_kind) )
 
-        for A_loop, A_loc, _ in closed_A_loops:
+
+        for A_loop, A_loc, A_kind in closed_A_loops:
             if A_loc == Inside:
                 continue
-            loops.append(list(A.vertices[idx] for idx in A_loop))
+            loops.append( (list(A.vertices[idx] for idx in A_loop), A_kind) )
 
-        for B_loop, B_loc, _ in closed_B_loops:
+        for B_loop, B_loc, B_kind in closed_B_loops:
             if B_loc == Inside:
                 continue
-            loops.append(list(B.vertices[idx] for idx in B_loop))
+            loops.append( (list(B.vertices[idx] for idx in B_loop), B_kind) )
 
-        print("loops:")
-        for l in loops: print(len(l))
 
     elif op == Subtraction:
         raise RuntimeError("Subtraction not supported yet")
@@ -165,16 +143,14 @@ def _bool_do(A, B, op, canvas=None):
     new_polys = []
     new_holes = []
 
-    # Create new polygon for each loop that is CCW
-    # CW loops represent holes
-    for verts in loops:
-        # if CCW
-        if Geom2.poly_signed_area(verts) > 0:
+    # Create new polygon for each outline loop
+    for verts, kind in loops:
+        if kind == Outline:
             new_polys.append(Polygon2d(verts))
         else:
             new_holes.append(verts)
 
-    # Try to add new holes to new polygons. Ignore holes that are outside all polys.
+    # Try to add new holes to new polygons
     for verts in new_holes:
         which_poly = next((poly for poly in new_polys if poly.point_inside(verts[0])), None)
         if which_poly is not None: which_poly.add_hole(verts)
