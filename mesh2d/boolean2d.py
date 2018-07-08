@@ -75,10 +75,10 @@ def _bool_do(A, B, op, canvas=None):
     A = deepcopy(A)
     B = deepcopy(B)
 
-    A_intersection_ids, B_intersection_ids, idx_map = _add_intersections_to_polys(A, B)
+    A_contacts, B_contacts = _add_intersections_to_polys(A, B)
 
-    A_pieces = list(split_poly_boundaries(A, A_intersection_ids, B, False))
-    B_pieces = list(split_poly_boundaries(B, B_intersection_ids, A, op == Subtraction))
+    A_pieces = list(split_poly_boundaries(A, A_contacts, B, False))
+    B_pieces = list(split_poly_boundaries(B, B_contacts, A, op == Subtraction))
 
     def next_idx(idx, poly):
         return poly.graph.next[idx]
@@ -92,11 +92,6 @@ def _bool_do(A, B, op, canvas=None):
     closed_A_loops = list((piece, loc, kind) for piece, loc, kind in A_pieces if next_in_A(piece[-1]) == piece[0])
     closed_B_loops = list((piece, loc, kind) for piece, loc, kind in B_pieces if next_in_B(piece[-1]) == piece[0])
 
-
-    if len(idx_map):
-        B_contacts, A_contacts = zip(*idx_map.items())
-    else:
-        B_contacts, A_contacts = [], []
 
     def _append_loop_union(loop, A_piece, A_loc, B_piece, B_loc):
         A_in_B_out = A_loc == Inside and B_loc == Outside
@@ -176,7 +171,7 @@ def _bool_do(A, B, op, canvas=None):
         else:
             new_holes.append(verts)
 
-    # Try to add new holes to new polygons
+    # Add new holes to new polygons
     for verts in new_holes:
         which_poly = next((poly for poly in new_polys if poly.point_inside(verts[0])), None)
         if which_poly is not None: which_poly.add_hole(verts)
@@ -221,22 +216,12 @@ def _add_intersections_to_polys(A, B):
                 A_new_vert_lists[A_edge].append(pair_index)
                 B_new_vert_lists[B_edge].append(pair_index)
 
-    # print("{} intersection points".format(len(intersection_param_pairs)))
-    # This list will hold indices into A's vertex buffer of all intersection verts that will be added to A.
-    A_new_ids = []
-
-    # Same for B.
-    B_new_ids = []
-
-    # This is a mapping of {index-in-B : index-in-A} for all intersection verts.
-    idx_map = {}
 
     A_inserted_ids = {}
     for (A_edge, pair_ids) in A_new_vert_lists.iteritems():
         params = list(intersection_param_pairs[idx][0] for idx in pair_ids)
         inserted_ids = A.add_vertices_to_border(A_edge, params)
         A_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
-        A_new_ids.extend(inserted_ids)
 
 
     B_inserted_ids = {}
@@ -244,15 +229,14 @@ def _add_intersections_to_polys(A, B):
         params = list(intersection_param_pairs[idx][1] for idx in pair_ids)
         inserted_ids = B.add_vertices_to_border(B_edge, params)
         B_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
-        B_new_ids.extend(inserted_ids)
 
 
+    ids_in_A, ids_in_B = [], []
     for pair_idx in range(len(intersection_param_pairs)):
-        inserted_into_A = A_inserted_ids[pair_idx]
-        inserted_into_B = B_inserted_ids[pair_idx]
-        idx_map[inserted_into_B] = inserted_into_A
+        ids_in_A.append(A_inserted_ids[pair_idx])
+        ids_in_B.append(B_inserted_ids[pair_idx])
 
-    return A_new_ids, B_new_ids, idx_map
+    return ids_in_A, ids_in_B
 
 
 def bool_subtract(A, B, canvas=None):
