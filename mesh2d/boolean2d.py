@@ -92,110 +92,78 @@ def _bool_do(A, B, op, canvas=None):
     closed_A_loops = list((piece, loc, kind) for piece, loc, kind in A_pieces if next_in_A(piece[-1]) == piece[0])
     closed_B_loops = list((piece, loc, kind) for piece, loc, kind in B_pieces if next_in_B(piece[-1]) == piece[0])
 
-    if op == Union:
-        # for each idx in intersection ids we have exactly 1 A-piece and 1 B-piece that start from it
-        # we need to choose 0, 1, or 2 pieces for each intersection
 
-        if len(idx_map):
-            B_contacts, A_contacts = zip(*idx_map.items())
+    if len(idx_map):
+        B_contacts, A_contacts = zip(*idx_map.items())
+    else:
+        B_contacts, A_contacts = [], []
+
+    def _append_loop_union(loop, A_piece, A_loc, B_piece, B_loc):
+        A_in_B_out = A_loc == Inside and B_loc == Outside
+
+        #### FOR DEBUG #### ####
+        B_in_A_out = B_loc == Inside and A_loc == Outside
+        if not (A_in_B_out or B_in_A_out):
+            raise RuntimeError("Boolean operation failure")
+        #### #### #### #### ####
+
+        if A_in_B_out:
+            loop.extend((B.vertices[idx] for idx in B_piece))
+            return B_contacts.index(next_in_B(B_piece[-1]))
         else:
-            B_contacts, A_contacts = [], []
-
-        consumed = [False] * len(A_contacts)
-
-        loops = []
-        for idx, _ in enumerate(A_contacts):
-            if consumed[idx]: continue
-
-            loop = []
-            while not consumed[idx]:
-                consumed[idx] = True
-
-                A_contact = A_contacts[idx]
-                B_contact = B_contacts[idx]
-                A_piece, A_loc, A_kind = next((p, loc, kind) for p, loc, kind in A_pieces if p[0] == A_contact)
-                B_piece, B_loc, B_kind = next((p, loc, kind) for p, loc, kind in B_pieces if p[0] == B_contact)
-
-                A_in_B_out = A_loc == Inside and B_loc == Outside
-
-                #### FOR DEBUG #### ####
-                # pieces cannot be both inside or both outside
-                B_in_A_out = B_loc == Inside and A_loc == Outside
-                if A_in_B_out == B_in_A_out:
-                    raise RuntimeError("Boolean operation failure")
-                #### #### #### #### ####
-
-                if A_in_B_out:
-                    loop.extend((B.vertices[idx] for idx in B_piece))
-                    idx = B_contacts.index(next_in_B(B_piece[-1]))
-                else:
-                    loop.extend((A.vertices[idx] for idx in A_piece))
-                    idx = A_contacts.index(next_in_A(A_piece[-1]))
-
-            loop_kind = Outline if Geom2.poly_signed_area(loop) > 0 else Hole
-            loops.append( (loop, loop_kind) )
+            loop.extend((A.vertices[idx] for idx in A_piece))
+            return A_contacts.index(next_in_A(A_piece[-1]))
 
 
-        for A_loop, A_loc, A_kind in closed_A_loops:
-            if A_loc == Inside:
-                continue
-            loops.append( (list(A.vertices[idx] for idx in A_loop), A_kind) )
+    def _append_loop_subtraction(loop, A_piece, A_loc, B_piece, B_loc):
+        A_out_B_out = A_loc == Outside and B_loc == Outside
 
-        for B_loop, B_loc, B_kind in closed_B_loops:
-            if B_loc == Inside:
-                continue
-            loops.append( (list(B.vertices[idx] for idx in B_loop), B_kind) )
+        #### FOR DEBUG #### ####
+        A_in_B_in = B_loc == Inside and A_loc == Inside
+        if not (A_in_B_in or A_out_B_out):
+            raise RuntimeError("Boolean operation failure")
+        #### #### #### #### ####
 
-
-    elif op == Subtraction:
-        if len(idx_map):
-            B_contacts, A_contacts = zip(*idx_map.items())
+        if A_out_B_out:
+            loop.extend((A.vertices[idx] for idx in A_piece))
+            return A_contacts.index(next_in_A(A_piece[-1]))
         else:
-            B_contacts, A_contacts = [], []
+            loop.extend((B.vertices[idx] for idx in B_piece))
+            return B_contacts.index(next_in_B(B_piece[-1]))
 
-        consumed = [False] * len(A_contacts)
 
-        loops = []
-        for idx, _ in enumerate(A_contacts):
-            if consumed[idx]: continue
+    loops = []
+    consumed = [False] * len(A_contacts)
+    append_loop = _append_loop_union if op == Union else _append_loop_subtraction
 
-            loop = []
-            while not consumed[idx]:
-                consumed[idx] = True
+    for idx, _ in enumerate(A_contacts):
+        if consumed[idx]: continue
 
-                A_contact = A_contacts[idx]
-                B_contact = B_contacts[idx]
-                A_piece, A_loc, A_kind = next((p, loc, kind) for p, loc, kind in A_pieces if p[0] == A_contact)
-                B_piece, B_loc, B_kind = next((p, loc, kind) for p, loc, kind in B_pieces if p[0] == B_contact)
+        loop = []
+        while not consumed[idx]:
+            consumed[idx] = True
 
-                A_out_B_out = A_loc == Outside and B_loc == Outside
+            A_piece, A_loc, A_kind = next((p, loc, kind) for p, loc, kind in A_pieces if p[0] == A_contacts[idx])
+            B_piece, B_loc, B_kind = next((p, loc, kind) for p, loc, kind in B_pieces if p[0] == B_contacts[idx])
+            idx = append_loop(loop, A_piece, A_loc, B_piece, B_loc)
 
-                #### FOR DEBUG #### ####
-                # pieces cannot be both inside or both outside
-                A_in_B_in = B_loc == Inside and A_loc == Inside
-                if A_out_B_out == A_in_B_in:
-                    raise RuntimeError("Boolean operation failure")
-                #### #### #### #### ####
+        loop_kind = Outline if Geom2.poly_signed_area(loop) > 0 else Hole
+        loops.append( (loop, loop_kind) )
 
-                if A_out_B_out:
-                    loop.extend((A.vertices[idx] for idx in A_piece))
-                    idx = A_contacts.index(next_in_A(A_piece[-1]))
-                else:
-                    loop.extend((B.vertices[idx] for idx in B_piece))
-                    idx = B_contacts.index(next_in_B(B_piece[-1]))
 
-            loop_kind = Outline if Geom2.poly_signed_area(loop) > 0 else Hole
-            loops.append( (loop, loop_kind) )
 
-        for A_loop, A_loc, A_kind in closed_A_loops:
-            if A_loc == Inside:
-                continue
-            loops.append( (list(A.vertices[idx] for idx in A_loop), A_kind) )
+    skip_B_loop = Inside if op == Union else Outside
+    map_B_kinds = (lambda kind: kind) if op == Union else (lambda kind: Outline if kind == Hole else Hole)
 
-        for B_loop, B_loc, B_kind in closed_B_loops:
-            if B_loc == Outside:
-                continue
-            loops.append( (list(B.vertices[idx] for idx in B_loop), Outline if B_kind == Hole else Hole) )
+    for A_loop, A_loc, A_kind in closed_A_loops:
+        if A_loc == Inside:
+            continue
+        loops.append( (list(A.vertices[idx] for idx in A_loop), A_kind) )
+
+    for B_loop, B_loc, B_kind in closed_B_loops:
+        if B_loc == skip_B_loop:
+            continue
+        loops.append( (list(B.vertices[idx] for idx in B_loop), map_B_kinds(B_kind)) )
 
 
     new_polys = []
