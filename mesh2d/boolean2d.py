@@ -14,7 +14,6 @@ from .utils import debug_draw_bool
 
 class Union       : pass
 class Subtraction : pass
-class Intersection: pass
 
 class Outline     : pass
 class Hole        : pass
@@ -138,8 +137,8 @@ def _bool_do(A, B, op, canvas=None):
         while not consumed[idx]:
             consumed[idx] = True
 
-            A_piece, A_loc, A_kind = next((p, loc, kind) for p, loc, kind in A_pieces if p[0] == A_contacts[idx])
-            B_piece, B_loc, B_kind = next((p, loc, kind) for p, loc, kind in B_pieces if p[0] == B_contacts[idx])
+            A_piece, A_loc = next((p, loc) for p, loc, _ in A_pieces if p[0] == A_contacts[idx])
+            B_piece, B_loc = next((p, loc) for p, loc, _ in B_pieces if p[0] == B_contacts[idx])
             idx = append_loop(loop, A_piece, A_loc, B_piece, B_loc)
 
         loop_kind = Outline if Geom2.poly_signed_area(loop) > 0 else Hole
