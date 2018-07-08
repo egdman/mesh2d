@@ -207,9 +207,12 @@ def _bool_do(A, B, op, canvas=None):
     if op == Union:
         # for each idx in intersection ids we have exactly 1 A-piece and 1 B-piece that start from it
         # we need to choose 0, 1, or 2 pieces for each intersection
-        open_A_pieces, open_B_pieces = [], []
 
-        B_contacts, A_contacts = zip(*idx_map.items())
+        if len(idx_map):
+            B_contacts, A_contacts = zip(*idx_map.items())
+        else:
+            B_contacts, A_contacts = [], []
+
         consumed = [False] * len(A_contacts)
 
         loops = []
@@ -244,143 +247,32 @@ def _bool_do(A, B, op, canvas=None):
                     loop.extend((A.vertices[idx] for idx in A_piece))
                     idx = A_contacts.index(next_idx(A, A_piece[-1]))
 
+
+        for A_loop, A_loc, _ in closed_A_loops:
+            if A_loc == Inside:
+                continue
+            loops.append(list(A.vertices[idx] for idx in A_loop))
+
+        for B_loop, B_loc, _ in closed_B_loops:
+            if B_loc == Inside:
+                continue
+            loops.append(list(B.vertices[idx] for idx in B_loop))
+
         print("loops:")
         for l in loops: print(len(l))
 
-        
-
-        # for B_idx, A_idx in idx_map.items():
-        #     A_piece, A_loc, A_kind = next((p, loc, kind) for p, loc, kind in A_pieces if p[0] == A_idx)
-        #     B_piece, B_loc, B_kind = next((p, loc, kind) for p, loc, kind in B_pieces if p[0] == B_idx)
-
-        #     A_in_B_out = A_loc == Inside and B_loc == Outside
-
-        #     #### FOR DEBUG #### ####
-        #     # pieces cannot be both inside or both outside
-        #     B_in_A_out = B_loc == Inside and A_loc == Outside
-        #     if A_in_B_out == B_in_A_out:
-        #         raise RuntimeError("Boolean operation failure")
-        #     #### #### #### #### ####
-
-        #     print("A-piece inside B, B-piece outside A" if A_in_B_out else "A-piece outside B, B-piece inside A")
-
-        #     print("A: {}".format(A_loc))
-        #     print("B: {}".format(B_loc))
-        #     print("---- ---- ---- ----")
-
-        #     if A_in_B_out:
-        #         open_B_pieces.append(B_piece)
-        #     else:
-        #         open_A_pieces.append(A_piece)
-
-
-
-
-
-    # # for each idx in intersection ids we have exactly 1 A-piece and 1 B-piece that start from it
-    # # we need to choose 0, 1, or 2 pieces for each intersection
-    # open_A_pieces, open_B_pieces = [], []
-    # for B_idx, A_idx in idx_map.items():
-    #     A_piece, A_loc = next((p, loc) for p, loc, _ in A_pieces if p[0] == A_idx)
-    #     B_piece, B_loc = next((p, loc) for p, loc, _ in B_pieces if p[0] == B_idx)
-
-    #     A_in_B_out = A_loc == Inside and B_loc == Outside
-
-    #     #### FOR DEBUG #### ####
-    #     # pieces cannot be both inside or both outside
-    #     B_in_A_out = B_loc == Inside and A_loc == Outside
-    #     if A_in_B_out == B_in_A_out:
-    #         raise RuntimeError("Boolean operation failure")
-    #     #### #### #### #### ####
-
-    #     print("A-piece inside B, B-piece outside A" if A_in_B_out else "A-piece outside B, B-piece inside A")
-
-    #     print("A: {}".format(A_loc))
-    #     print("B: {}".format(B_loc))
-    #     print("---- ---- ---- ----")
-
-
-    #     if op == Union:
-    #         # choose the one piece that is located outside
-    #         if A_in_B_out:
-    #             open_B_pieces.append(B_piece)
-    #         else:
-    #             open_A_pieces.append(A_piece)
-
-    #     if op == Subtraction:
-    #         if A_in_B_out:
-    #             pass
-    #         else:
-    #             open_B_pieces.append(B_piece[::-1])
-    #             open_A_pieces.append(A_piece)
-                
-    # print("chosen A-pieces:")
-    # for p in open_A_pieces: print(p)
-
-    # print("chosen B-pieces:")
-    # for p in open_B_pieces: print(p)
-
-    if op == Subtraction:
-        # find pieces of A that are outside B
-        A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
-
-        # find pieces of B that are inside A
-        _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
-
-    elif op == Intersection:
-        # find pieces of A that are inside B
-        _, A_border_pieces = _get_pieces_outside_inside(A, A_intersection_ids, B)
-
-        # find pieces of B that are inside A
-        _, B_border_pieces = _get_pieces_outside_inside(B, B_intersection_ids, A)
-
-    elif op == Union:
-        # find pieces of A that are outside B
-        A_border_pieces, _ = _get_pieces_outside_inside(A, A_intersection_ids, B)
-
-        # find pieces of B that are outside A
-        B_border_pieces, _ = _get_pieces_outside_inside(B, B_intersection_ids, A)
-
-
-
-    # debug draw
-    if canvas:
-        for idx in canvas.find_all(): canvas.delete(idx)
-        debug_draw_bool(A, B, A_border_pieces, B_border_pieces, idx_map, canvas)
-
-
-    # divide into closed and open loops
-    A_closed = list(p for p in A_border_pieces if p[0] == p[-1])
-    B_closed = list(p for p in B_border_pieces if p[0] == p[-1])
-
-    A_open = list(p for p in A_border_pieces if p[0] != p[-1])
-    B_open = list(p for p in B_border_pieces if p[0] != p[-1])
-
-    A_closed.extend(_concat_border_pieces(A, B, A_open, B_open, idx_map, op == Subtraction))
+    elif op == Subtraction:
+        raise RuntimeError("Subtraction not supported yet")
 
 
     new_polys = []
     new_holes = []
 
-    # A_closed contains outlines and holes.
     # Create new polygon for each loop that is CCW
     # CW loops represent holes
-    for loop in A_closed:
-        verts = list(A.vertices[idx] for idx in loop[:-1])
+    for verts in loops:
         # if CCW
         if Geom2.poly_signed_area(verts) > 0:
-            new_polys.append(Polygon2d(verts))
-        else:
-            new_holes.append(verts)
-
-    # B_closed contains outlines and holes.
-    # Create new polygon for each loop that is CCW (CW if subtracting)
-    # CW (CCW if subtracting) loops represent holes
-    flip = -1 if op == Subtraction else 1
-    for loop in B_closed:
-        verts = list(B.vertices[idx] for idx in loop[:-1])
-        # if CW
-        if flip * Geom2.poly_signed_area(verts) > 0:
             new_polys.append(Polygon2d(verts))
         else:
             new_holes.append(verts)
@@ -391,12 +283,6 @@ def _bool_do(A, B, op, canvas=None):
         if which_poly is not None: which_poly.add_hole(verts)
 
     return new_polys
-
-
-
-
-
-
 
 
 
