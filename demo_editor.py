@@ -595,17 +595,18 @@ class Application(tk.Frame):
 
         self._polygons = new_polys
 
-        # # make navmeshes
-        # for poly in self._polygons:
-        #     navmesh = Mesh2d(poly, 15)
-        #     num_polys = len(self.find_draw_objects_glob('polys/*'))
-        #     self.add_draw_object('polys/poly_{}'.format(num_polys),
-        #         NavMeshView(navmesh))
-
+        # draw navmeshes
         for poly in self._polygons:
+            navmesh = Mesh2d(poly, 15)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
-                PolygonView(poly))
+                NavMeshView(navmesh))
+
+        # # draw polygons
+        # for poly in self._polygons:
+        #     num_polys = len(self.find_draw_objects_glob('polys/*'))
+        #     self.add_draw_object('polys/poly_{}'.format(num_polys),
+        #         PolygonView(poly))
 
 
     def draw_all(self):
