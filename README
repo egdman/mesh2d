@@ -1,3 +1,8 @@
+This program partitions any 2d polygon into convex or near-convex regions.
+It uses algorithm from R. Oliva and N. Pelechano - Automatic Generation of Suboptimal NavMeshes.
+Launch demo_editor.py to see how it works.
+
+demo_editor.py usage:
 Place polygon points with left clicks, right click to finish creating the polygon. Self-intersections are not allowed.
 Press plus or minus button in lower left corner to switch between addition and subtraction mode.
 
