@@ -1,5 +1,6 @@
-from itertools import chain, tee, cycle, repeat
-from collections import deque, defaultdict
+from itertools import chain, cycle, repeat
+from functools import partial
+from collections import defaultdict
 from copy import deepcopy
 
 try:
@@ -40,7 +41,7 @@ def cut_loop_into_pieces(loop, cuts):
     yield piece
 
 
-def split_poly_boundaries(this_poly, intersect_ids, other_poly):
+def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
     def _cut_loop(loop):
         pieces = list(cut_loop_into_pieces(loop, intersect_ids))
         ref_idx, ref_piece = next((n, piece) for n, piece in enumerate(pieces) if len(piece) > 1)
@@ -55,6 +56,10 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly):
 
     outline = this_poly.graph.loop_iterator(this_poly.graph.loops[0])
     holes = (this_poly.graph.loop_iterator(hole) for hole in this_poly.graph.loops[1:])
+
+    if backwards:
+        outline = reversed(list(outline))
+        holes = (reversed(list(hole)) for hole in holes)
 
     for piece, location in _cut_loop(outline):
         yield piece, location, Outline
@@ -72,14 +77,20 @@ def _bool_do(A, B, op, canvas=None):
 
     A_intersection_ids, B_intersection_ids, idx_map = _add_intersections_to_polys(A, B)
 
-    A_pieces = list(split_poly_boundaries(A, A_intersection_ids, B))
-    B_pieces = list(split_poly_boundaries(B, B_intersection_ids, A))
+    A_pieces = list(split_poly_boundaries(A, A_intersection_ids, B, False))
+    B_pieces = list(split_poly_boundaries(B, B_intersection_ids, A, op == Subtraction))
 
-    def next_idx(poly, idx):
+    def next_idx(idx, poly):
         return poly.graph.next[idx]
 
-    closed_A_loops = list((piece, loc, kind) for piece, loc, kind in A_pieces if next_idx(A, piece[-1]) == piece[0])
-    closed_B_loops = list((piece, loc, kind) for piece, loc, kind in B_pieces if next_idx(B, piece[-1]) == piece[0])
+    def prev_idx(idx, poly):
+        return poly.graph.prev[idx]
+
+    next_in_A = partial(next_idx, poly = A)
+    next_in_B = partial((prev_idx if op == Subtraction else next_idx), poly = B)
+
+    closed_A_loops = list((piece, loc, kind) for piece, loc, kind in A_pieces if next_in_A(piece[-1]) == piece[0])
+    closed_B_loops = list((piece, loc, kind) for piece, loc, kind in B_pieces if next_in_B(piece[-1]) == piece[0])
 
     if op == Union:
         # for each idx in intersection ids we have exactly 1 A-piece and 1 B-piece that start from it
@@ -116,10 +127,10 @@ def _bool_do(A, B, op, canvas=None):
 
                 if A_in_B_out:
                     loop.extend((B.vertices[idx] for idx in B_piece))
-                    idx = B_contacts.index(next_idx(B, B_piece[-1]))
+                    idx = B_contacts.index(next_in_B(B_piece[-1]))
                 else:
                     loop.extend((A.vertices[idx] for idx in A_piece))
-                    idx = A_contacts.index(next_idx(A, A_piece[-1]))
+                    idx = A_contacts.index(next_in_A(A_piece[-1]))
 
             loop_kind = Outline if Geom2.poly_signed_area(loop) > 0 else Hole
             loops.append( (loop, loop_kind) )
@@ -137,7 +148,54 @@ def _bool_do(A, B, op, canvas=None):
 
 
     elif op == Subtraction:
-        raise RuntimeError("Subtraction not supported yet")
+        if len(idx_map):
+            B_contacts, A_contacts = zip(*idx_map.items())
+        else:
+            B_contacts, A_contacts = [], []
+
+        consumed = [False] * len(A_contacts)
+
+        loops = []
+        for idx, _ in enumerate(A_contacts):
+            if consumed[idx]: continue
+
+            loop = []
+            while not consumed[idx]:
+                consumed[idx] = True
+
+                A_contact = A_contacts[idx]
+                B_contact = B_contacts[idx]
+                A_piece, A_loc, A_kind = next((p, loc, kind) for p, loc, kind in A_pieces if p[0] == A_contact)
+                B_piece, B_loc, B_kind = next((p, loc, kind) for p, loc, kind in B_pieces if p[0] == B_contact)
+
+                A_out_B_out = A_loc == Outside and B_loc == Outside
+
+                #### FOR DEBUG #### ####
+                # pieces cannot be both inside or both outside
+                A_in_B_in = B_loc == Inside and A_loc == Inside
+                if A_out_B_out == A_in_B_in:
+                    raise RuntimeError("Boolean operation failure")
+                #### #### #### #### ####
+
+                if A_out_B_out:
+                    loop.extend((A.vertices[idx] for idx in A_piece))
+                    idx = A_contacts.index(next_in_A(A_piece[-1]))
+                else:
+                    loop.extend((B.vertices[idx] for idx in B_piece))
+                    idx = B_contacts.index(next_in_B(B_piece[-1]))
+
+            loop_kind = Outline if Geom2.poly_signed_area(loop) > 0 else Hole
+            loops.append( (loop, loop_kind) )
+
+        for A_loop, A_loc, A_kind in closed_A_loops:
+            if A_loc == Inside:
+                continue
+            loops.append( (list(A.vertices[idx] for idx in A_loop), A_kind) )
+
+        for B_loop, B_loc, B_kind in closed_B_loops:
+            if B_loc == Outside:
+                continue
+            loops.append( (list(B.vertices[idx] for idx in B_loop), Outline if B_kind == Hole else Hole) )
 
 
     new_polys = []

@@ -13,6 +13,7 @@ class Loops(object):
     def __init__(self):
         self.loops = []
         self.next = []
+        self.prev = []
 
 
     def add_loop(self, how_many_nodes):
@@ -21,6 +22,7 @@ class Loops(object):
 
         self.loops.append(loop_start)
         self.next.extend(ids[1:] + ids[:1])
+        self.prev.extend(ids[-1:] + ids[:-1])
         return loop_start
 
 
@@ -40,8 +42,9 @@ class Loops(object):
         new_idx = len(self.next)
         e0, e1 = edge_to_split
 
-        self.next[e0] = new_idx
+        self.next[e0] = self.prev[e1] = new_idx
         self.next.append(e1)
+        self.prev.append(e0)
         return new_idx
 
 
