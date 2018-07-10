@@ -20,15 +20,29 @@ def v2col(x, y):
 
 def poly_to_ascii(poly):
     s = ""
-    outline = (poly.vertices[idx] for idx in poly.graph.loop_iterator(poly.graph.loops[0]))
-    holes = ((poly.vertices[idx] for idx in poly.graph.loop_iterator(hole)) for hole in poly.graph.loops[1:])
-    s += " ".join("{} {}".format(v[0], v[1]) for v in outline)
-    s += "\n"
-    for hole in holes:
-        s += " ".join("{} {}".format(v[0], v[1]) for v in hole)
+    loops = ((poly.vertices[idx] for idx in poly.graph.loop_iterator(loop)) for loop in poly.graph.loops)
+    for loop in loops:
+        s += " ".join("{} {}".format(v[0], v[1]) for v in loop)
         s += "\n"
     return s
 
+def ascii_to_poly(text):
+    loops = []
+    for line in text.splitlines():
+        loop = []
+        loops.append(loop)
+        crds = (float(el.strip()) for el in line.strip().split())
+        try:
+            while True:
+                v0 = next(crds)
+                v1 = next(crds)
+                loop.append(vec(v0, v1))
+        except StopIteration:
+            pass
+    poly = Polygon2d(loops[0])
+    for hole in loops[1:]:
+        poly.add_hole(hole)
+    return poly
 
 
 class Tool(object):
@@ -225,6 +239,17 @@ class Application(tk.Frame):
         )
 
         self.pointer_over_poly = False
+
+        try:
+            with open("poly.txt", 'r') as stream:
+                poly = ascii_to_poly(stream.read())
+                self._polygons.append(poly)
+                navmesh = Mesh2d(poly, 15)
+                num_polys = len(self.find_draw_objects_glob('polys/*'))
+                self.add_draw_object('polys/poly_{}'.format(num_polys),
+                    NavMeshView(navmesh))
+        except IOError:
+            pass
 
         self.draw_all()
 
