@@ -4,10 +4,15 @@ from collections import defaultdict
 from operator import itemgetter
 from itertools import chain, izip, repeat, tee
 from copy import deepcopy
+from time import clock
 
 from .vector2 import vec, Geom2
 from .utils import pairs, triples
 
+def timeit(name, start):
+    now = clock()
+    print("{} took {:.3f} ms".format(name, 1000 * (now - start)))
+    return now
 
 class Loops(object):
     def __init__(self):
@@ -271,8 +276,11 @@ class Mesh2d(object):
 
 
     @staticmethod
-    def find_closest_edge_inside_sector(poly, sector, tip_idx):
+    def find_closest_edge_inside_sector(poly, sector, tip_idx, cutoff1, cutoff2):
+        skipped_num, considered_num = 0, 0
+        _, tip, _ = sector
         closest_para, closest_distSq, closest_edge = None, None, None
+        cutoff_plane = None
 
         for loop_start in poly.graph.loops:
             indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
@@ -281,15 +289,35 @@ class Mesh2d(object):
                 if tip_idx in (seg_i1, seg_i2):
                     continue
 
-                segment = (poly.vertices[seg_i1], poly.vertices[seg_i2])
-                para, distSq = Mesh2d._segment_closest_point_inside_sector(segment, sector)
-                if para is None: continue
+                (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
 
+                seg0x, seg1x = seg0.append(1), seg1.append(1)
+
+                if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
+                    skipped_num += 1
+                    continue
+
+                if cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
+                    skipped_num += 1
+                    continue
+
+                para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
+                considered_num += 1
+                if para is None: continue
                 if closest_distSq is None or distSq < closest_distSq:
                     closest_distSq = distSq
                     closest_para = para
                     closest_edge = (seg_i1, seg_i2)
 
+                    # if closest_distSq == 0:
+                    #     return closest_edge, closest_para, closest_distSq
+
+                    # make cutoff line
+                    n = point - tip
+                    cutoff_plane = n.append(-n.dot(point))
+                    # print("cutoff plane: {}".format(cutoff_plane))
+
+        # print("{} considered, {} skipped".format(considered_num, skipped_num))
         return closest_edge, closest_para, closest_distSq
 
 
@@ -304,7 +332,7 @@ class Mesh2d(object):
             portal_seg = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
             if portal_seg[0] == portal_seg[1]: continue
 
-            para, distSq = Mesh2d._segment_closest_point_inside_sector(portal_seg, sector)
+            para, _, distSq = Mesh2d._segment_closest_point_inside_sector(portal_seg, sector)
 
             if para is None: continue
 
@@ -335,7 +363,7 @@ class Mesh2d(object):
         line_through_sector = raypara1 > 0 or raypara2 > 0
 
         if not line_through_sector:
-            return None, None
+            return None, None, None
 
         # now we know that line goes through sector
 
@@ -362,7 +390,7 @@ class Mesh2d(object):
             if pt_inside(segment[0]):
                 candid_params = [0, 1]
             else:
-                return None, None
+                return None, None, None
 
         # find point on line closest to tip
         projpara = Geom2.project_to_line(tip, line)
@@ -375,7 +403,9 @@ class Mesh2d(object):
             return line[0] + (para * line[1])
 
         distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
-        return min(izip(candid_params, distances), key = itemgetter(1))
+        p, d = min(izip(candid_params, distances), key = itemgetter(1))
+        return p, para_to_pt(p), d
+
 
 
 
@@ -390,8 +420,10 @@ class Mesh2d(object):
         The endpoints of portals can be new vertices,
         but they are guaranteed to lie on the polygon boundary (not inside the polygon)
         """
-
+        started = clock()
         spikes = Mesh2d.find_spikes(poly, threshold)
+        # started = timeit("find spikes", started)
+
         portals = []
 
         for spike in spikes:
@@ -400,12 +432,20 @@ class Mesh2d(object):
 
             right_dir, left_dir = Mesh2d.get_sector(v0, v1, v2, threshold)
 
+            n_right = left_dir - left_dir.dot(right_dir) * right_dir
+            n_left  = right_dir - right_dir.dot(left_dir) * left_dir
+
+            hp1 = n_right.append(-n_right.dot(v1))
+            hp2 = n_left.append(-n_left.dot(v1))
+
             tip = poly.vertices[spike_idx]
             sector = (right_dir, tip, left_dir)
 
+            # started = clock()
             # find closest edge
             closest_seg, closest_seg_para, closest_seg_dst = \
-                Mesh2d.find_closest_edge_inside_sector(poly, sector, spike_idx)
+                Mesh2d.find_closest_edge_inside_sector(poly, sector, spike_idx, hp1, hp2)
+            # started = timeit("find_closest_edge_inside_sector", started)
 
             if closest_seg is None:
                 raise RuntimeError("Could not find a single edge inside sector")
@@ -413,6 +453,7 @@ class Mesh2d(object):
             # find closest portal
             closest_portal, closest_portal_para, closest_portal_dst = \
                 Mesh2d.find_closest_portal_inside_sector(poly, sector, spike_idx, portals)
+            # started = timeit("find_closest_portal_inside_sector", started)
 
             # closest edge always exists (unless something's horribly wrong)
             # closest portal - not always (there might be no portals inside the sector
@@ -475,16 +516,20 @@ class Mesh2d(object):
                     else:
                         portal.end_info = closest_portal, 1
 
+            # started = timeit("creating portals for 1 spike", started)
 
             portals.extend(new_portals)
-
+        # started = timeit("creating portals for all spikes", started)
         return portals
 
 
 
     def __init__(self, poly, convex_relax_thresh = 0.0):
         poly = deepcopy(poly)
+
+        started = clock()
         portals = Mesh2d.find_portals(poly, convex_relax_thresh)
+        started = timeit("find portals", started)
 
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
         segments_to_split = defaultdict(list)
@@ -502,6 +547,8 @@ class Mesh2d(object):
                 portal.kind = Portal.ToVertex
                 portal.end_info = end_idx
 
+
+        # started = timeit("inserting new vertices", started)
 
         def resolve_chain(portal):
             if portal.kind == Portal.ToPortal:
@@ -587,7 +634,7 @@ class Mesh2d(object):
                 out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
                 idx, _ = max(izip(ways1, out_angles), key = itemgetter(1))
 
-
+        # started = timeit("making rooms", started)
         # for r in rooms: print(r)
         self.rooms = rooms
         self.portals = portals
