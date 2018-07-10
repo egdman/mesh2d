@@ -18,6 +18,19 @@ parser.add_argument('-d', '--debug', action='store_true', help='Start in debug m
 def v2col(x, y):
     return Matrix.column_vec((x, y, 1.))
 
+def poly_to_ascii(poly):
+    s = ""
+    outline = (poly.vertices[idx] for idx in poly.graph.loop_iterator(poly.graph.loops[0]))
+    holes = ((poly.vertices[idx] for idx in poly.graph.loop_iterator(hole)) for hole in poly.graph.loops[1:])
+    s += " ".join("{} {}".format(v[0], v[1]) for v in outline)
+    s += "\n"
+    for hole in holes:
+        s += " ".join("{} {}".format(v[0], v[1]) for v in hole)
+        s += "\n"
+    return s
+
+
+
 class Tool(object):
 
     def __init__(self, parent):
@@ -301,6 +314,16 @@ class Application(tk.Frame):
         self.wallToolBtn.pack()
 
 
+        self.saveToolIcon = tk.PhotoImage(file=os.path.join(button_dir, 'save.gif'))
+        self.saveToolBtn = tk.Button(
+            self,
+            image=self.saveToolIcon,
+            height=31,
+            width=31,
+            command = self.save_polygon)
+        self.saveToolBtn.pack()
+
+
         self.minusIcon = tk.PhotoImage(file=os.path.join(button_dir, 'minus.gif'))
         self.minusBtn = tk.Button(
             self,
@@ -317,6 +340,12 @@ class Application(tk.Frame):
             command = self._switch_add_mode
         )
         self.plusBtn.pack(side = tk.BOTTOM)
+
+
+    def save_polygon(self):
+        if self._polygons:
+            with open("poly.txt", 'w') as stream:
+                stream.write(poly_to_ascii(self._polygons[0]))
 
 
     def get_bool_mode(self):
