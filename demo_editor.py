@@ -4,6 +4,7 @@ import fnmatch
 import platform
 import Tkinter as tk
 from argparse import ArgumentParser
+import traceback
 
 from mesh2d import *
 from views import *
@@ -683,6 +684,7 @@ class ProvideException(object):
 
         except Exception as e:
             print('Exception was thrown: {}'.format(e))
+            print(traceback.format_exc())
             # Optionally raise your own exceptions, popups etc
 
 

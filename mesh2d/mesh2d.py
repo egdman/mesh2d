@@ -5,14 +5,33 @@ from operator import itemgetter
 from itertools import chain, izip, repeat, tee
 from copy import deepcopy
 from time import clock
+from contextlib import contextmanager
 
 from .vector2 import vec, Geom2
 from .utils import pairs, triples
 
-def timeit(name, start):
-    now = clock()
-    print("{} took {:.3f} ms".format(name, 1000 * (now - start)))
-    return now
+class CallTime:
+    def __init__(self):
+        self.accum = 0.
+        self.n = 0
+
+    def add(self, time):
+        self.n += 1
+        self.accum += time
+    def average(self):
+        return self.accum / self.n
+
+timing = defaultdict(CallTime)
+
+@contextmanager
+def timed_exec(name):
+    s = clock()
+    yield
+    timing[name].add(clock() - s)
+
+
+
+
 
 class Loops(object):
     def __init__(self):
@@ -274,13 +293,11 @@ class Mesh2d(object):
         )
 
 
-
     @staticmethod
     def find_closest_edge_inside_sector(poly, sector, tip_idx, cutoff1, cutoff2):
-        skipped_num, considered_num = 0, 0
         _, tip, _ = sector
-        closest_para, closest_distSq, closest_edge = None, None, None
         cutoff_plane = None
+        closest_para, closest_distSq, closest_edge = None, None, None
 
         for loop_start in poly.graph.loops:
             indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
@@ -291,26 +308,23 @@ class Mesh2d(object):
 
                 (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
 
-                seg0x, seg1x = seg0.append(1), seg1.append(1)
+                # with timed_exec("cutoff plane check"):
+                #     seg0x, seg1x = seg0.append(1), seg1.append(1)
 
-                if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
-                    skipped_num += 1
-                    continue
+                #     if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
+                #         continue
 
-                if cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
-                    skipped_num += 1
-                    continue
+                #     elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
+                #         continue
 
-                para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
-                considered_num += 1
+                with timed_exec("_segment_closest_point_inside_sector"):
+                    para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
+
                 if para is None: continue
                 if closest_distSq is None or distSq < closest_distSq:
                     closest_distSq = distSq
                     closest_para = para
                     closest_edge = (seg_i1, seg_i2)
-
-                    # if closest_distSq == 0:
-                    #     return closest_edge, closest_para, closest_distSq
 
                     # make cutoff line
                     n = point - tip
@@ -323,16 +337,28 @@ class Mesh2d(object):
 
 
     @staticmethod
-    def find_closest_portal_inside_sector(poly, sector, tip_idx, portals):
+    def find_closest_portal_inside_sector(poly, sector, tip_idx, portals, cutoff1, cutoff2):
+        _, tip, _ = sector
+        cutoff_plane = None
         closest_portal, closest_distSq, closest_para = None, None, None
 
         for portal in portals:
             if tip_idx == portal.start_index: continue
 
-            portal_seg = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
-            if portal_seg[0] == portal_seg[1]: continue
+            (seg0, seg1) = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
+            if seg0 == seg1: continue
 
-            para, _, distSq = Mesh2d._segment_closest_point_inside_sector(portal_seg, sector)
+            # with timed_exec("cutoff plane check"):
+            #     seg0x, seg1x = seg0.append(1), seg1.append(1)
+
+            #     if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
+            #         continue
+
+            #     elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
+            #         continue
+
+            with timed_exec("_segment_closest_point_inside_sector"):
+                para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
 
             if para is None: continue
 
@@ -342,8 +368,11 @@ class Mesh2d(object):
                 closest_para = para
                 closest_portal = portal
 
-        return closest_portal, closest_para, closest_distSq
+                # make cutoff line
+                n = point - tip
+                cutoff_plane = n.append(-n.dot(point))
 
+        return closest_portal, closest_para, closest_distSq
 
 
     @staticmethod
@@ -355,10 +384,11 @@ class Mesh2d(object):
             return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
 
         # make ray-like line
-        line = (segment[0], segment[1] - segment[0])
-        (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
-        (linepara2, raypara2, _) = Geom2.lines_intersect(line, (tip, dir2))
-        
+        with timed_exec("section 1 (finding line intersections)"):
+            line = (segment[0], segment[1] - segment[0])
+            (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
+            (linepara2, raypara2, _) = Geom2.lines_intersect(line, (tip, dir2))
+
         # check whether line containing segment passes through sector:
         line_through_sector = raypara1 > 0 or raypara2 > 0
 
@@ -366,45 +396,47 @@ class Mesh2d(object):
             return None, None, None
 
         # now we know that line goes through sector
+        with timed_exec("section 2"):
+            # find intersections between segment and sector rays
+            intersect_params = []
+            if raypara1 > 0 and 0 < linepara1 and linepara1 < 1:
+                intersect_params.append(linepara1)
 
-        # find intersections between segment and sector rays
-        intersect_params = []
-        if raypara1 > 0 and 0 < linepara1 and linepara1 < 1:
-            intersect_params.append(linepara1)
+            if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
+                intersect_params.append(linepara2)
 
-        if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
-            intersect_params.append(linepara2)
+            # one intersection => one endpoint inside, other outside
+            if len(intersect_params) == 1:
+                if pt_inside(segment[0]):
+                    candid_params = [0, intersect_params[0]]
+                else:
+                    candid_params = [intersect_params[0], 1]
+            # two intersections => middle section passes through sector
+            elif len(intersect_params) == 2:
+                candid_params = list(sorted(intersect_params))
 
-        # one intersection => one endpoint inside, other outside
-        if len(intersect_params) == 1:
-            if pt_inside(segment[0]):
-                candid_params = [0, intersect_params[0]]
+            # no intersections => entirely inside or outside
             else:
-                candid_params = [intersect_params[0], 1]
-        # two intersections => middle section passes through sector
-        elif len(intersect_params) == 2:
-            candid_params = list(sorted(intersect_params))
+                if pt_inside(segment[0]):
+                    candid_params = [0, 1]
+                else:
+                    return None, None, None
 
-        # no intersections => entirely inside or outside
-        else:
-            if pt_inside(segment[0]):
-                candid_params = [0, 1]
-            else:
-                return None, None, None
+        with timed_exec("section 3"):
+            # find point on line closest to tip
+            projpara = Geom2.project_to_line(tip, line)
 
-        # find point on line closest to tip
-        projpara = Geom2.project_to_line(tip, line)
-
-        if candid_params[0] < projpara and projpara < candid_params[1]:
-            candid_params.append(projpara)
+            if candid_params[0] < projpara and projpara < candid_params[1]:
+                candid_params.append(projpara)
 
 
-        def para_to_pt(para):
-            return line[0] + (para * line[1])
+            def para_to_pt(para):
+                return line[0] + (para * line[1])
 
-        distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
-        p, d = min(izip(candid_params, distances), key = itemgetter(1))
-        return p, para_to_pt(p), d
+            distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
+            with timed_exec("section 3.1 minimization"):
+                p, d = min(izip(candid_params, distances), key = itemgetter(1))
+                return p, para_to_pt(p), d
 
 
 
@@ -420,9 +452,7 @@ class Mesh2d(object):
         The endpoints of portals can be new vertices,
         but they are guaranteed to lie on the polygon boundary (not inside the polygon)
         """
-        started = clock()
         spikes = Mesh2d.find_spikes(poly, threshold)
-        # started = timeit("find spikes", started)
 
         portals = []
 
@@ -441,19 +471,16 @@ class Mesh2d(object):
             tip = poly.vertices[spike_idx]
             sector = (right_dir, tip, left_dir)
 
-            # started = clock()
             # find closest edge
             closest_seg, closest_seg_para, closest_seg_dst = \
                 Mesh2d.find_closest_edge_inside_sector(poly, sector, spike_idx, hp1, hp2)
-            # started = timeit("find_closest_edge_inside_sector", started)
 
             if closest_seg is None:
                 raise RuntimeError("Could not find a single edge inside sector")
 
             # find closest portal
             closest_portal, closest_portal_para, closest_portal_dst = \
-                Mesh2d.find_closest_portal_inside_sector(poly, sector, spike_idx, portals)
-            # started = timeit("find_closest_portal_inside_sector", started)
+                Mesh2d.find_closest_portal_inside_sector(poly, sector, spike_idx, portals, hp1, hp2)
 
             # closest edge always exists (unless something's horribly wrong)
             # closest portal - not always (there might be no portals inside the sector
@@ -516,10 +543,8 @@ class Mesh2d(object):
                     else:
                         portal.end_info = closest_portal, 1
 
-            # started = timeit("creating portals for 1 spike", started)
-
             portals.extend(new_portals)
-        # started = timeit("creating portals for all spikes", started)
+
         return portals
 
 
@@ -527,9 +552,10 @@ class Mesh2d(object):
     def __init__(self, poly, convex_relax_thresh = 0.0):
         poly = deepcopy(poly)
 
-        started = clock()
         portals = Mesh2d.find_portals(poly, convex_relax_thresh)
-        started = timeit("find portals", started)
+
+        for name, time in timing.items():
+            print("{} took on average {:.3f} ms,   called {} times,   {} ms total".format(name, 1000 * time.average(), time.n, 1000 * time.accum))
 
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
         segments_to_split = defaultdict(list)
@@ -547,8 +573,6 @@ class Mesh2d(object):
                 portal.kind = Portal.ToVertex
                 portal.end_info = end_idx
 
-
-        # started = timeit("inserting new vertices", started)
 
         def resolve_chain(portal):
             if portal.kind == Portal.ToPortal:
@@ -634,7 +658,6 @@ class Mesh2d(object):
                 out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
                 idx, _ = max(izip(ways1, out_angles), key = itemgetter(1))
 
-        # started = timeit("making rooms", started)
         # for r in rooms: print(r)
         self.rooms = rooms
         self.portals = portals
