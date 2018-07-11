@@ -308,14 +308,14 @@ class Mesh2d(object):
 
                 (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
 
-                # with timed_exec("cutoff plane check"):
-                #     seg0x, seg1x = seg0.append(1), seg1.append(1)
+                with timed_exec("cutoff plane check"):
+                    seg0x, seg1x = seg0.append(1), seg1.append(1)
 
-                #     if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
-                #         continue
+                    if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
+                        continue
 
-                #     elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
-                #         continue
+                    elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
+                        continue
 
                 with timed_exec("_segment_closest_point_inside_sector"):
                     para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
@@ -348,14 +348,14 @@ class Mesh2d(object):
             (seg0, seg1) = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
             if seg0 == seg1: continue
 
-            # with timed_exec("cutoff plane check"):
-            #     seg0x, seg1x = seg0.append(1), seg1.append(1)
+            with timed_exec("cutoff plane check"):
+                seg0x, seg1x = seg0.append(1), seg1.append(1)
 
-            #     if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
-            #         continue
+                if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
+                    continue
 
-            #     elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
-            #         continue
+                elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
+                    continue
 
             with timed_exec("_segment_closest_point_inside_sector"):
                 para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
@@ -384,10 +384,9 @@ class Mesh2d(object):
             return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
 
         # make ray-like line
-        with timed_exec("section 1 (finding line intersections)"):
-            line = (segment[0], segment[1] - segment[0])
-            (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
-            (linepara2, raypara2, _) = Geom2.lines_intersect(line, (tip, dir2))
+        line = (segment[0], segment[1] - segment[0])
+        (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
+        (linepara2, raypara2, _) = Geom2.lines_intersect(line, (tip, dir2))
 
         # check whether line containing segment passes through sector:
         line_through_sector = raypara1 > 0 or raypara2 > 0
@@ -396,47 +395,44 @@ class Mesh2d(object):
             return None, None, None
 
         # now we know that line goes through sector
-        with timed_exec("section 2"):
-            # find intersections between segment and sector rays
-            intersect_params = []
-            if raypara1 > 0 and 0 < linepara1 and linepara1 < 1:
-                intersect_params.append(linepara1)
+        # find intersections between segment and sector rays
+        intersect_params = []
+        if raypara1 > 0 and 0 < linepara1 and linepara1 < 1:
+            intersect_params.append(linepara1)
 
-            if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
-                intersect_params.append(linepara2)
+        if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
+            intersect_params.append(linepara2)
 
-            # one intersection => one endpoint inside, other outside
-            if len(intersect_params) == 1:
-                if pt_inside(segment[0]):
-                    candid_params = [0, intersect_params[0]]
-                else:
-                    candid_params = [intersect_params[0], 1]
-            # two intersections => middle section passes through sector
-            elif len(intersect_params) == 2:
-                candid_params = list(sorted(intersect_params))
-
-            # no intersections => entirely inside or outside
+        # one intersection => one endpoint inside, other outside
+        if len(intersect_params) == 1:
+            if pt_inside(segment[0]):
+                candid_params = [0, intersect_params[0]]
             else:
-                if pt_inside(segment[0]):
-                    candid_params = [0, 1]
-                else:
-                    return None, None, None
+                candid_params = [intersect_params[0], 1]
+        # two intersections => middle section passes through sector
+        elif len(intersect_params) == 2:
+            candid_params = list(sorted(intersect_params))
 
-        with timed_exec("section 3"):
-            # find point on line closest to tip
-            projpara = Geom2.project_to_line(tip, line)
+        # no intersections => entirely inside or outside
+        else:
+            if pt_inside(segment[0]):
+                candid_params = [0, 1]
+            else:
+                return None, None, None
 
-            if candid_params[0] < projpara and projpara < candid_params[1]:
-                candid_params.append(projpara)
+        # find point on line closest to tip
+        projpara = Geom2.project_to_line(tip, line)
 
+        if candid_params[0] < projpara and projpara < candid_params[1]:
+            candid_params.append(projpara)
 
-            def para_to_pt(para):
-                return line[0] + (para * line[1])
+        def para_to_pt(para):
+            return line[0] + (para * line[1])
 
-            distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
-            with timed_exec("section 3.1 minimization"):
-                p, d = min(izip(candid_params, distances), key = itemgetter(1))
-                return p, para_to_pt(p), d
+        distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
+
+        p, d = min(izip(candid_params, distances), key = itemgetter(1))
+        return p, para_to_pt(p), d
 
 
 
