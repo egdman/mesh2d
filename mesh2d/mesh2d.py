@@ -18,6 +18,7 @@ class CallTime:
     def add(self, time):
         self.n += 1
         self.accum += time
+
     def average(self):
         return self.accum / self.n
 
@@ -28,9 +29,6 @@ def timed_exec(name):
     s = clock()
     yield
     timing[name].add(clock() - s)
-
-
-
 
 
 class Loops(object):
@@ -329,9 +327,7 @@ class Mesh2d(object):
                     # make cutoff line
                     n = point - tip
                     cutoff_plane = n.append(-n.dot(point))
-                    # print("cutoff plane: {}".format(cutoff_plane))
 
-        # print("{} considered, {} skipped".format(considered_num, skipped_num))
         return closest_edge, closest_para, closest_distSq
 
 
@@ -548,115 +544,121 @@ class Mesh2d(object):
     def __init__(self, poly, convex_relax_thresh = 0.0):
         poly = deepcopy(poly)
 
-        portals = Mesh2d.find_portals(poly, convex_relax_thresh)
+        with timed_exec("find portals"):
+            portals = Mesh2d.find_portals(poly, convex_relax_thresh)
+
+
+
+        with timed_exec("process portals"):
+            # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
+            segments_to_split = defaultdict(list)
+            for portal in portals:
+
+                if portal.kind == Portal.ToSegment:
+                    segment, _ = portal.end_info
+                    segments_to_split[segment].append(portal)
+
+            for segment, seg_portals in segments_to_split.items():
+                end_params = list(portal.end_info[1] for portal in seg_portals)
+                end_ids = poly.add_vertices_to_border(segment, end_params)
+
+                for end_idx, portal in izip(end_ids, seg_portals):
+                    portal.kind = Portal.ToVertex
+                    portal.end_info = end_idx
+
+
+            def resolve_chain(portal):
+                if portal.kind == Portal.ToPortal:
+                    next_portal, para = portal.end_info
+                    resolve_chain(next_portal)
+
+                    portal.kind = Portal.ToVertex
+                    if para == 0:
+                        portal.end_info = next_portal.start_index
+                    elif para == 1:
+                        portal.end_info = next_portal.end_info
+                    else:
+                        raise RuntimeError(
+                            "{} - what is this parameter value?"
+                            " It should be either 0 or 1".format(para))
+
+            # convert all 'ToPortal' portals to 'ToVertex' portals
+            for portal in portals:
+                # travel down the chain of linked portals until arrive to 'ToVertex' portal
+                resolve_chain(portal)
+
+            # now all portals are 'ToVertex'
+
+            # convert portals to edges (tuples)
+            portals = ((p.start_index, p.end_info) for p in portals)
+
+            # remove degen portals
+            portals = list(p for p in portals if p[0] != p[1])
+
+            # for each portal add reversed portal
+            fwd, back = tee(portals, 2)
+            portals = chain(fwd, (tuple(reversed(p)) for p in back))
+            # remove duplicates that might have occured if
+            # we already had pairs of opposites among original portals
+            portals = list(set(portals))
+
+            # print("{} portals".format(len(portals)))
+
+
+            # list of edges
+            edge_buffer = list()
+
+            # linked lists of indices of outgoing edges for each vertex index
+            ways_to_go = Loops()
+            first_way_ids = list(None for _ in xrange(len(poly.graph.next)))
+
+            for src in poly.graph.all_nodes_iterator():
+                tgt = poly.graph.next[src]
+                first_way_ids[src] = ways_to_go.add_loop(1)
+                edge_buffer.append((src, tgt))
+
+            for src, tgt in portals:
+                way_idx = first_way_ids[src]
+                ways_to_go.insert_node((way_idx, ways_to_go.next[way_idx]))
+                edge_buffer.append((src, tgt))
+
+
+            def angle(v0, v1):
+                # backtracking gives -180 degrees, not 180
+                cosine = Geom2.cos_angle(v0, v1)
+                sine = Geom2.sin_angle(v0, v1)
+                return math.acos(cosine) if sine > 0 else -math.acos(cosine)
+
+
+            # make rooms (a room is just a list of vertex ids)
+            rooms = list()
+            consumed = [False] * len(edge_buffer)
+            for idx, _ in enumerate(edge_buffer):
+                if consumed[idx]: continue
+                room = list()
+                rooms.append(room)
+
+                while not consumed[idx]:
+                    consumed[idx] = True
+                    src, tgt = edge_buffer[idx]
+                    room.append(src)
+                    ways0, ways1 = tee(ways_to_go.loop_iterator(first_way_ids[tgt]))
+
+                    in_edge = poly.vertices[tgt] - poly.vertices[src]
+                    out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
+                        for nxt in (edge_buffer[way][1] for way in ways0))
+
+                    out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
+                    idx, _ = max(izip(ways1, out_angles), key = itemgetter(1))
+
+            # for r in rooms: print(r)
+            self.rooms = rooms
+            self.portals = portals
+            self.vertices = poly.vertices
+            self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
+            self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
+
 
         for name, time in timing.items():
-            print("{} took on average {:.3f} ms,   called {} times,   {} ms total".format(name, 1000 * time.average(), time.n, 1000 * time.accum))
-
-        # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
-        segments_to_split = defaultdict(list)
-        for portal in portals:
-
-            if portal.kind == Portal.ToSegment:
-                segment, _ = portal.end_info
-                segments_to_split[segment].append(portal)
-
-        for segment, seg_portals in segments_to_split.items():
-            end_params = list(portal.end_info[1] for portal in seg_portals)
-            end_ids = poly.add_vertices_to_border(segment, end_params)
-
-            for end_idx, portal in izip(end_ids, seg_portals):
-                portal.kind = Portal.ToVertex
-                portal.end_info = end_idx
-
-
-        def resolve_chain(portal):
-            if portal.kind == Portal.ToPortal:
-                next_portal, para = portal.end_info
-                resolve_chain(next_portal)
-
-                portal.kind = Portal.ToVertex
-                if para == 0:
-                    portal.end_info = next_portal.start_index
-                elif para == 1:
-                    portal.end_info = next_portal.end_info
-                else:
-                    raise RuntimeError(
-                        "{} - what is this parameter value?"
-                        " It should be either 0 or 1".format(para))
-
-        # convert all 'ToPortal' portals to 'ToVertex' portals
-        for portal in portals:
-            # travel down the chain of linked portals until arrive to 'ToVertex' portal
-            resolve_chain(portal)
-
-        # now all portals are 'ToVertex'
-
-        # convert portals to edges (tuples)
-        portals = ((p.start_index, p.end_info) for p in portals)
-
-        # remove degen portals
-        portals = list(p for p in portals if p[0] != p[1])
-
-        # for each portal add reversed portal
-        fwd, back = tee(portals, 2)
-        portals = chain(fwd, (tuple(reversed(p)) for p in back))
-        # remove duplicates that might have occured if
-        # we already had pairs of opposites among original portals
-        portals = list(set(portals))
-
-        # print("{} portals".format(len(portals)))
-
-
-        # list of edges
-        edge_buffer = list()
-
-        # linked lists of indices of outgoing edges for each vertex index
-        ways_to_go = Loops()
-        first_way_ids = list(None for _ in xrange(len(poly.graph.next)))
-
-        for src in poly.graph.all_nodes_iterator():
-            tgt = poly.graph.next[src]
-            first_way_ids[src] = ways_to_go.add_loop(1)
-            edge_buffer.append((src, tgt))
-
-        for src, tgt in portals:
-            way_idx = first_way_ids[src]
-            ways_to_go.insert_node((way_idx, ways_to_go.next[way_idx]))
-            edge_buffer.append((src, tgt))
-
-
-        def angle(v0, v1):
-            # backtracking gives -180 degrees, not 180
-            cosine = Geom2.cos_angle(v0, v1)
-            sine = Geom2.sin_angle(v0, v1)
-            return math.acos(cosine) if sine > 0 else -math.acos(cosine)
-
-
-        # make rooms (a room is just a list of vertex ids)
-        rooms = list()
-        consumed = [False] * len(edge_buffer)
-        for idx, _ in enumerate(edge_buffer):
-            if consumed[idx]: continue
-            room = list()
-            rooms.append(room)
-
-            while not consumed[idx]:
-                consumed[idx] = True
-                src, tgt = edge_buffer[idx]
-                room.append(src)
-                ways0, ways1 = tee(ways_to_go.loop_iterator(first_way_ids[tgt]))
-
-                in_edge = poly.vertices[tgt] - poly.vertices[src]
-                out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
-                    for nxt in (edge_buffer[way][1] for way in ways0))
-
-                out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
-                idx, _ = max(izip(ways1, out_angles), key = itemgetter(1))
-
-        # for r in rooms: print(r)
-        self.rooms = rooms
-        self.portals = portals
-        self.vertices = poly.vertices
-        self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
-        self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
+            print("{} took on average {:.3f} ms,   called {} times,   {} ms total"
+            .format(name, 1000 * time.average(), time.n, 1000 * time.accum))
