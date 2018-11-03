@@ -13,9 +13,6 @@ pkg_dir = os.path.dirname(os.path.abspath(__file__))
 resource_dir = os.path.join(pkg_dir, 'resources')
 button_dir = os.path.join(resource_dir, 'buttons')
 
-parser = ArgumentParser()
-parser.add_argument('-d', '--debug', action='store_true', help='Start in debug mode')
-
 def v2col(x, y):
     return Matrix.column_vec((x, y, 1.))
 
@@ -200,7 +197,7 @@ class Bool:
 
 
 class Application(tk.Frame):
-    def __init__(self, master=None, db_mode = False):
+    def __init__(self, master=None, poly_path=None, db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
         self.this_is_windows = "windows" in platform.system().lower()
@@ -241,16 +238,17 @@ class Application(tk.Frame):
 
         self.pointer_over_poly = False
 
-        try:
-            with open("poly.txt", 'r') as stream:
-                poly = ascii_to_poly(stream.read())
-                self._polygons.append(poly)
-                navmesh = Mesh2d(poly, 15)
-                num_polys = len(self.find_draw_objects_glob('polys/*'))
-                self.add_draw_object('polys/poly_{}'.format(num_polys),
-                    NavMeshView(navmesh))
-        except IOError:
-            pass
+        if poly_path is not None:
+            try:
+                with open(poly_path, 'r') as stream:
+                    poly = ascii_to_poly(stream.read())
+                    self._polygons.append(poly)
+                    navmesh = Mesh2d(poly, 15)
+                    num_polys = len(self.find_draw_objects_glob('polys/*'))
+                    self.add_draw_object('polys/poly_{}'.format(num_polys),
+                        NavMeshView(navmesh))
+            except IOError:
+                print("given file cannot be opened")
 
         self.draw_all()
 
@@ -690,10 +688,14 @@ class ProvideException(object):
 
 @ProvideException
 def main():
+    parser = ArgumentParser()
+
+    parser.add_argument('-d', '--debug', action='store_true', help='Start in debug mode')
+    parser.add_argument('-p', '--poly', type=str, default=None, help='open this polygon file')
 
     args = parser.parse_args()
 
-    app = Application(db_mode=args.debug)
+    app = Application(db_mode=args.debug, poly_path=args.poly)
     app.master.title('Map editor')
     app.mainloop() 
 
