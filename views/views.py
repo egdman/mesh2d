@@ -113,6 +113,42 @@ class ObjectView(object):
         return crds
 
 
+class PointHelperView(ObjectView):
+    def __init__(self, loc, color='#ffffff'):
+        self.loc = loc
+        self.sz = 3
+        self.color = color
+        super(PointHelperView, self).__init__()
+
+
+    def draw_self(self, camera_transform, canvas):
+        if self.world_vertices_np is None:
+            Id = canvas.create_polygon((0, 0, 0, 0, 0, 0, 0, 0), fill=self.color)
+            canvas.addtag_withtag(self.tag, Id)
+            self.element_ids.append(Id)
+
+            x, y = self.loc
+            self.world_vertices_np = np.ndarray(
+                shape = (1, 3),
+                buffer=np.array((x, y, 1.0)))
+
+        self.redraw(camera_transform, canvas)
+
+    def redraw(self, camera_transform, canvas):
+        screen_coords = self.world_vertices_np[:1].dot(camera_transform[:-1].T)
+        x, y = screen_coords[0]
+        sz = self.sz
+        for elem_id in self.element_ids:
+            canvas.coords(elem_id,
+                x - sz,
+                y - sz,
+                x + sz,
+                y - sz,
+                x + sz,
+                y + sz,
+                x - sz,
+                y + sz,
+            )
 
 class WallHelperView(ObjectView):
     def __init__(self, vec1, vec2, width, color='#ffffff'):
@@ -172,44 +208,6 @@ class WallHelperView(ObjectView):
         self.set_vector(5, c4)
         self.set_vector(6, c4)
         self.set_vector(7, c1)
-
-
-
-
-class PointHelperView(ObjectView):
-    def __init__(self, loc, color='#ffffff'):
-        self.loc = loc
-        self.color = color
-        super(PointHelperView, self).__init__()
-
-
-    def modify(self, vec):
-        delta = vec - self.loc
-        self.loc = vec
-        self.offset_by(delta)
-
-
-    def first_time_draw(self, canvas):
-        sz = 3
-        Id = canvas.create_polygon(
-            (
-                self.loc[0] - sz,
-                self.loc[1] - sz,
-
-                self.loc[0] + sz,
-                self.loc[1] - sz,
-
-                self.loc[0] + sz,
-                self.loc[1] + sz,
-
-                self.loc[0] - sz,
-                self.loc[1] + sz,
-            ),
-
-            fill = self.color
-        )
-        self.element_ids.append(Id)
-
 
 
 class SegmentHelperView(ObjectView):
