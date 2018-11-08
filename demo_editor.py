@@ -2,16 +2,25 @@ import os
 import random
 import fnmatch
 import platform
+import struct
 import Tkinter as tk
 from argparse import ArgumentParser
 import traceback
-
 from mesh2d import *
 from views import *
 
 pkg_dir = os.path.dirname(os.path.abspath(__file__))
 resource_dir = os.path.join(pkg_dir, 'resources')
 button_dir = os.path.join(resource_dir, 'buttons')
+
+try:
+    AnyError = StandardError
+except NameError:
+    AnyError = Exception
+
+class RecordType:
+    class AddVertex: pass
+    class AddPoly: pass
 
 def v2col(x, y):
     return Matrix.column_vec((x, y, 1.))
@@ -41,6 +50,26 @@ def ascii_to_poly(text):
     for hole in loops[1:]:
         poly.add_hole(hole)
     return poly
+
+
+def ieee754_ser(floatNumber):
+    return hex(struct.unpack('<Q', struct.pack('<d', floatNumber))[0])[:-1]
+
+def ieee754_unser(hexString):
+    return struct.unpack('<d', struct.pack('<Q', int(hexString, base=16)))[0]
+
+
+def dump_history(history):
+    import uuid
+    fname = "hist_{}".format(uuid.uuid4().hex)
+    with open(fname, 'w') as stream:
+        for kind, data in history:
+            if kind == RecordType.AddVertex:
+                x, y = data
+                stream.write(ieee754_ser(x) + " : " + str(x) + '\n')
+                stream.write(ieee754_ser(y) + " : " + str(y) + '\n')
+            elif kind == RecordType.AddPoly:
+                stream.write("AddPoly\n")
 
 
 class Tool(object):
@@ -126,6 +155,7 @@ class FreePolyTool(Tool):
 
     def right_click(self, event):
         app = self.parent
+        app.history.append((RecordType.AddPoly, None))
 
         def remove_duplicates(vertices):
             seen = set()
@@ -137,7 +167,11 @@ class FreePolyTool(Tool):
         self.vertices = list(remove_duplicates(self.vertices))
         if len(self.vertices) < 3: return
 
-        app.add_polygon(self.vertices)
+        try:
+            app.add_polygon(self.vertices)
+        except AnyError:
+            dump_history(app.history)
+
 
         del self.vertices[:]
         # remove helper views
@@ -148,6 +182,8 @@ class FreePolyTool(Tool):
     def left_click(self, event):
         app = self.parent
         new_vrt = app.get_world_crds(event.x, event.y)
+
+        app.history.append((RecordType.AddVertex, new_vrt))
         app.add_draw_object(
             'tool_helpers/free_poly/point_{}'.format(len(self.vertices)),
             PointHelperView(loc=new_vrt))
@@ -200,6 +236,7 @@ class Application(tk.Frame):
     def __init__(self, master=None, poly_path=None, db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
+        self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
 
         self.grid()
@@ -367,6 +404,7 @@ class Application(tk.Frame):
 
 
     def save_polygon(self):
+        dump_history(self.history)
         if self._polygons:
             with open("poly.txt", 'w') as stream:
                 stream.write(poly_to_ascii(self._polygons[0]))
