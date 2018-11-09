@@ -185,9 +185,14 @@ class FreePolyTool(Tool):
         new_vrt = app.get_world_crds(event.x, event.y)
 
         app.history.append((RecordType.AddVertex, new_vrt))
+
         app.add_draw_object(
             'tool_helpers/free_poly/point_{}'.format(len(self.vertices)),
             PointHelperView(loc=new_vrt))
+
+        # app.add_draw_object(
+        #         'tool_helpers/free_poly/point_annot_{}'.format(len(self.vertices)),
+        #     TextView(loc=new_vrt, text=str(len(self.vertices))))
 
         self.vertices.append(new_vrt)
 

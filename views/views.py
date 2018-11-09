@@ -1,4 +1,6 @@
 from mesh2d import vec, Matrix
+import Tkinter as tk
+from tkFont import Font as font
 import random
 import numpy as np
 import uuid
@@ -111,6 +113,49 @@ class ObjectView(object):
         crds.append(vertices[indices[0]][0])
         crds.append(vertices[indices[0]][1])
         return crds
+
+
+class TextView(ObjectView):
+    def __init__(self, loc, text, size=18, scale=True, color='#ffffff'):
+        super(TextView, self).__init__()
+        self.loc = loc
+        self.color = color
+        self.text = text
+        self.size = self.current_size = size
+        self.scale = scale
+
+    def draw_self(self, camera_transform, canvas):
+        if self.world_vertices_np is None:
+            textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=font(size=self.size), anchor=tk.NW)
+            canvas.addtag_withtag(self.tag, textId)
+            self.element_ids = (textId,)
+
+            x, y = self.loc
+            self.world_vertices_np = np.ndarray(
+                shape = (3, 3),
+                buffer=np.array((
+                    x, y, 1.0,
+                    0, 0, 1.0,
+                    1, 0, 1.0)))
+
+        self.redraw(camera_transform, canvas)
+
+    def redraw(self, camera_transform, canvas):
+        screen_coords = self.world_vertices_np.dot(camera_transform[:-1].T)
+
+        x, y = screen_coords[0]
+        if self.scale:
+            scale = np.linalg.norm(screen_coords[1] - screen_coords[2])
+            new_size = int(self.size * scale)
+            if abs(new_size - self.current_size) > 5 and new_size <= 70:
+                self.current_size = new_size
+                self.cleanup(canvas)
+                textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=font(size=self.current_size), anchor=tk.NW)
+                canvas.addtag_withtag(self.tag, textId)
+                self.element_ids = (textId,)
+
+        elem_id, = self.element_ids
+        canvas.coords(elem_id, x, y)
 
 
 class PointHelperView(ObjectView):
