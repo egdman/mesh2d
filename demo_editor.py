@@ -69,7 +69,8 @@ def dump_history(history):
                 stream.write(ieee754_ser(x) + " : " + str(x) + '\n')
                 stream.write(ieee754_ser(y) + " : " + str(y) + '\n')
             elif kind == RecordType.AddPoly:
-                stream.write("AddPoly\n")
+                mode = '+' if data == Bool.Add else '-'
+                stream.write("AddPoly " + mode + '\n')
 
 
 class Tool(object):
@@ -155,7 +156,7 @@ class FreePolyTool(Tool):
 
     def right_click(self, event):
         app = self.parent
-        app.history.append((RecordType.AddPoly, None))
+        app.history.append((RecordType.AddPoly, app.get_bool_mode()))
 
         def remove_duplicates(vertices):
             seen = set()
