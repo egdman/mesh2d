@@ -116,7 +116,9 @@ class ObjectView(object):
 
 
 class TextView(ObjectView):
-    def __init__(self, loc, text, size=18, scale=True, color='#ffffff'):
+    # sizes = set(range(6, 78, 6))
+
+    def __init__(self, loc, text, size=18, scale=False, color='#ffffff'):
         super(TextView, self).__init__()
         self.loc = loc
         self.color = color
@@ -143,18 +145,25 @@ class TextView(ObjectView):
     def redraw(self, camera_transform, canvas):
         screen_coords = self.world_vertices_np.dot(camera_transform[:-1].T)
 
-        x, y = screen_coords[0]
         if self.scale:
             scale = np.linalg.norm(screen_coords[1] - screen_coords[2])
             new_size = int(self.size * scale)
-            if abs(new_size - self.current_size) > 5 and new_size <= 70:
+            if new_size != self.current_size and new_size % 5 == 0 and new_size <= 70:
                 self.current_size = new_size
+                print("cur scale = {}".format(scale))
+                print("cur size  = {}".format(new_size))
+
                 self.cleanup(canvas)
-                textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=font(size=self.current_size), anchor=tk.NW)
-                canvas.addtag_withtag(self.tag, textId)
-                self.element_ids = (textId,)
+                if new_size >= 10:
+                    textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=font(size=new_size), anchor=tk.NW)
+                    canvas.addtag_withtag(self.tag, textId)
+                    self.element_ids = (textId,)
+                else:
+                    new_size = 10
+
 
         elem_id, = self.element_ids
+        x, y = screen_coords[0]
         canvas.coords(elem_id, x, y)
 
 

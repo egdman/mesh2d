@@ -171,6 +171,7 @@ class FreePolyTool(Tool):
         try:
             app.add_polygon(self.vertices)
         except AnyError:
+            raise
             dump_history(app.history)
 
 
@@ -238,10 +239,24 @@ class Bool:
     class Add: pass
 
 
+class VisualDebug(object):
+    def __init__(self, app):
+        self.app = app
+        self.counter = 0
+
+    def add_text(self, loc, text, size=18, scale=True, color='#ffffff'):
+        self.app.add_draw_object(
+            'debug_text_{}'.format(self.counter),
+            TextView(loc=loc, text=text, size=size, scale=scale, color=color))
+        self.counter += 1
+
+
 class Application(tk.Frame):
     def __init__(self, master=None, poly_path=None, db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
+        self.debugger = None # VisualDebug(self)
+
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
 
@@ -286,7 +301,7 @@ class Application(tk.Frame):
                 with open(poly_path, 'r') as stream:
                     poly = ascii_to_poly(stream.read())
                     self._polygons.append(poly)
-                    navmesh = Mesh2d(poly, 15)
+                    navmesh = Mesh2d(poly, 15, self.debugger)
                     num_polys = len(self.find_draw_objects_glob('polys/*'))
                     self.add_draw_object('polys/poly_{}'.format(num_polys),
                         NavMeshView(navmesh))
@@ -664,6 +679,7 @@ class Application(tk.Frame):
 
         # delete all polygon views (we'll add them after boolean operation)
         self.remove_draw_objects_glob('polys/*')
+        self.remove_draw_objects_glob('debug_*')
 
         new_poly = Polygon2d(vertices[:])
 
@@ -694,7 +710,7 @@ class Application(tk.Frame):
 
         # draw navmeshes
         for poly in self._polygons:
-            navmesh = Mesh2d(poly, 15)
+            navmesh = Mesh2d(poly, 15, self.debugger)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
             self.add_draw_object('polys/poly_{}'.format(num_polys),
                 NavMeshView(navmesh))
@@ -708,6 +724,10 @@ class Application(tk.Frame):
 
     def draw_all(self):
         camera_trans = self.get_world_to_screen_mtx()
+
+        # draw debug objects on top
+        for name in self.find_draw_objects_glob('debug_*'):
+            self.canvas.tag_raise(self.draw_objects[name].tag)
 
         for draw_object in self.draw_objects.values():
             draw_object.draw_self(camera_trans, self.canvas)

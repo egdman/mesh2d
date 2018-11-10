@@ -432,7 +432,7 @@ class Mesh2d(object):
 
 
     @staticmethod
-    def find_portals(poly, threshold):
+    def find_portals(poly, threshold, db_visitor=None):
 
         """
         This function uses algorithm from R. Oliva and N. Pelechano - 
@@ -538,10 +538,10 @@ class Mesh2d(object):
 
 
 
-    def __init__(self, poly, convex_relax_thresh = 0.0):
+    def __init__(self, poly, convex_relax_thresh = 0.0, db_visitor=None):
         poly = deepcopy(poly)
 
-        portals = Mesh2d.find_portals(poly, convex_relax_thresh)
+        portals = Mesh2d.find_portals(poly, convex_relax_thresh, db_visitor)
 
 
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
@@ -616,6 +616,9 @@ class Mesh2d(object):
             ways_to_go.insert_node((way_idx, ways_to_go.next[way_idx]))
             edge_buffer.append((src, tgt))
 
+        if db_visitor:
+            for idx in poly.graph.all_nodes_iterator():
+                db_visitor.add_text(loc=poly.vertices[idx], text=str(idx), scale=False)
 
         def angle(v0, v1):
             # backtracking gives -180 degrees, not 180
