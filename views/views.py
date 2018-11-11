@@ -150,8 +150,6 @@ class TextView(ObjectView):
             new_size = int(self.size * scale)
             if new_size != self.current_size and new_size % 5 == 0 and new_size <= 70:
                 self.current_size = new_size
-                print("cur scale = {}".format(scale))
-                print("cur size  = {}".format(new_size))
 
                 self.cleanup(canvas)
                 if new_size >= 10:

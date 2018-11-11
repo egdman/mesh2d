@@ -442,7 +442,6 @@ class Mesh2d(object):
         but they are guaranteed to lie on the polygon boundary (not inside the polygon)
         """
         spikes = Mesh2d.find_spikes(poly, threshold)
-
         portals = []
 
         for spike in spikes:
@@ -478,23 +477,11 @@ class Mesh2d(object):
 
             # we might want to add a second portal later
             new_portals = [portal]
-
             portal.start_index = spike_idx
-            if closest_seg_para == 0 or closest_seg_para == 1:
-                portal.kind = Portal.ToVertex
-                portal.end_info = closest_seg[int(closest_seg_para)]
-
-            else:
-                portal.kind = Portal.ToSegment
-                portal.end_info = closest_seg, closest_seg_para
-
-            closest_dst = closest_seg_dst
-
-            # check if there is a portal closer than the previous closest element
+            
+            # check if there is a portal closer than the closest edge
             # TODO When attaching to an existing portal, need to reconsider the necessity of the older portal
-            if closest_portal_dst is not None and closest_portal_dst < closest_dst:
-                closest_dst = closest_portal_dst
-
+            if closest_portal_dst is not None and closest_portal_dst < closest_seg_dst:
                 # figure out if we want to create one or two portals
 
                 # we only want to connect to one or two endpoints,
@@ -528,12 +515,20 @@ class Mesh2d(object):
                         new_portals.append(second_portal)
 
                     elif start_inside:
-                        portal.end_info = closest_portal, 0
+                        portal.end_info = closest_portal, 0 # attach to portal startPt
                     else:
                         portal.end_info = closest_portal, 1
 
-            portals.extend(new_portals)
+            # if no portals are in the way, attach to edge/vertex
+            else:
+                if closest_seg_para == 0 or closest_seg_para == 1:
+                    portal.kind = Portal.ToVertex
+                    portal.end_info = closest_seg[int(closest_seg_para)]
+                else:
+                    portal.kind = Portal.ToSegment
+                    portal.end_info = closest_seg, closest_seg_para
 
+            portals.extend(new_portals)
         return portals
 
 
@@ -543,22 +538,20 @@ class Mesh2d(object):
 
         portals = Mesh2d.find_portals(poly, convex_relax_thresh, db_visitor)
 
-
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
         segments_to_split = defaultdict(list)
         for portal in portals:
-
             if portal.kind == Portal.ToSegment:
                 segment, _ = portal.end_info
                 segments_to_split[segment].append(portal)
 
         for segment, seg_portals in segments_to_split.items():
-            end_params = list(portal.end_info[1] for portal in seg_portals)
-            end_ids = poly.add_vertices_to_border(segment, end_params)
+            split_params = list(portal.end_info[1] for portal in seg_portals)
+            split_ids = poly.add_vertices_to_border(segment, split_params)
 
-            for end_idx, portal in izip(end_ids, seg_portals):
+            for split_idx, portal in izip(split_ids, seg_portals):
                 portal.kind = Portal.ToVertex
-                portal.end_info = end_idx
+                portal.end_info = split_idx
 
 
         def resolve_chain(portal):
@@ -604,19 +597,19 @@ class Mesh2d(object):
 
         # linked lists of indices of outgoing edges for each vertex index
         ways_to_go = Loops()
-        first_way_ids = list(None for _ in xrange(len(poly.graph.next)))
+        ids_of_edge_lists = list(None for _ in xrange(len(poly.graph.next)))
 
         for src in poly.graph.all_nodes_iterator():
             tgt = poly.graph.next[src]
-            first_way_ids[src] = ways_to_go.add_loop(1)
+            ids_of_edge_lists[src] = ways_to_go.add_loop(1)
             edge_buffer.append((src, tgt))
 
         for src, tgt in portals:
-            way_idx = first_way_ids[src]
+            way_idx = ids_of_edge_lists[src]
             ways_to_go.insert_node((way_idx, ways_to_go.next[way_idx]))
             edge_buffer.append((src, tgt))
 
-        if db_visitor:
+        if db_visitor is not None:
             for idx in poly.graph.all_nodes_iterator():
                 db_visitor.add_text(loc=poly.vertices[idx], text=str(idx), scale=False)
 
@@ -639,7 +632,7 @@ class Mesh2d(object):
                 consumed[idx] = True
                 src, tgt = edge_buffer[idx]
                 room.append(src)
-                ways0, ways1 = tee(ways_to_go.loop_iterator(first_way_ids[tgt]))
+                ways0, ways1 = tee(ways_to_go.loop_iterator(ids_of_edge_lists[tgt]))
 
                 in_edge = poly.vertices[tgt] - poly.vertices[src]
                 out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
