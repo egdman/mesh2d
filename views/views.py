@@ -379,10 +379,10 @@ class NavMeshView(ObjectView):
             self.element_ids.append(Id)
 
         # draw portals
-        # for portal in self.navmesh.portals:
-        #     portal_crds = self.get_open_crds(trans_vertices, portal)
-        #     Id = canvas.create_line(portal_crds, fill='red', width=1)
-        #     self.element_ids.append(Id)
+        for portal in self.navmesh.portals:
+            portal_crds = self.get_open_crds(trans_vertices, portal)
+            Id = canvas.create_line(portal_crds, fill='red', width=1)
+            self.element_ids.append(Id)
 
         # draw outline
         outline_crds = self.get_closed_crds(trans_vertices, self.navmesh.outline)

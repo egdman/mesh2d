@@ -10,6 +10,9 @@ from contextlib import contextmanager
 from .vector2 import vec, Geom2
 from .utils import pairs, triples
 
+
+DB_SPIKE=7
+
 class CallTime:
     def __init__(self):
         self.accum = 0.
@@ -296,7 +299,7 @@ class Mesh2d(object):
 #########################################################################################
 #########################################################################################
 #########################################################################################
-        if tip_idx == 2 and db_visitor is not None:
+        if tip_idx == DB_SPIKE and db_visitor is not None:
             return Mesh2d.DB_find_closest_edge_inside_sector(
                 poly, sector, tip_idx, cutoff1, cutoff2, db_visitor)
 #########################################################################################
@@ -370,7 +373,7 @@ class Mesh2d(object):
 
                 if para is None: continue
 
-                db_visitor.add_text(.5 * (seg0 + seg1), text="@{}".format(tip_idx), color='#949683')
+                db_visitor.add_text(.5 * (seg0 + seg1), text="@{}".format(tip_idx), color='#949683', scale=False)
 
                 if closest_distSq is None or distSq < closest_distSq:
                     closest_distSq = distSq
@@ -387,6 +390,43 @@ class Mesh2d(object):
 #########################################################################################
 
 
+
+
+    # @staticmethod
+    # def find_closest_portal_inside_sector(poly, sector, tip_idx, portals, cutoff1, cutoff2):
+    #     _, tip, _ = sector
+    #     cutoff_plane = None
+    #     closest_portal, closest_distSq, closest_para = None, None, None
+
+    #     for portal in portals:
+    #         if tip_idx == portal.start_index: continue
+
+    #         (seg0, seg1) = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
+    #         if seg0 == seg1: continue
+
+    #         seg0x, seg1x = seg0.append(1), seg1.append(1)
+
+    #         if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
+    #             continue
+
+    #         elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
+    #             continue
+
+    #         para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
+
+    #         if para is None: continue
+
+    #         # update closest portal
+    #         if closest_distSq is None or distSq < closest_distSq:
+    #             closest_distSq = distSq
+    #             closest_para = para
+    #             closest_portal = portal
+
+    #             # make cutoff line
+    #             n = point - tip
+    #             cutoff_plane = n.append(-n.dot(point))
+
+    #     return closest_portal, closest_para, closest_distSq
 
 
     @staticmethod
@@ -424,6 +464,8 @@ class Mesh2d(object):
                 cutoff_plane = n.append(-n.dot(point))
 
         return closest_portal, closest_para, closest_distSq
+
+
 
 
     @staticmethod
@@ -534,8 +576,9 @@ class Mesh2d(object):
                 Mesh2d.find_closest_portal_inside_sector(poly, sector, spike_idx, portals, hp1, hp2)
 
             if db_visitor is not None:
-                if spike_idx == 2:
-                    print("closest portal={}".format(closest_portal))
+                if spike_idx == DB_SPIKE:
+                    print("closest edge   dist={}".format(math.sqrt(closest_seg_dst)))
+                    print("closest portal dist={}".format(math.sqrt(closest_portal_dst) if closest_portal_dst else None))
                     idx0, idx1 = closest_seg
                     p0 = poly.vertices[idx0]
                     p1 = poly.vertices[idx1]
