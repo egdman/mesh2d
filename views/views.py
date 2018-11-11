@@ -150,8 +150,8 @@ class TextView(ObjectView):
             new_size = int(self.size * scale)
             if new_size != self.current_size and new_size % 5 == 0 and new_size <= 70:
                 self.current_size = new_size
-                print("cur scale = {}".format(scale))
-                print("cur size  = {}".format(new_size))
+                # print("cur scale = {}".format(scale))
+                # print("cur size  = {}".format(new_size))
 
                 self.cleanup(canvas)
                 if new_size >= 10:
@@ -334,21 +334,23 @@ class PlusView(ObjectView):
 
 
 class PolygonView(ObjectView):
-    def __init__(self, poly):
+    def __init__(self, poly, outline_color='#a0a0a0', hole_color='#a0a0ff'):
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(hole)) for hole in poly.graph.loops[1:])
         self.vertices = poly.vertices
+        self.outline_color = outline_color
+        self.hole_color = hole_color
         super(PolygonView, self).__init__()
 
 
     def first_time_draw(self, canvas):
         outline_crds = self.get_closed_crds(self.vertices, self.outline)
-        Id = canvas.create_line(outline_crds, fill='#a0a0a0', width=1)
+        Id = canvas.create_line(outline_crds, fill=self.outline_color, width=1)
         self.element_ids.append(Id)
 
         for hole in self.holes:
             outline_crds = self.get_closed_crds(self.vertices, hole)
-            Id = canvas.create_line(outline_crds, fill='#a0a0ff', width=1)
+            Id = canvas.create_line(outline_crds, fill=self.hole_color, width=1)
             self.element_ids.append(Id)            
 
 
@@ -377,10 +379,10 @@ class NavMeshView(ObjectView):
             self.element_ids.append(Id)
 
         # draw portals
-        for portal in self.navmesh.portals:
-            portal_crds = self.get_open_crds(trans_vertices, portal)
-            Id = canvas.create_line(portal_crds, fill='red', width=1)
-            self.element_ids.append(Id)
+        # for portal in self.navmesh.portals:
+        #     portal_crds = self.get_open_crds(trans_vertices, portal)
+        #     Id = canvas.create_line(portal_crds, fill='red', width=1)
+        #     self.element_ids.append(Id)
 
         # draw outline
         outline_crds = self.get_closed_crds(trans_vertices, self.navmesh.outline)
