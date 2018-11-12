@@ -245,12 +245,17 @@ class VisualDebug(object):
             TextView(loc=loc, text=text, size=size, scale=scale, color=color))
         self.counter += 1
 
+    def add_polygon(self, points, color='#ffffff'):
+        self.app.add_draw_object('debug_text_{}'.format(self.counter),
+            PolygonView(Polygon2d(points), outline_color=color))
+        self.counter += 1
+
 
 class Application(tk.Frame):
     def __init__(self, master=None, poly_path=None, db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
-        self.debugger = None # VisualDebug(self)
+        self.debugger = VisualDebug(self)
 
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()

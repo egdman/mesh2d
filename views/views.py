@@ -150,8 +150,8 @@ class TextView(ObjectView):
             new_size = int(self.size * scale)
             if new_size != self.current_size and new_size % 5 == 0 and new_size <= 70:
                 self.current_size = new_size
-
                 self.cleanup(canvas)
+
                 if new_size >= 10:
                     textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=font(size=new_size), anchor=tk.NW)
                     canvas.addtag_withtag(self.tag, textId)
@@ -332,21 +332,23 @@ class PlusView(ObjectView):
 
 
 class PolygonView(ObjectView):
-    def __init__(self, poly):
+    def __init__(self, poly, outline_color='#a0a0a0', hole_color='#a0a0ff'):
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(hole)) for hole in poly.graph.loops[1:])
         self.vertices = poly.vertices
+        self.outline_color = outline_color
+        self.hole_color = hole_color
         super(PolygonView, self).__init__()
 
 
     def first_time_draw(self, canvas):
         outline_crds = self.get_closed_crds(self.vertices, self.outline)
-        Id = canvas.create_line(outline_crds, fill='#a0a0a0', width=1)
+        Id = canvas.create_line(outline_crds, fill=self.outline_color, width=1)
         self.element_ids.append(Id)
 
         for hole in self.holes:
             outline_crds = self.get_closed_crds(self.vertices, hole)
-            Id = canvas.create_line(outline_crds, fill='#a0a0ff', width=1)
+            Id = canvas.create_line(outline_crds, fill=self.hole_color, width=1)
             self.element_ids.append(Id)            
 
 
