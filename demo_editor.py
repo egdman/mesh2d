@@ -186,10 +186,6 @@ class FreePolyTool(Tool):
             'tool_helpers/free_poly/point_{}'.format(len(self.vertices)),
             PointHelperView(loc=new_vrt))
 
-        # app.add_draw_object(
-        #         'tool_helpers/free_poly/point_annot_{}'.format(len(self.vertices)),
-        #     TextView(loc=new_vrt, text=str(len(self.vertices))))
-
         self.vertices.append(new_vrt)
 
         if len(self.vertices) > 1:
@@ -255,7 +251,7 @@ class Application(tk.Frame):
     def __init__(self, master=None, poly_path=None, db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
-        self.debugger = VisualDebug(self)
+        self.debugger = None #VisualDebug(self)
 
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
@@ -716,7 +712,7 @@ class Application(tk.Frame):
                 self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
 
         except AnyError as err:
-            dump_history(app.history)
+            dump_history(self.history)
             print("Exception was thrown inside method 'add_polygon': {}".format(err))
             print(traceback.format_exc())
 
