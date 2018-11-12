@@ -168,12 +168,7 @@ class FreePolyTool(Tool):
         self.vertices = list(remove_duplicates(self.vertices))
         if len(self.vertices) < 3: return
 
-        try:
-            app.add_polygon(self.vertices)
-        except AnyError:
-            raise
-            dump_history(app.history)
-
+        app.add_polygon(self.vertices)
 
         del self.vertices[:]
         # remove helper views
@@ -681,39 +676,44 @@ class Application(tk.Frame):
         self.remove_draw_objects_glob('polys/*')
         self.remove_draw_objects_glob('debug_*')
 
-        new_poly = Polygon2d(vertices[:])
+        try:
+            new_poly = Polygon2d(vertices[:])
 
-        # do boolean operations
-        new_polys = []
+            # do boolean operations
+            new_polys = []
 
-        if mode == Bool.Subtract:
-            for old_poly in self._polygons:
-                new_polys.extend(bool_subtract(old_poly, new_poly, self.debug_canvas))
-            
-        elif mode == Bool.Add:
-            while len(self._polygons):
-                old_poly = self._polygons.pop()
+            if mode == Bool.Subtract:
+                for old_poly in self._polygons:
+                    new_polys.extend(bool_subtract(old_poly, new_poly, self.debug_canvas))
+                
+            elif mode == Bool.Add:
+                while len(self._polygons):
+                    old_poly = self._polygons.pop()
 
-                # add 2 polys, get either 1 or 2 polys
-                added = bool_add(old_poly, new_poly, self.debug_canvas)
-                if len(added) == 1:
-                    (new_poly,) = added
-                else:
-                    new_polys.append(old_poly)
+                    # add 2 polys, get either 1 or 2 polys
+                    added = bool_add(old_poly, new_poly, self.debug_canvas)
+                    if len(added) == 1:
+                        (new_poly,) = added
+                    else:
+                        new_polys.append(old_poly)
 
-            new_polys.append(new_poly)
+                new_polys.append(new_poly)
 
-        else:
-            return
+            else:
+                return
 
-        self._polygons = new_polys
+            self._polygons = new_polys
 
-        # draw navmeshes
-        for poly in self._polygons:
-            navmesh = Mesh2d(poly, 15, self.debugger)
-            num_polys = len(self.find_draw_objects_glob('polys/*'))
-            self.add_draw_object('polys/poly_{}'.format(num_polys),
-                NavMeshView(navmesh))
+            # draw navmeshes
+            for poly in self._polygons:
+                navmesh = Mesh2d(poly, 15, self.debugger)
+                num_polys = len(self.find_draw_objects_glob('polys/*'))
+                self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+
+        except AnyError as err:
+            dump_history(app.history)
+            print("Exception was thrown inside method 'add_polygon': {}".format(err))
+            print(traceback.format_exc())
 
         # # draw polygons
         # for poly in self._polygons:

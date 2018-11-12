@@ -213,13 +213,9 @@ class Portal(object):
             return vertices[idx1] + (para * (vertices[idx2] - vertices[idx1]))
 
         elif self.kind == Portal.ToPortal:
-            other_portal, para = self.end_info
-            if para == 0:
-                return vertices[other_portal.start_index]
-            elif para == 1:
-                return other_portal.calc_endpoint(vertices)
-            else:
-                raise RuntimeError("{} - what is this parameter value? It should be either 0 or 1".format(para))
+            other_portal = self.end_info
+            return other_portal.calc_endpoint(vertices)
+
         else:
              raise RuntimeError("Portal of unknown kind: {}".format(self.kind))
 
@@ -339,6 +335,7 @@ class Mesh2d(object):
 
         for portal in portals:
             if tip_idx == portal.start_index: continue
+            if portal.kind == Portal.ToVertex and tip_idx == portal.end_info: continue
 
             (seg0, seg1) = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
             if seg0 == seg1: continue
@@ -486,12 +483,13 @@ class Mesh2d(object):
 
                 # we only want to connect to one or two endpoints,
                 # not to an intermediate point of the portal
-                portal.kind = Portal.ToPortal
 
                 if closest_portal_para == 0:
-                    portal.end_info = closest_portal, 0
+                    portal.kind = Portal.ToVertex
+                    portal.end_info = closest_portal.start_index
                 elif closest_portal_para == 1:
-                    portal.end_info = closest_portal, 1
+                    portal.kind = Portal.ToPortal
+                    portal.end_info = closest_portal
 
                 # If closest point is not one of the endpoints,
                 # we still create the portal(s) to one or two endpoints.
@@ -509,15 +507,26 @@ class Mesh2d(object):
 
                     # if none of the portal endpoints is inside sector, create 2 portals to both ends:
                     if not start_inside and not end_inside:
-                        second_portal = deepcopy(portal)
-                        portal.end_info = closest_portal, 0
-                        second_portal.end_info = closest_portal, 1
+                        portal.kind = Portal.ToVertex
+                        portal.end_info = closest_portal.start_index
+
+                        second_portal = Portal()
+                        second_portal.start_index = portal.start_index
+                        if closest_portal.kind == Portal.ToVertex:
+                            second_portal.kind = Portal.ToVertex
+                            second_portal.end_info = closest_portal.end_info
+                        else:
+                            second_portal.kind = Portal.ToPortal
+                            second_portal.end_info = closest_portal
+
                         new_portals.append(second_portal)
 
                     elif start_inside:
-                        portal.end_info = closest_portal, 0 # attach to portal startPt
+                        portal.kind = Portal.ToVertex
+                        portal.end_info = closest_portal.start_index # attach to portal startPt
                     else:
-                        portal.end_info = closest_portal, 1
+                        portal.kind = Portal.ToPortal
+                        portal.end_info = closest_portal
 
             # if no portals are in the way, attach to edge/vertex
             else:
@@ -556,18 +565,10 @@ class Mesh2d(object):
 
         def resolve_chain(portal):
             if portal.kind == Portal.ToPortal:
-                next_portal, para = portal.end_info
+                next_portal = portal.end_info
                 resolve_chain(next_portal)
-
                 portal.kind = Portal.ToVertex
-                if para == 0:
-                    portal.end_info = next_portal.start_index
-                elif para == 1:
-                    portal.end_info = next_portal.end_info
-                else:
-                    raise RuntimeError(
-                        "{} - what is this parameter value?"
-                        " It should be either 0 or 1".format(para))
+                portal.end_info = next_portal.end_info
 
         # convert all 'ToPortal' portals to 'ToVertex' portals
         for portal in portals:
@@ -576,18 +577,21 @@ class Mesh2d(object):
 
         # now all portals are 'ToVertex'
 
-        # convert portals to edges (tuples)
-        portals = ((p.start_index, p.end_info) for p in portals)
-
-        # remove degen portals
-        portals = list(p for p in portals if p[0] != p[1])
-
         # for each portal add reversed portal
-        fwd, back = tee(portals, 2)
-        portals = chain(fwd, (tuple(reversed(p)) for p in back))
+        def _add_opposite():
+            for p in portals:
+                yield (p.start_index, p.end_info)
+                yield (p.end_info, p.start_index)
+
+        portals = list(_add_opposite())
+
+        print("{} -- {}".format(len(portals), len(list(set(portals)))))
+
+        # fwd, back = tee(portals, 2)
+        # portals = chain(fwd, (tuple(reversed(p)) for p in back))
         # remove duplicates that might have occured if
         # we already had pairs of opposites among original portals
-        portals = list(set(portals))
+        # portals = list(set(portals))
 
         # print("{} portals".format(len(portals)))
 
