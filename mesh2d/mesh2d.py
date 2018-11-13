@@ -611,30 +611,21 @@ class Mesh2d(object):
         # list of edges
         edge_buffer = list()
 
-        # linked lists of indices of outgoing edges for each vertex index
-        ways_to_go = Loops()
-        ids_of_edge_lists = list(None for _ in xrange(len(poly.graph.next)))
+        # lists of indices of outgoing edges for each vertex index
+        ways_to_go = list([] for _ in xrange(len(poly.graph.next)))
 
         for src in poly.graph.all_nodes_iterator():
             tgt = poly.graph.next[src]
-            ids_of_edge_lists[src] = ways_to_go.add_loop(1)
+            ways_to_go[src].append(len(edge_buffer))
             edge_buffer.append((src, tgt))
 
         for src, tgt in portals:
-            way_idx = ids_of_edge_lists[src]
-            ways_to_go.insert_node((way_idx, ways_to_go.next[way_idx]))
+            ways_to_go[src].append(len(edge_buffer))
             edge_buffer.append((src, tgt))
 
         if db_visitor is not None:
             for idx in poly.graph.all_nodes_iterator():
                 db_visitor.add_text(loc=poly.vertices[idx], text=str(idx), scale=False)
-
-        def angle(v0, v1):
-            # backtracking gives -180 degrees, not 180
-            cosine = Geom2.cos_angle(v0, v1)
-            sine = Geom2.sin_angle(v0, v1)
-            return math.acos(cosine) if sine > 0 else -math.acos(cosine)
-
 
         # make rooms (a room is just a list of vertex ids)
         rooms = list()
@@ -648,16 +639,34 @@ class Mesh2d(object):
                 consumed[idx] = True
                 src, tgt = edge_buffer[idx]
                 room.append(src)
-                ways0, ways1 = tee(ways_to_go.loop_iterator(ids_of_edge_lists[tgt]))
+                in_dir = poly.vertices[tgt] - poly.vertices[src]
 
-                in_edge = poly.vertices[tgt] - poly.vertices[src]
-                out_edges = (poly.vertices[nxt] - poly.vertices[tgt] \
-                    for nxt in (edge_buffer[way][1] for way in ways0))
+                e_ids = ways_to_go[tgt]
+                v_ids = list(edge_buffer[edge_idx][1] for edge_idx in e_ids)
 
-                out_angles = (angle(in_edge, out_edge) for out_edge in out_edges)
-                idx, _ = max(izip(ways1, out_angles), key = itemgetter(1))
+                direcs = list((e_idx, (poly.vertices[v_idx] - poly.vertices[tgt]).normalized())
+                    for e_idx, v_idx in zip(e_ids, v_ids) if v_idx != src) # backtracking not allowed
+
+                left, right = [], []
+                for e_idx, out_dir in direcs:
+                    if vec.cross2(in_dir, out_dir) > 0:
+                        left.append((e_idx, out_dir))
+                    else:
+                        right.append((e_idx, out_dir))
+
+                if left:
+                    candidates = left
+                    pick = min
+                else:
+                    candidates = right
+                    pick = max
+
+                projections = (out_dir.dot(in_dir) for _, out_dir in candidates)
+                picked_idx, _ = pick(enumerate(projections), key=itemgetter(1))
+                idx, _ = candidates[picked_idx]
 
         # for r in rooms: print(r)
+
         self.rooms = rooms
         self.portals = portals
         self.vertices = poly.vertices
