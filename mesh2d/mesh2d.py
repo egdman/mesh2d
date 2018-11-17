@@ -734,22 +734,13 @@ class Mesh2d(object):
             inbound_portals = list(inbound_edges_around_vert(vid))[1:-1]
 
             for p in inbound_portals:
-                if redundant[p]:
-                    continue
-
                 def calc_external_angle_if_portal_is_removed(p):
                     # calc sum of angles before and after the portal p
                     eid_before = next_edge(p)
-                    while redundant[eid_before]:
-                        eid_before = next_edge(opposite(eid_before))
-
-                    eid_after = prev_edge(opposite(p))
-                    while redundant[eid_after]:
-                        eid_after = prev_edge(opposite(eid_after))
+                    eid_after = opposite(prev_edge(opposite(p)))
 
                     vid_before = edge_buffer[eid_before]
-                    vid_after = edge_buffer[opposite(eid_after)]
-
+                    vid_after = edge_buffer[eid_after]
 
                     prev_v = poly.vertices[vid_before]
                     cand_v = poly.vertices[edge_buffer[p]]
@@ -763,12 +754,13 @@ class Mesh2d(object):
                         # positive external angle is concavity
                         external_angle = math.acos(Geom2.cos_angle(side1, side2))
                         external_angle = external_angle*180.0 / math.pi
-                        return external_angle
+                        return external_angle, eid_before, eid_after
                     else:
-                        return 0.
+                        return 0., eid_before, eid_after
 
-                xa0 = calc_external_angle_if_portal_is_removed(p)
-                xa1 = calc_external_angle_if_portal_is_removed(opposite(p))
+                xa0, bef0, aft0 = calc_external_angle_if_portal_is_removed(p)
+                xa1, bef1, aft1 = calc_external_angle_if_portal_is_removed(opposite(p))
+
                 print("portal {}, xa: {}, {}".format(
                     (edge_buffer[p], edge_buffer[opposite(p)]),
                     xa0, xa1))
@@ -776,15 +768,33 @@ class Mesh2d(object):
                 if xa0 <= convex_relax_thresh and xa1 <= convex_relax_thresh:
                     redundant[p] = redundant[opposite(p)] = True
 
+                    # delete redundant portal
+                    prev_edges[bef0] = opposite(aft0)
+                    prev_edges[aft0] = opposite(bef0)
+                    next_edges[opposite(bef0)] = aft0
+                    next_edges[opposite(aft0)] = bef0
+
+                    prev_edges[bef1] = opposite(aft1)
+                    prev_edges[aft1] = opposite(bef1)
+                    next_edges[opposite(bef1)] = aft1
+                    next_edges[opposite(aft1)] = bef1
+
+                    next_edges[p] = prev_edges[p] = opposite(p)
+                    next_edges[opposite(p)] = prev_edges[opposite(p)] = p
+
+
         redundant_portals = list(eid for eid in next_edges if redundant[eid])
         redundant_portals = list((edge_buffer[eid], edge_buffer[opposite(eid)]) for eid in redundant_portals)
         for rp in redundant_portals:
             print("redundant: {}".format(rp))
 
         print("---------------------------------------------------------------------")
+        self.portals = []
+        for eid in range(len(is_border))[::2]:
+            if not is_border[eid] and not is_border[eid + 1] and next_edges[eid] != eid + 1:
+                self.portals.append((edge_buffer[eid], edge_buffer[eid + 1]))
 
         self.rooms = rooms
-        self.portals = portals
         self.vertices = poly.vertices
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
