@@ -2,10 +2,15 @@ import math
 
 from collections import defaultdict
 from operator import itemgetter
-from itertools import chain, izip, repeat, tee
+from itertools import chain, repeat, tee
 from copy import deepcopy
 from time import clock
 from contextlib import contextmanager
+
+try:
+    from itertools import izip as zip
+except ImportError:
+    pass
 
 from .vector2 import vec, Geom2
 from .utils import pairs, triples
@@ -433,7 +438,7 @@ class Mesh2d(object):
 
         distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
 
-        p, d = min(izip(candid_params, distances), key = itemgetter(1))
+        p, d = min(zip(candid_params, distances), key = itemgetter(1))
         return p, para_to_pt(p), d
 
 
@@ -582,7 +587,7 @@ class Mesh2d(object):
             split_params = list(portal.end_info[1] for portal in seg_portals)
             split_ids = poly.add_vertices_to_border(segment, split_params)
 
-            for split_idx, portal in izip(split_ids, seg_portals):
+            for split_idx, portal in zip(split_ids, seg_portals):
                 portal.kind = Portal.ToVertex
                 portal.end_info = split_idx
 
@@ -627,7 +632,7 @@ class Mesh2d(object):
             for idx in poly.graph.all_nodes_iterator():
                 db_visitor.add_text(loc=poly.vertices[idx], text=str(idx), scale=False)
 
-        # make rooms (a room is just a list of vertex ids)
+        # make rooms (a room is just a list of vertex ids that form a nearly convex polygon)
         rooms = list()
         consumed = [False] * len(edge_buffer)
         for idx, _ in enumerate(edge_buffer):
@@ -665,10 +670,8 @@ class Mesh2d(object):
                 picked_idx, _ = pick(enumerate(projections), key=itemgetter(1))
                 idx, _ = candidates[picked_idx]
 
-        # for r in rooms: print(r)
-
         self.rooms = rooms
-        self.portals = portals
+        self.portals = portals[::2]
         self.vertices = poly.vertices
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
