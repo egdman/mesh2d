@@ -464,9 +464,9 @@ class Mesh2d(object):
 
             right_dir, left_dir = Mesh2d.get_sector(v0, v1, v2, threshold)
 
-            if db_visitor is not None:
-                pts = v1 + 50. * right_dir, v1, v1 + 50. * left_dir
-                db_visitor.add_polygon(pts, '#ffff22')
+            # if db_visitor is not None:
+            #     pts = v1 + 50. * right_dir, v1, v1 + 50. * left_dir
+            #     db_visitor.add_polygon(pts, '#ffff22')
 
             n_right = left_dir - left_dir.dot(right_dir) * right_dir
             n_left  = right_dir - right_dir.dot(left_dir) * left_dir
@@ -488,11 +488,11 @@ class Mesh2d(object):
             closest_portal, closest_portal_para, closest_portal_dst = \
                 Mesh2d.find_closest_portal_inside_sector(poly, sector, spike_idx, portals, hp1, hp2)
 
-            if db_visitor is not None:
-                idx0, idx1 = closest_seg
-                p0 = poly.vertices[idx0]
-                p1 = poly.vertices[idx1]
-                db_visitor.add_polygon((p0, tip, p1, tip), color='#119875')
+            # if db_visitor is not None:
+            #     idx0, idx1 = closest_seg
+            #     p0 = poly.vertices[idx0]
+            #     p1 = poly.vertices[idx1]
+            #     db_visitor.add_polygon((p0, tip, p1, tip), color='#119875')
 
 
             # closest edge always exists (unless something's horribly wrong)
@@ -605,28 +605,43 @@ class Mesh2d(object):
             resolve_chain(portal)
         # now all portals are 'ToVertex'
 
-        # for each portal add reversed portal
-        def _add_opposite():
-            for p in portals:
-                yield (p.start_index, p.end_info)
-                yield (p.end_info, p.start_index)
-
-        portals = list(_add_opposite())
+        portals = list((p.start_index, p.end_info) for p in portals)
 
         # list of edges
         edge_buffer = list()
+        is_border = list()
+
+        def opposite(eid):
+            return eid - 1 if eid & 1 else eid + 1
 
         # lists of indices of outgoing edges for each vertex index
         ways_to_go = list([] for _ in xrange(len(poly.graph.next)))
 
         for src in poly.graph.all_nodes_iterator():
             tgt = poly.graph.next[src]
+
             ways_to_go[src].append(len(edge_buffer))
-            edge_buffer.append((src, tgt))
+            edge_buffer.append(tgt)
+            is_border.append(True)
+
+            ways_to_go[tgt].append(len(edge_buffer))
+            edge_buffer.append(src)
+            is_border.append(False)
 
         for src, tgt in portals:
+
             ways_to_go[src].append(len(edge_buffer))
-            edge_buffer.append((src, tgt))
+            edge_buffer.append(tgt)
+            is_border.append(False)
+
+            ways_to_go[tgt].append(len(edge_buffer))
+            edge_buffer.append(src)
+            is_border.append(False)
+
+
+        next_edges = list(None for _ in xrange(len(edge_buffer)))
+        prev_edges = list(None for _ in xrange(len(edge_buffer)))
+        inbound_edges = list(None for _ in xrange(len(poly.graph.next)))
 
         if db_visitor is not None:
             for idx in poly.graph.all_nodes_iterator():
@@ -642,19 +657,25 @@ class Mesh2d(object):
 
             while not consumed[idx]:
                 consumed[idx] = True
-                src, tgt = edge_buffer[idx]
+                tgt = edge_buffer[idx]
+                src = edge_buffer[opposite(idx)]
+                if is_border[idx]:
+                    inbound_edges[tgt] = idx
+
                 room.append(src)
+
                 in_dir = poly.vertices[tgt] - poly.vertices[src]
 
                 e_ids = ways_to_go[tgt]
-                v_ids = list(edge_buffer[edge_idx][1] for edge_idx in e_ids)
+                v_ids = list(edge_buffer[edge_idx] for edge_idx in e_ids)
 
                 direcs = list((e_idx, (poly.vertices[v_idx] - poly.vertices[tgt]).normalized())
                     for e_idx, v_idx in zip(e_ids, v_ids) if v_idx != src) # backtracking not allowed
 
+                # pick the leftmost direction as the next edge
                 left, right = [], []
                 for e_idx, out_dir in direcs:
-                    if vec.cross2(in_dir, out_dir) > 0:
+                    if vec.cross2(in_dir, out_dir) < 0:
                         left.append((e_idx, out_dir))
                     else:
                         right.append((e_idx, out_dir))
@@ -668,10 +689,98 @@ class Mesh2d(object):
 
                 projections = (out_dir.dot(in_dir) for _, out_dir in candidates)
                 picked_idx, _ = pick(enumerate(projections), key=itemgetter(1))
-                idx, _ = candidates[picked_idx]
+                next_idx, _ = candidates[picked_idx]
 
+                next_edges[idx] = next_idx
+                prev_edges[next_idx] = idx
+                idx = next_idx
+
+        def next_edge(eid):
+            return next_edges[eid]
+
+        def prev_edge(eid):
+            return prev_edges[eid]
+
+        # def verts_around_vert(vid):
+        #     eid = inbound_edges[vid]
+        #     op_eid = opposite(eid)
+        #     yield edge_buffer[op_eid]
+        #     next_eid = next_edge(eid)
+        #     while next_eid != op_eid:
+        #         yield edge_buffer[next_eid]
+        #         next_eid = next_edge(opposite(next_eid))
+
+        def inbound_edges_around_vert(vid):
+            eid = inbound_edges[vid]
+            yield eid
+            next_eid = prev_edge(opposite(eid))
+            while next_eid != eid:
+                yield next_eid
+                next_eid = prev_edge(opposite(next_eid))
+
+
+        def verts_around_face(eid):
+            yield edge_buffer[eid]
+            next_eid = next_edge(eid)
+            while next_eid != eid:
+                yield edge_buffer[next_eid]
+                next_eid = next_edge(next_eid)
+
+        border_verts = list(verts_around_face(next(eid for eid in next_edges if is_border[eid])))
+        print("border: {}".format(border_verts))
+
+        redundant = list(False for _ in xrange(len(edge_buffer)))
+        for vid in poly.graph.all_nodes_iterator():
+            inbound_portals = list(inbound_edges_around_vert(vid))[1:-1]
+
+            for p in inbound_portals:
+                if redundant[p]:
+                    continue
+
+                # calc sum of angles before and after the portal p
+                eid_before = next_edge(p)
+                while redundant[eid_before]:
+                    eid_before = next_edge(opposite(eid_before))
+
+                eid_after = prev_edge(opposite(p))
+                while redundant[eid_after]:
+                    eid_after = prev_edge(opposite(eid_after))
+
+                vid_before = edge_buffer[eid_before]
+                vid_after = edge_buffer[opposite(eid_after)]
+
+                
+
+
+            in_border_eid = inbound_edges[vid]
+            in_border_vid = edge_buffer[opposite(in_border_eid)]
+            in_dir = poly.vertices[vid] - poly.vertices[in_border_vid]
+
+
+            inbound = list(inbound_edges_around_vert(vid))
+            if len(inbound) < 3:
+                continue
+
+            # in_dir = poly.vertices[vid] - poly.vertices[edge_buffer[opposite(inbound[0])]]
+            # for eid in inbound[1:-1]:
+            #     portal_vid = edge_buffer[opposite(eid)]
+            #     portal_dir = poly.vertices[portal_vid] - poly.vertices[vid]
+            #     after_portal_vid = edge_buffer[opposite(prev_edge(opposite(eid)))]
+            #     after_portal_dir = poly.vertices[after_portal_vid] - poly.vertices[vid]
+
+
+
+            verts_around = list(edge_buffer[opposite(eid)] for eid in inbound)            
+            verts_around = list(str(idx) for idx in verts_around)
+            print("around {}: [{}]".format(vid, ', '.join(verts_around)))
+
+
+
+
+
+        print("---------------------------------------------------------------------")
         self.rooms = rooms
-        self.portals = portals[::2]
+        self.portals = portals
         self.vertices = poly.vertices
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])

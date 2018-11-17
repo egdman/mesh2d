@@ -251,7 +251,7 @@ class Application(tk.Frame):
     def __init__(self, master=None, poly_path=None, db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
-        self.debugger = None #VisualDebug(self)
+        self.debugger = VisualDebug(self)
 
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
