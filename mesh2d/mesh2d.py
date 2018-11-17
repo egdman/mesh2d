@@ -737,48 +737,52 @@ class Mesh2d(object):
                 if redundant[p]:
                     continue
 
-                # calc sum of angles before and after the portal p
-                eid_before = next_edge(p)
-                while redundant[eid_before]:
-                    eid_before = next_edge(opposite(eid_before))
+                def calc_external_angle_if_portal_is_removed(p):
+                    # calc sum of angles before and after the portal p
+                    eid_before = next_edge(p)
+                    while redundant[eid_before]:
+                        eid_before = next_edge(opposite(eid_before))
 
-                eid_after = prev_edge(opposite(p))
-                while redundant[eid_after]:
-                    eid_after = prev_edge(opposite(eid_after))
+                    eid_after = prev_edge(opposite(p))
+                    while redundant[eid_after]:
+                        eid_after = prev_edge(opposite(eid_after))
 
-                vid_before = edge_buffer[eid_before]
-                vid_after = edge_buffer[opposite(eid_after)]
-
-                
-
-
-            in_border_eid = inbound_edges[vid]
-            in_border_vid = edge_buffer[opposite(in_border_eid)]
-            in_dir = poly.vertices[vid] - poly.vertices[in_border_vid]
+                    vid_before = edge_buffer[eid_before]
+                    vid_after = edge_buffer[opposite(eid_after)]
 
 
-            inbound = list(inbound_edges_around_vert(vid))
-            if len(inbound) < 3:
-                continue
+                    prev_v = poly.vertices[vid_before]
+                    cand_v = poly.vertices[edge_buffer[p]]
+                    next_v = poly.vertices[vid_after]
 
-            # in_dir = poly.vertices[vid] - poly.vertices[edge_buffer[opposite(inbound[0])]]
-            # for eid in inbound[1:-1]:
-            #     portal_vid = edge_buffer[opposite(eid)]
-            #     portal_dir = poly.vertices[portal_vid] - poly.vertices[vid]
-            #     after_portal_vid = edge_buffer[opposite(prev_edge(opposite(eid)))]
-            #     after_portal_dir = poly.vertices[after_portal_vid] - poly.vertices[vid]
+                    signed_area = Geom2.signed_area(prev_v, cand_v, next_v)
+                    if signed_area < 0.0:
+                        side1 = cand_v - prev_v
+                        side2 = next_v - cand_v
 
+                        # positive external angle is concavity
+                        external_angle = math.acos(Geom2.cos_angle(side1, side2))
+                        external_angle = external_angle*180.0 / math.pi
+                        return external_angle
+                    else:
+                        return 0.
 
+                xa0 = calc_external_angle_if_portal_is_removed(p)
+                xa1 = calc_external_angle_if_portal_is_removed(opposite(p))
+                print("portal {}, xa: {}, {}".format(
+                    (edge_buffer[p], edge_buffer[opposite(p)]),
+                    xa0, xa1))
 
-            verts_around = list(edge_buffer[opposite(eid)] for eid in inbound)            
-            verts_around = list(str(idx) for idx in verts_around)
-            print("around {}: [{}]".format(vid, ', '.join(verts_around)))
+                if xa0 <= convex_relax_thresh and xa1 <= convex_relax_thresh:
+                    redundant[p] = redundant[opposite(p)] = True
 
-
-
-
+        redundant_portals = list(eid for eid in next_edges if redundant[eid])
+        redundant_portals = list((edge_buffer[eid], edge_buffer[opposite(eid)]) for eid in redundant_portals)
+        for rp in redundant_portals:
+            print("redundant: {}".format(rp))
 
         print("---------------------------------------------------------------------")
+
         self.rooms = rooms
         self.portals = portals
         self.vertices = poly.vertices
