@@ -297,10 +297,13 @@ class Application(tk.Frame):
                 with open(poly_path, 'r') as stream:
                     poly = ascii_to_poly(stream.read())
                     self._polygons.append(poly)
-                    navmesh = Mesh2d(poly, 15, self.debugger)
                     num_polys = len(self.find_draw_objects_glob('polys/*'))
-                    self.add_draw_object('polys/poly_{}'.format(num_polys),
-                        NavMeshView(navmesh))
+                    try:
+                        navmesh = Mesh2d(poly, 15, self.debugger)
+                        self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+                    except RuntimeError:
+                        self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
+
             except IOError:
                 print("given file cannot be opened")
 

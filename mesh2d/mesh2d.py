@@ -701,39 +701,21 @@ class Mesh2d(object):
         def prev_edge(eid):
             return prev_edges[eid]
 
-        # def verts_around_vert(vid):
+        # def inbound_edges_around_vert(vid):
         #     eid = inbound_edges[vid]
-        #     op_eid = opposite(eid)
-        #     yield edge_buffer[op_eid]
-        #     next_eid = next_edge(eid)
-        #     while next_eid != op_eid:
-        #         yield edge_buffer[next_eid]
-        #         next_eid = next_edge(opposite(next_eid))
-
-        def inbound_edges_around_vert(vid):
-            eid = inbound_edges[vid]
-            yield eid
-            next_eid = prev_edge(opposite(eid))
-            while next_eid != eid:
-                yield next_eid
-                next_eid = prev_edge(opposite(next_eid))
+        #     yield eid
+        #     next_eid = prev_edge(opposite(eid))
+        #     while next_eid != eid:
+        #         yield next_eid
+        #         next_eid = prev_edge(opposite(next_eid))
 
 
-        def verts_around_face(eid):
-            yield edge_buffer[eid]
-            next_eid = next_edge(eid)
-            while next_eid != eid:
-                yield edge_buffer[next_eid]
-                next_eid = next_edge(next_eid)
-
-        border_verts = list(verts_around_face(next(eid for eid in next_edges if is_border[eid])))
-        print("border: {}".format(border_verts))
-
-        redundant = list(False for _ in xrange(len(edge_buffer)))
         for vid in poly.graph.all_nodes_iterator():
-            inbound_portals = list(inbound_edges_around_vert(vid))[1:-1]
+            p = prev_edge(opposite(inbound_edges[vid]))
 
-            for p in inbound_portals:
+            while not is_border[opposite(p)]:
+                p_next = prev_edge(opposite(p))
+
                 def calc_external_angle_if_portal_is_removed(p):
                     # calc sum of angles before and after the portal p
                     eid_before = next_edge(p)
@@ -761,34 +743,33 @@ class Mesh2d(object):
                 xa0, bef0, aft0 = calc_external_angle_if_portal_is_removed(p)
                 xa1, bef1, aft1 = calc_external_angle_if_portal_is_removed(opposite(p))
 
-                print("portal {}, xa: {}, {}".format(
+                this_redundant = xa0 <= convex_relax_thresh and xa1 <= convex_relax_thresh
+                print("portal {:>8}, xa: {:>8.3f}, {:>8.3f}{:>12}".format(
                     (edge_buffer[p], edge_buffer[opposite(p)]),
-                    xa0, xa1))
+                    xa0, xa1,
+                    "(redundant)" if this_redundant else ""))
 
-                if xa0 <= convex_relax_thresh and xa1 <= convex_relax_thresh:
-                    redundant[p] = redundant[opposite(p)] = True
+                if this_redundant:
+                    # print("0 b  = {}".format(edge_buffer[bef0]))
+                    # print("0 a  = {}".format(edge_buffer[aft0]))
+                    # print("1 b  = {}".format(edge_buffer[bef1]))
+                    # print("1 a  = {}".format(edge_buffer[aft1]))
 
                     # delete redundant portal
                     prev_edges[bef0] = opposite(aft0)
-                    prev_edges[aft0] = opposite(bef0)
-                    next_edges[opposite(bef0)] = aft0
                     next_edges[opposite(aft0)] = bef0
 
                     prev_edges[bef1] = opposite(aft1)
-                    prev_edges[aft1] = opposite(bef1)
-                    next_edges[opposite(bef1)] = aft1
                     next_edges[opposite(aft1)] = bef1
 
                     next_edges[p] = prev_edges[p] = opposite(p)
                     next_edges[opposite(p)] = prev_edges[opposite(p)] = p
 
+                if p == p_next:
+                    raise RuntimeError("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                p = p_next
 
-        redundant_portals = list(eid for eid in next_edges if redundant[eid])
-        redundant_portals = list((edge_buffer[eid], edge_buffer[opposite(eid)]) for eid in redundant_portals)
-        for rp in redundant_portals:
-            print("redundant: {}".format(rp))
 
-        print("---------------------------------------------------------------------")
         self.portals = []
         for eid in range(len(is_border))[::2]:
             if not is_border[eid] and not is_border[eid + 1] and next_edges[eid] != eid + 1:
