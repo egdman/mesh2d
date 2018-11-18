@@ -248,7 +248,7 @@ class Mesh2d(object):
                     side1 = cand_v - prev_v
                     side2 = next_v - cand_v
 
-                    # positive external angle is concavity
+                    # positive external angle indicates concavity
                     external_angle = math.acos(Geom2.cos_angle(side1, side2))
                     external_angle = external_angle*180.0 / math.pi
                     accum_angle = max(0., accum_angle + external_angle)
@@ -667,7 +667,23 @@ class Mesh2d(object):
                 direcs = list((e_idx, (poly.vertices[v_idx] - poly.vertices[tgt]).normalized())
                     for e_idx, v_idx in zip(e_ids, v_ids) if v_idx != src) # backtracking not allowed
 
-                # pick the leftmost direction as the next edge
+
+                r'''
+                pick the first direction in clockwise order as the next edge:
+
+
+                              \      /
+                               \    /
+                                \  /
+                                 \/_ _ _ _ _
+                                 /|
+                                / |
+                               /  |
+    pick this edge as next -- /   ^
+                                  ^
+                                  ^  --  coming in along this edge
+                '''
+
                 left, right = [], []
                 for e_idx, out_dir in direcs:
                     if vec.cross2(in_dir, out_dir) < 0:
@@ -705,9 +721,9 @@ class Mesh2d(object):
 
                 def calc_external_angle_if_portal_is_removed(p):
                     '''
-                    This calculates the sum of 2 angles - one before and one after the portal p
-                    adjacent to the target vertex of p
-                    It returns max((sum_of_2_angles - 180_degrees), 0)
+                    This calculates the sum of 2 angles - one before and one after
+                    the portal p, adjacent to the target vertex of p, in degrees.
+                    It returns max((sum_of_2_angles - 180_degrees), 0).
                     '''
                     eid_before = next_edge(p)
                     eid_after = opposite(prev_edge(opposite(p)))
@@ -724,7 +740,7 @@ class Mesh2d(object):
                         side1 = cand_v - prev_v
                         side2 = next_v - cand_v
 
-                        # positive external angle is concavity
+                        # positive external angle indicates concavity
                         external_angle = math.acos(Geom2.cos_angle(side1, side2))
                         external_angle = external_angle*180.0 / math.pi
                         return external_angle, eid_before, eid_after
@@ -736,7 +752,7 @@ class Mesh2d(object):
 
                     xa1, bef1, aft1 = calc_external_angle_if_portal_is_removed(opposite(p))
                     if xa1 <= convex_relax_thresh:
-                        # this portal is redundant, delete it
+                        # this portal is redundant, delete it (by rewiring the connectivity)
 
                         prev_edges[bef0] = opposite(aft0)
                         next_edges[opposite(aft0)] = bef0
