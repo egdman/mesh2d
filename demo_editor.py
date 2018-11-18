@@ -251,7 +251,7 @@ class Application(tk.Frame):
     def __init__(self, master=None, poly_path=None, db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
-        self.debugger = VisualDebug(self)
+        self.debugger = None # VisualDebug(self)
 
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
@@ -298,11 +298,15 @@ class Application(tk.Frame):
                     poly = ascii_to_poly(stream.read())
                     self._polygons.append(poly)
                     num_polys = len(self.find_draw_objects_glob('polys/*'))
+
                     try:
                         navmesh = Mesh2d(poly, 15, self.debugger)
                         self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
-                    except RuntimeError:
+
+                    except AnyError as err:
                         self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
+                        print("error occured during navmesh construction: {}".format(err))
+                        print(traceback.format_exc())
 
             except IOError:
                 print("given file cannot be opened")

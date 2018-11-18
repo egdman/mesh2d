@@ -607,8 +607,8 @@ class Mesh2d(object):
 
         portals = list((p.start_index, p.end_info) for p in portals)
 
-        # list of edges
-        edge_buffer = list()
+        # list of half-edges
+        target_verts = list()
         is_border = list()
 
         def opposite(eid):
@@ -620,54 +620,49 @@ class Mesh2d(object):
         for src in poly.graph.all_nodes_iterator():
             tgt = poly.graph.next[src]
 
-            ways_to_go[src].append(len(edge_buffer))
-            edge_buffer.append(tgt)
+            ways_to_go[src].append(len(target_verts))
+            target_verts.append(tgt)
             is_border.append(True)
 
-            ways_to_go[tgt].append(len(edge_buffer))
-            edge_buffer.append(src)
+            ways_to_go[tgt].append(len(target_verts))
+            target_verts.append(src)
             is_border.append(False)
 
         for src, tgt in portals:
 
-            ways_to_go[src].append(len(edge_buffer))
-            edge_buffer.append(tgt)
+            ways_to_go[src].append(len(target_verts))
+            target_verts.append(tgt)
             is_border.append(False)
 
-            ways_to_go[tgt].append(len(edge_buffer))
-            edge_buffer.append(src)
+            ways_to_go[tgt].append(len(target_verts))
+            target_verts.append(src)
             is_border.append(False)
 
 
-        next_edges = list(None for _ in xrange(len(edge_buffer)))
-        prev_edges = list(None for _ in xrange(len(edge_buffer)))
+        next_edges = list(None for _ in xrange(len(target_verts)))
+        prev_edges = list(None for _ in xrange(len(target_verts)))
         inbound_edges = list(None for _ in xrange(len(poly.graph.next)))
 
         if db_visitor is not None:
             for idx in poly.graph.all_nodes_iterator():
                 db_visitor.add_text(loc=poly.vertices[idx], text=str(idx), scale=False)
 
-        # make rooms (a room is just a list of vertex ids that form a nearly convex polygon)
-        rooms = list()
-        consumed = [False] * len(edge_buffer)
-        for idx, _ in enumerate(edge_buffer):
+
+        consumed = [False] * len(target_verts)
+        for idx, _ in enumerate(target_verts):
             if consumed[idx]: continue
-            room = list()
-            rooms.append(room)
 
             while not consumed[idx]:
                 consumed[idx] = True
-                tgt = edge_buffer[idx]
-                src = edge_buffer[opposite(idx)]
+                tgt = target_verts[idx]
+                src = target_verts[opposite(idx)]
                 if is_border[idx]:
                     inbound_edges[tgt] = idx
-
-                room.append(src)
 
                 in_dir = poly.vertices[tgt] - poly.vertices[src]
 
                 e_ids = ways_to_go[tgt]
-                v_ids = list(edge_buffer[edge_idx] for edge_idx in e_ids)
+                v_ids = list(target_verts[edge_idx] for edge_idx in e_ids)
 
                 direcs = list((e_idx, (poly.vertices[v_idx] - poly.vertices[tgt]).normalized())
                     for e_idx, v_idx in zip(e_ids, v_ids) if v_idx != src) # backtracking not allowed
@@ -701,15 +696,7 @@ class Mesh2d(object):
         def prev_edge(eid):
             return prev_edges[eid]
 
-        # def inbound_edges_around_vert(vid):
-        #     eid = inbound_edges[vid]
-        #     yield eid
-        #     next_eid = prev_edge(opposite(eid))
-        #     while next_eid != eid:
-        #         yield next_eid
-        #         next_eid = prev_edge(opposite(next_eid))
-
-
+        # find and delete redundant portals
         for vid in poly.graph.all_nodes_iterator():
             p = prev_edge(opposite(inbound_edges[vid]))
 
@@ -717,15 +704,19 @@ class Mesh2d(object):
                 p_next = prev_edge(opposite(p))
 
                 def calc_external_angle_if_portal_is_removed(p):
-                    # calc sum of angles before and after the portal p
+                    '''
+                    This calculates the sum of 2 angles - one before and one after the portal p
+                    adjacent to the target vertex of p
+                    It returns max((sum_of_2_angles - 180_degrees), 0)
+                    '''
                     eid_before = next_edge(p)
                     eid_after = opposite(prev_edge(opposite(p)))
 
-                    vid_before = edge_buffer[eid_before]
-                    vid_after = edge_buffer[eid_after]
+                    vid_before = target_verts[eid_before]
+                    vid_after = target_verts[eid_after]
 
                     prev_v = poly.vertices[vid_before]
-                    cand_v = poly.vertices[edge_buffer[p]]
+                    cand_v = poly.vertices[target_verts[p]]
                     next_v = poly.vertices[vid_after]
 
                     signed_area = Geom2.signed_area(prev_v, cand_v, next_v)
@@ -741,41 +732,45 @@ class Mesh2d(object):
                         return 0., eid_before, eid_after
 
                 xa0, bef0, aft0 = calc_external_angle_if_portal_is_removed(p)
-                xa1, bef1, aft1 = calc_external_angle_if_portal_is_removed(opposite(p))
+                if xa0 <= convex_relax_thresh:
 
-                this_redundant = xa0 <= convex_relax_thresh and xa1 <= convex_relax_thresh
-                print("portal {:>8}, xa: {:>8.3f}, {:>8.3f}{:>12}".format(
-                    (edge_buffer[p], edge_buffer[opposite(p)]),
-                    xa0, xa1,
-                    "(redundant)" if this_redundant else ""))
+                    xa1, bef1, aft1 = calc_external_angle_if_portal_is_removed(opposite(p))
+                    if xa1 <= convex_relax_thresh:
+                        # this portal is redundant, delete it
 
-                if this_redundant:
-                    # print("0 b  = {}".format(edge_buffer[bef0]))
-                    # print("0 a  = {}".format(edge_buffer[aft0]))
-                    # print("1 b  = {}".format(edge_buffer[bef1]))
-                    # print("1 a  = {}".format(edge_buffer[aft1]))
+                        prev_edges[bef0] = opposite(aft0)
+                        next_edges[opposite(aft0)] = bef0
 
-                    # delete redundant portal
-                    prev_edges[bef0] = opposite(aft0)
-                    next_edges[opposite(aft0)] = bef0
+                        prev_edges[bef1] = opposite(aft1)
+                        next_edges[opposite(aft1)] = bef1
 
-                    prev_edges[bef1] = opposite(aft1)
-                    next_edges[opposite(aft1)] = bef1
+                        next_edges[p] = prev_edges[p] = opposite(p)
+                        next_edges[opposite(p)] = prev_edges[opposite(p)] = p
 
-                    next_edges[p] = prev_edges[p] = opposite(p)
-                    next_edges[opposite(p)] = prev_edges[opposite(p)] = p
-
-                if p == p_next:
-                    raise RuntimeError("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 p = p_next
 
 
-        self.portals = []
+        self.portals = list()
         for eid in range(len(is_border))[::2]:
             if not is_border[eid] and not is_border[eid + 1] and next_edges[eid] != eid + 1:
-                self.portals.append((edge_buffer[eid], edge_buffer[eid + 1]))
+                self.portals.append((target_verts[eid], target_verts[eid + 1]))
 
-        self.rooms = rooms
+        # make rooms (a room is just a list of vertex ids that form a nearly convex polygon)
+        self.rooms = list()
+        consumed = list(False for _ in xrange(len(target_verts)))
+
+        for eid, _ in enumerate(target_verts):
+            if is_border[eid] or consumed[eid]:
+                continue
+
+            room = list()
+            self.rooms.append(room)
+            while not consumed[eid]:
+                consumed[eid] = True
+                room.append(target_verts[eid])
+                eid = next_edge(eid)
+
+
         self.vertices = poly.vertices
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
