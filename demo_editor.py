@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import random
 import fnmatch
@@ -205,16 +206,7 @@ class SelectTool(Tool):
 
 
     def left_click(self, event):
-        # print("SELECT: left click")
-        obj_ids = self.parent.canvas.find_overlapping(event.x, event.y, event.x, event.y)
-        print (obj_ids)
-
-        world_c = self.parent.get_world_crds(event.x, event.y)
-        screen_c = self.parent.get_screen_crds(world_c[0], world_c[1])
-
-        print ("mouse at {}, {} from event".format(event.x, event.y))
-        print ("mouse at {} in world".format(world_c))
-        print ("mouse at {} on screen".format(screen_c))
+        print("SELECT: left click")
 
 
 def get_event_modifiers(event):
@@ -361,7 +353,8 @@ class Application(tk.Frame):
             self.canvas.bind_all('<Button-4>', self._mousewheel_up)
             self.canvas.bind_all('<Button-5>', self._mousewheel_down)
 
-        
+        # escape button resets the active tool
+        self.bind_all('<Escape>', lambda _: self.change_active_tool(type(self.active_tool)))
 
         self.canvas.pack(side = tk.RIGHT, expand = True, fill = tk.BOTH)
 
