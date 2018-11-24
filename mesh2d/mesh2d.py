@@ -455,11 +455,93 @@ class Mesh2d(object):
         The endpoints of portals can be new vertices,
         but they are guaranteed to lie on the polygon boundary (not inside the polygon)
         """
+
+        def find_closest_intersection(start_point, far_endpoint):
+            n = far_endpoint - start_point
+            near_cutoff = n.append(-n.dot(start_point))
+            far_cutoff = (-n).append(n.dot(far_endpoint))
+
+            closest_param = 1.
+            closest_edge = None
+            closest_edge_param = None
+            for loop_start in poly.graph.loops:
+                indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
+
+                for (seg_i1, seg_i2) in pairs(indices):
+                    if tip_idx in (seg_i1, seg_i2):
+                        continue
+
+                    (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
+                    seg0x, seg1x = seg0.append(1), seg1.append(1)
+
+                    if \
+                        (seg0x.dot(near_cutoff) < 0 and seg1x.dot(near_cutoff) < 0) or \
+                        (seg0x.dot( far_cutoff) < 0 and seg1x.dot( far_cutoff) < 0):
+                        continue
+
+                    coef0, coef1, _ = Geom2.lines_intersect((start_point, n), (seg0, seg1 - seg0))
+                    if 0 < coef1 and coef1 < 1 and 0 < coef0 and coef0 < closest_param:
+                        closest_param = coef0
+                        closest_edge = (seg_i1, seg_i2)
+                        closest_edge_param = coef1
+                        x_point = start_point + coef0 * n
+                        far_cutoff = (-n).append(n.dot(x_point))
+
+            return closest_edge, closest_edge_param
+
+
+        def portal_to_contour(start_idx, edge, param):
+            portal = Portal()
+            portal.start_index = start_idx
+            if param == 0 or param == 1:
+                portal.kind = Portal.ToVertex
+                portal.end_info = edge[int(param)]
+            else:
+                portal.kind = Portal.ToSegment
+                portal.end_info = edge, param
+            return portal
+
+        def portal_to_portal_startpoint(start_idx, other_portal):
+            portal = Portal()
+            portal.start_index = start_idx
+            portal.kind = Portal.ToVertex
+            portal.end_info = other_portal.start_index
+            return portal
+
+        def portal_to_portal_endpoint(start_idx, other_portal):
+            portal = Portal()
+            portal.start_index = start_idx
+            if other_portal.kind == Portal.ToVertex:
+                portal.kind = Portal.ToVertex
+                portal.end_info = other_portal.end_info
+            else:
+                portal.kind = Portal.ToPortal
+                portal.end_info = other_portal
+            return portal
+
+        def portal_to_portal_startpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
+            endpoint = poly.vertices[other_portal.start_index]
+            edge, param = find_closest_intersection(poly.vertices[start_idx], endpoint)
+            if edge is None:
+                return portal_to_portal_startpoint(start_idx, other_portal)
+            else:
+                return portal_to_contour(start_idx, edge, param)
+
+
+        def portal_to_portal_endpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
+            endpoint = other_portal.calc_endpoint(poly.vertices)
+            edge, param = find_closest_intersection(poly.vertices[start_idx], endpoint)
+            if edge is None:
+                return portal_to_portal_endpoint(tip_idx, other_portal)
+            else:
+                return portal_to_contour(tip_idx, edge, param)
+
+
         spikes = Mesh2d.find_spikes(poly, threshold)
         portals = []
 
         for spike in spikes:
-            (_, spike_idx, _) = spike
+            (_, tip_idx, _) = spike
             (v0, v1, v2) = (poly.vertices[idx] for idx in spike)
 
             right_dir, left_dir = Mesh2d.get_sector(v0, v1, v2, threshold)
@@ -474,19 +556,19 @@ class Mesh2d(object):
             hp1 = n_right.append(-n_right.dot(v1))
             hp2 = n_left.append(-n_left.dot(v1))
 
-            tip = poly.vertices[spike_idx]
+            tip = poly.vertices[tip_idx]
             sector = (right_dir, tip, left_dir)
 
             # find closest edge
             closest_seg, closest_seg_para, closest_seg_dst = \
-                Mesh2d.find_closest_edge_inside_sector(poly, sector, spike_idx, hp1, hp2)
+                Mesh2d.find_closest_edge_inside_sector(poly, sector, tip_idx, hp1, hp2)
 
             if closest_seg is None:
                 raise RuntimeError("Could not find a single edge inside sector")
 
             # find closest portal
             closest_portal, closest_portal_para, closest_portal_dst = \
-                Mesh2d.find_closest_portal_inside_sector(poly, sector, spike_idx, portals, hp1, hp2)
+                Mesh2d.find_closest_portal_inside_sector(poly, sector, tip_idx, portals, hp1, hp2)
 
             # if db_visitor is not None:
             #     idx0, idx1 = closest_seg
@@ -498,11 +580,6 @@ class Mesh2d(object):
             # closest edge always exists (unless something's horribly wrong)
             # closest portal - not always (there might be no portals inside the sector
             # or no portals at all)
-            portal = Portal()
-
-            # we might want to add a second portal later
-            new_portals = [portal]
-            portal.start_index = spike_idx
             
             # check if there is a portal closer than the closest edge
             # TODO When attaching to an existing portal, need to reconsider the necessity of the older portal
@@ -536,35 +613,20 @@ class Mesh2d(object):
 
                     # if none of the portal endpoints is inside sector, create 2 portals to both ends:
                     if not start_inside and not end_inside:
-                        portal.kind = Portal.ToVertex
-                        portal.end_info = closest_portal.start_index
-
-                        second_portal = Portal()
-                        second_portal.start_index = portal.start_index
-                        if closest_portal.kind == Portal.ToVertex:
-                            second_portal.kind = Portal.ToVertex
-                            second_portal.end_info = closest_portal.end_info
-                        else:
-                            second_portal.kind = Portal.ToPortal
-                            second_portal.end_info = closest_portal
-
-                        new_portals.append(second_portal)
+                        new_portals = [
+                            portal_to_portal_startpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal),
+                            portal_to_portal_endpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)
+                        ]
 
                     elif start_inside:
-                        portal.kind = Portal.ToVertex
-                        portal.end_info = closest_portal.start_index # attach to portal startPt
+                        new_portals = [portal_to_portal_startpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)]
+
                     else:
-                        portal.kind = Portal.ToPortal
-                        portal.end_info = closest_portal
+                        new_portals = [portal_to_portal_endpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)]
 
             # if no portals are in the way, attach to edge/vertex
             else:
-                if closest_seg_para == 0 or closest_seg_para == 1:
-                    portal.kind = Portal.ToVertex
-                    portal.end_info = closest_seg[int(closest_seg_para)]
-                else:
-                    portal.kind = Portal.ToSegment
-                    portal.end_info = closest_seg, closest_seg_para
+                new_portals = [portal_to_contour(tip_idx, closest_seg, closest_seg_para)]
 
             portals.extend(new_portals)
         return portals
