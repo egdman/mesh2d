@@ -456,7 +456,7 @@ class Mesh2d(object):
         but they are guaranteed to lie on the polygon boundary (not inside the polygon)
         """
 
-        def find_closest_intersection(start_point, far_endpoint):
+        def find_closest_intersection(start_idx, start_point, far_endpoint):
             n = far_endpoint - start_point
             near_cutoff = n.append(-n.dot(start_point))
             far_cutoff = (-n).append(n.dot(far_endpoint))
@@ -468,7 +468,7 @@ class Mesh2d(object):
                 indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
 
                 for (seg_i1, seg_i2) in pairs(indices):
-                    if tip_idx in (seg_i1, seg_i2):
+                    if start_idx in (seg_i1, seg_i2):
                         continue
 
                     (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
@@ -486,7 +486,6 @@ class Mesh2d(object):
                         closest_edge_param = coef1
                         x_point = start_point + coef0 * n
                         far_cutoff = (-n).append(n.dot(x_point))
-
             return closest_edge, closest_edge_param
 
 
@@ -521,8 +520,10 @@ class Mesh2d(object):
 
         def portal_to_portal_startpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
             endpoint = poly.vertices[other_portal.start_index]
-            edge, param = find_closest_intersection(poly.vertices[start_idx], endpoint)
+            edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
             if edge is None:
+                return portal_to_portal_startpoint(start_idx, other_portal)
+            elif other_portal.start_index in edge:
                 return portal_to_portal_startpoint(start_idx, other_portal)
             else:
                 return portal_to_contour(start_idx, edge, param)
@@ -530,8 +531,12 @@ class Mesh2d(object):
 
         def portal_to_portal_endpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
             endpoint = other_portal.calc_endpoint(poly.vertices)
-            edge, param = find_closest_intersection(poly.vertices[start_idx], endpoint)
+            edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
             if edge is None:
+                return portal_to_portal_endpoint(tip_idx, other_portal)
+            elif other_portal.kind == Portal.ToVertex and other_portal.end_info in edge:
+                return portal_to_portal_endpoint(tip_idx, other_portal)
+            elif other_portal.kind == Portal.ToSegment and other_portal.end_info[0] == edge:
                 return portal_to_portal_endpoint(tip_idx, other_portal)
             else:
                 return portal_to_contour(tip_idx, edge, param)
@@ -582,7 +587,6 @@ class Mesh2d(object):
             # or no portals at all)
             
             # check if there is a portal closer than the closest edge
-            # TODO When attaching to an existing portal, need to reconsider the necessity of the older portal
             if closest_portal_dst is not None and closest_portal_dst < closest_seg_dst:
                 if closest_portal_dst == 0:
                     continue
