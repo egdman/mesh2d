@@ -446,7 +446,7 @@ class Mesh2d(object):
 
 
     @staticmethod
-    def find_portals(poly, threshold, db_visitor=None):
+    def create_portals(poly, threshold, db_visitor=None):
 
         """
         This function uses algorithm from R. Oliva and N. Pelechano - 
@@ -594,15 +594,15 @@ class Mesh2d(object):
                 # figure out if we want to create one or two portals
                 # we only want to connect to one or two endpoints,
                 # not to an intermediate point of the portal
+
+                # If closest point is one of the endpoints of closest_portal:
                 if closest_portal_para == 0:
-                    portal.kind = Portal.ToVertex
-                    portal.end_info = closest_portal.start_index
+                    new_portals = [portal_to_portal_startpoint(tip_idx, closest_portal)]
                 elif closest_portal_para == 1:
-                    portal.kind = Portal.ToPortal
-                    portal.end_info = closest_portal
+                    new_portals = [portal_to_portal_endpoint(tip_idx, closest_portal)]
 
                 # If closest point is not one of the endpoints,
-                # we still create the portal(s) to one or two endpoints.
+                # we still create the portal(s) to one or two endpoints:
                 else:
                     def pt_inside_sector(sector, pt):
                         dir1, tip, dir2 = sector
@@ -640,7 +640,7 @@ class Mesh2d(object):
     def __init__(self, poly, convex_relax_thresh = 0.0, db_visitor=None):
         poly = deepcopy(poly)
 
-        portals = Mesh2d.find_portals(poly, convex_relax_thresh, db_visitor)
+        portals = Mesh2d.create_portals(poly, convex_relax_thresh, db_visitor)
 
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
         segments_to_split = defaultdict(list)
