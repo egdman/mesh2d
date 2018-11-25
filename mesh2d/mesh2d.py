@@ -208,6 +208,8 @@ class Portal(object):
     class ToSegment: pass
     class ToVertex: pass
     class ToPortal: pass
+    def __repr__(self):
+        return "portal {}, from idx {} to {}".format(self.kind.__name__, self.start_index, self.end_info)
 
     def calc_endpoint(self, vertices):
         if self.kind == Portal.ToVertex:
@@ -632,6 +634,11 @@ class Mesh2d(object):
             else:
                 new_portals = [portal_to_contour(tip_idx, closest_seg, closest_seg_para)]
 
+            if tip_idx in (81, 98):
+                print("portals from {}:".format(tip_idx))
+                for p in new_portals:
+                    print(p)
+                print("~~~~~~~~")
             portals.extend(new_portals)
         return portals
 
@@ -672,6 +679,11 @@ class Mesh2d(object):
         # now all portals are 'ToVertex'
 
         portals = list((p.start_index, p.end_info) for p in portals)
+
+        for portal in portals:
+            rp = (portal[1], portal[0])
+            if rp in portals:
+                print("x2 portal: {}, {}".format(portal, rp))
 
         # list of half-edges
         target_verts = list()
@@ -764,12 +776,21 @@ class Mesh2d(object):
                     candidates = right
                     pick = max
 
-                projections = (out_dir.dot(in_dir) for _, out_dir in candidates)
+                projections = list(out_dir.dot(in_dir) for _, out_dir in candidates)
                 picked_idx, _ = pick(enumerate(projections), key=itemgetter(1))
                 next_idx, _ = candidates[picked_idx]
 
                 next_edges[idx] = next_idx
                 prev_edges[next_idx] = idx
+
+                if idx in (416, 417, 407, 389):
+                    print("    at edge #{} (v{} -> v{})".format(idx, target_verts[opposite(idx)], target_verts[idx]))
+                    print("picked edge #{} (    -> v{})".format(next_idx, target_verts[next_idx]))
+                    print("projections: {}".format(projections))
+                    print("-- -- -- --")
+
+
+
                 idx = next_idx
 
         def next_edge(eid):
@@ -778,58 +799,70 @@ class Mesh2d(object):
         def prev_edge(eid):
             return prev_edges[eid]
 
-        # find and delete redundant portals
-        for vid in poly.graph.all_nodes_iterator():
-            p = prev_edge(opposite(inbound_edges[vid]))
 
-            while not is_border[opposite(p)]:
-                p_next = prev_edge(opposite(p))
+        # if None in next_edges or None in prev_edges:
+        #     print("PROBLEM!!")
+        #     for eid, (pr, nx) in enumerate(zip(prev_edges, next_edges)):
+        #         print("{}: {} , {},  -> {}".format(eid, pr, nx, target_verts[eid]))
 
-                def calc_external_angle_if_portal_is_removed(p):
-                    '''
-                    This calculates the sum of 2 angles - one before and one after
-                    the portal p, adjacent to the target vertex of p, in degrees.
-                    It returns max((sum_of_2_angles - 180_degrees), 0).
-                    '''
-                    eid_before = next_edge(p)
-                    eid_after = opposite(prev_edge(opposite(p)))
 
-                    vid_before = target_verts[eid_before]
-                    vid_after = target_verts[eid_after]
+        # # find and delete redundant portals
+        # for vid in poly.graph.all_nodes_iterator():
+        #     p = prev_edge(opposite(inbound_edges[vid]))
 
-                    prev_v = poly.vertices[vid_before]
-                    cand_v = poly.vertices[target_verts[p]]
-                    next_v = poly.vertices[vid_after]
+        #     while not is_border[opposite(p)]:
+        #         p_next = prev_edge(opposite(p))
 
-                    signed_area = Geom2.signed_area(prev_v, cand_v, next_v)
-                    if signed_area < 0.0:
-                        side1 = cand_v - prev_v
-                        side2 = next_v - cand_v
+        #         def calc_external_angle_if_portal_is_removed(p):
+        #             '''
+        #             This calculates the sum of 2 angles - one before and one after
+        #             the portal p, adjacent to the target vertex of p, in degrees.
+        #             It returns max((sum_of_2_angles - 180_degrees), 0).
+        #             '''
+        #             eid_before = next_edge(p)
+        #             try:
+        #                 eid_after = opposite(prev_edge(opposite(p)))
+        #             except TypeError as err:
+        #                 print("next_edges: {}".format(next_edges))
+        #                 print("prev_edges: {}".format(prev_edges))
+        #                 raise err
 
-                        # positive external angle indicates concavity
-                        external_angle = math.acos(Geom2.cos_angle(side1, side2))
-                        external_angle = external_angle*180.0 / math.pi
-                        return external_angle, eid_before, eid_after
-                    else:
-                        return 0., eid_before, eid_after
+        #             vid_before = target_verts[eid_before]
+        #             vid_after = target_verts[eid_after]
 
-                xa0, bef0, aft0 = calc_external_angle_if_portal_is_removed(p)
-                if xa0 <= convex_relax_thresh:
+        #             prev_v = poly.vertices[vid_before]
+        #             cand_v = poly.vertices[target_verts[p]]
+        #             next_v = poly.vertices[vid_after]
 
-                    xa1, bef1, aft1 = calc_external_angle_if_portal_is_removed(opposite(p))
-                    if xa1 <= convex_relax_thresh:
-                        # this portal is redundant, delete it (by rewiring the connectivity)
+        #             signed_area = Geom2.signed_area(prev_v, cand_v, next_v)
+        #             if signed_area < 0.0:
+        #                 side1 = cand_v - prev_v
+        #                 side2 = next_v - cand_v
 
-                        prev_edges[bef0] = opposite(aft0)
-                        next_edges[opposite(aft0)] = bef0
+        #                 # positive external angle indicates concavity
+        #                 external_angle = math.acos(Geom2.cos_angle(side1, side2))
+        #                 external_angle = external_angle*180.0 / math.pi
+        #                 return external_angle, eid_before, eid_after
+        #             else:
+        #                 return 0., eid_before, eid_after
 
-                        prev_edges[bef1] = opposite(aft1)
-                        next_edges[opposite(aft1)] = bef1
+        #         xa0, bef0, aft0 = calc_external_angle_if_portal_is_removed(p)
+        #         if xa0 <= convex_relax_thresh:
 
-                        next_edges[p] = prev_edges[p] = opposite(p)
-                        next_edges[opposite(p)] = prev_edges[opposite(p)] = p
+        #             xa1, bef1, aft1 = calc_external_angle_if_portal_is_removed(opposite(p))
+        #             if xa1 <= convex_relax_thresh:
+        #                 # this portal is redundant, delete it (by rewiring the connectivity)
 
-                p = p_next
+        #                 prev_edges[bef0] = opposite(aft0)
+        #                 next_edges[opposite(aft0)] = bef0
+
+        #                 prev_edges[bef1] = opposite(aft1)
+        #                 next_edges[opposite(aft1)] = bef1
+
+        #                 next_edges[p] = prev_edges[p] = opposite(p)
+        #                 next_edges[opposite(p)] = prev_edges[opposite(p)] = p
+
+        #         p = p_next
 
 
         self.portals = list()
