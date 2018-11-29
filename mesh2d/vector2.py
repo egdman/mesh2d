@@ -22,7 +22,7 @@ class vec(object):
         return self.dot(self)
 
     def norm(self):
-        return math.sqrt(self.normSq())
+        return math.sqrt(self.dot(self))
 
     # multiply by a scalar on the right
     def __mul__(self, right_scalar):
@@ -34,7 +34,7 @@ class vec(object):
 
     # negate
     def __neg__(self):
-        return -1. * self
+        return vec(*(-c for c in self.comps))
 
     # add vector
     def __add__(self, right):
@@ -42,11 +42,12 @@ class vec(object):
 
     # subtract vector
     def __sub__(self, right):
-        return self + (-right)
+        return vec(*(c0 - c1 for (c0, c1) in zip(self.comps, right.comps)))
 
     # scalar division
     def __div__(self, right_scalar):
-        return (1. / right_scalar) * self
+        a = 1. / right_scalar
+        return vec(*(a * c for c in self.comps))
 
     # [] getter
     def __getitem__(self, key):
@@ -58,7 +59,7 @@ class vec(object):
 
     # inequality test
     def __ne__(self, right):
-        return not self == right
+        return self.comps != right.comps
 
     # hashing support
     def __hash__(self):
@@ -71,7 +72,8 @@ class vec(object):
         return self.comps.__repr__()
 
     def normalized(self):
-        return self / self.norm()
+        a = 1. / math.sqrt(self.dot(self))
+        return vec(*(a * c for c in self.comps))
 
     def append(self, *tail):
         return vec(*chain(self.comps, tail))
