@@ -230,132 +230,82 @@ class Portal(object):
 
 
 
-class Mesh2d(object):
 
-    @staticmethod
-    def find_spikes(poly, threshold):
-        spikes = []
-        accum_angle = 0.
-        for loop_start in poly.graph.loops:
-            indices = chain(poly.graph.loop_iterator(loop_start),
-                [loop_start, poly.graph.next[loop_start]])
+def find_spikes(poly, threshold):
+    spikes = []
+    accum_angle = 0.
+    for loop_start in poly.graph.loops:
+        indices = chain(poly.graph.loop_iterator(loop_start),
+            [loop_start, poly.graph.next[loop_start]])
 
-            for i0, i1, i2 in triples(indices):
-                prev_v = poly.vertices[i0]
-                cand_v = poly.vertices[i1]
-                next_v = poly.vertices[i2]
+        for i0, i1, i2 in triples(indices):
+            prev_v = poly.vertices[i0]
+            cand_v = poly.vertices[i1]
+            next_v = poly.vertices[i2]
 
-                signed_area = Geom2.signed_area(prev_v, cand_v, next_v)
-                if signed_area < 0.0:
-                    side1 = cand_v - prev_v
-                    side2 = next_v - cand_v
+            signed_area = Geom2.signed_area(prev_v, cand_v, next_v)
+            if signed_area < 0.0:
+                side1 = cand_v - prev_v
+                side2 = next_v - cand_v
 
-                    # positive external angle indicates concavity
-                    external_angle = math.acos(Geom2.cos_angle(side1, side2))
-                    external_angle = external_angle*180.0 / math.pi
-                    accum_angle = max(0., accum_angle + external_angle)
-                    if accum_angle > threshold:
-                        spikes.append((i0, i1, i2))
-                        accum_angle = 0.
-        return spikes
+                # positive external angle indicates concavity
+                external_angle = math.acos(Geom2.cos_angle(side1, side2))
+                external_angle = external_angle*180.0 / math.pi
+                accum_angle = max(0., accum_angle + external_angle)
+                if accum_angle > threshold:
+                    spikes.append((i0, i1, i2))
+                    accum_angle = 0.
+    return spikes
 
 
-    @staticmethod
-    def get_sector(prev_v, spike_v, next_v, threshold=0.0):
-        '''
-        Returns 2 vectors that define the sector rays.
-        The vectors have unit lengths
-        The vector pair is right-hand
-        '''
-        vec1 = (spike_v - prev_v).normalized()
-        vec2 = (spike_v - next_v).normalized()
+def get_sector(prev_v, spike_v, next_v, threshold=0.0):
+    '''
+    Returns 2 vectors that define the sector rays.
+    The vectors have unit lengths
+    The vector pair is right-hand
+    '''
+    vec1 = (spike_v - prev_v).normalized()
+    vec2 = (spike_v - next_v).normalized()
 
-        cosine = Geom2.cos_angle(vec1, vec2)
-        sine = Geom2.sin_angle(vec1, vec2)
+    cosine = Geom2.cos_angle(vec1, vec2)
+    sine = Geom2.sin_angle(vec1, vec2)
 
-        sector_angle = 2 * math.pi - math.acos(cosine) if sine < 0 else math.acos(cosine)
+    sector_angle = 2 * math.pi - math.acos(cosine) if sine < 0 else math.acos(cosine)
 
-        # degrees to radian
-        clearance = math.pi * threshold / 180.0
-        sector_angle_plus = sector_angle + clearance
+    # degrees to radian
+    clearance = math.pi * threshold / 180.0
+    sector_angle_plus = sector_angle + clearance
 
-        
-        # limit sector opening to 180 degrees:
-        sector_angle_plus = min(sector_angle_plus, math.pi)
+    
+    # limit sector opening to 180 degrees:
+    sector_angle_plus = min(sector_angle_plus, math.pi)
 
-        clearance = .5 * (sector_angle_plus - sector_angle)
+    clearance = .5 * (sector_angle_plus - sector_angle)
 
-        cosine = math.cos(clearance)
-        sine = math.sin(clearance)
+    cosine = math.cos(clearance)
+    sine = math.sin(clearance)
 
-        # rotate sector vectors to increase angle for clearance
-        return (
-            Geom2.mul_mtx_2x2((cosine, sine, -sine, cosine), vec1),
-            Geom2.mul_mtx_2x2((cosine, -sine, sine, cosine), vec2)
-        )
-
-
-    @staticmethod
-    def find_closest_edge_inside_sector(poly, sector, tip_idx, cutoff1, cutoff2):
-        _, tip, _ = sector
-        cutoff_plane = None
-        closest_para, closest_distSq, closest_edge = None, None, None
-
-        for loop_start in poly.graph.loops:
-            indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
-
-            for (seg_i1, seg_i2) in pairs(indices):
-                if tip_idx in (seg_i1, seg_i2):
-                    continue
-
-                (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
+    # rotate sector vectors to increase angle for clearance
+    return (
+        Geom2.mul_mtx_2x2((cosine, sine, -sine, cosine), vec1),
+        Geom2.mul_mtx_2x2((cosine, -sine, sine, cosine), vec2)
+    )
 
 
-                seg0x, seg1x = seg0.append(1), seg1.append(1)
+def find_closest_edge_inside_sector(poly, sector, tip_idx, cutoff1, cutoff2):
+    _, tip, _ = sector
+    cutoff_plane = None
+    closest_para, closest_distSq, closest_edge = None, None, None
 
-                if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
-                    continue
+    for loop_start in poly.graph.loops:
+        indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
 
-                elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
-                    continue
+        for (seg_i1, seg_i2) in pairs(indices):
+            if tip_idx in (seg_i1, seg_i2):
+                continue
 
-                para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
+            (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
 
-                if para is None: continue
-                if closest_distSq is None or distSq < closest_distSq:
-                    closest_distSq = distSq
-                    closest_para = para
-                    closest_edge = (seg_i1, seg_i2)
-
-                    # make cutoff line
-                    n = point - tip
-                    cutoff_plane = n.append(-n.dot(point))
-
-        return closest_edge, closest_para, closest_distSq
-
-
-    @staticmethod
-    def find_closest_portal_inside_sector(poly, sector, tip_idx, portals, cutoff1, cutoff2):
-        dir1, tip, dir2 = sector
-        cutoff_plane = None
-        closest_portal, closest_distSq, closest_para = None, None, None
-
-        for portal in portals:
-            if tip_idx == portal.start_index: continue
-
-            (seg0, seg1) = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
-            if seg0 == seg1: continue
-
-            # special case: portal endpoint is at the sector tip
-            # if other endpoint is inside sector, return portal as closest with distance = 0
-            # if other endpoint is outside sector, skip this portal
-            if seg1 == tip:
-                dir_p = seg0 - tip
-                seg0_inside = vec.cross2(dir1, dir_p) > 0 and vec.cross2(dir2, dir_p) < 0
-                if seg0_inside:
-                    return portal, 1., 0.
-                else:
-                    continue
 
             seg0x, seg1x = seg0.append(1), seg1.append(1)
 
@@ -365,303 +315,346 @@ class Mesh2d(object):
             elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
                 continue
 
-            para, point, distSq = Mesh2d._segment_closest_point_inside_sector((seg0, seg1), sector)
+            para, point, distSq = _segment_closest_point_inside_sector((seg0, seg1), sector)
 
             if para is None: continue
-
-            # update closest portal
             if closest_distSq is None or distSq < closest_distSq:
                 closest_distSq = distSq
                 closest_para = para
-                closest_portal = portal
+                closest_edge = (seg_i1, seg_i2)
 
                 # make cutoff line
                 n = point - tip
                 cutoff_plane = n.append(-n.dot(point))
 
-        return closest_portal, closest_para, closest_distSq
+    return closest_edge, closest_para, closest_distSq
+
+
+def find_closest_portal_inside_sector(poly, sector, tip_idx, portals, cutoff1, cutoff2):
+    dir1, tip, dir2 = sector
+    cutoff_plane = None
+    closest_portal, closest_distSq, closest_para = None, None, None
+
+    for portal in portals:
+        if tip_idx == portal.start_index: continue
+
+        (seg0, seg1) = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
+        if seg0 == seg1: continue
+
+        # special case: portal endpoint is at the sector tip
+        # if other endpoint is inside sector, return portal as closest with distance = 0
+        # if other endpoint is outside sector, skip this portal
+        if seg1 == tip:
+            dir_p = seg0 - tip
+            seg0_inside = vec.cross2(dir1, dir_p) > 0 and vec.cross2(dir2, dir_p) < 0
+            if seg0_inside:
+                return portal, 1., 0.
+            else:
+                continue
+
+        seg0x, seg1x = seg0.append(1), seg1.append(1)
+
+        if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
+            continue
+
+        elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
+            continue
+
+        para, point, distSq = _segment_closest_point_inside_sector((seg0, seg1), sector)
+
+        if para is None: continue
+
+        # update closest portal
+        if closest_distSq is None or distSq < closest_distSq:
+            closest_distSq = distSq
+            closest_para = para
+            closest_portal = portal
+
+            # make cutoff line
+            n = point - tip
+            cutoff_plane = n.append(-n.dot(point))
+
+    return closest_portal, closest_para, closest_distSq
 
 
 
+def _segment_closest_point_inside_sector(segment, sector):
+    dir1, tip, dir2 = sector
 
-    @staticmethod
-    def _segment_closest_point_inside_sector(segment, sector):
-        dir1, tip, dir2 = sector
+    def pt_inside(pt):
+        rel_pt = pt - tip
+        return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
 
-        def pt_inside(pt):
-            rel_pt = pt - tip
-            return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
+    # make ray-like line
+    line = (segment[0], segment[1] - segment[0])
+    (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
+    (linepara2, raypara2, _) = Geom2.lines_intersect(line, (tip, dir2))
 
-        # make ray-like line
-        line = (segment[0], segment[1] - segment[0])
-        (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
-        (linepara2, raypara2, _) = Geom2.lines_intersect(line, (tip, dir2))
+    # check whether line containing segment passes through sector:
+    line_through_sector = raypara1 > 0 or raypara2 > 0
 
-        # check whether line containing segment passes through sector:
-        line_through_sector = raypara1 > 0 or raypara2 > 0
+    if not line_through_sector:
+        return None, None, None
 
-        if not line_through_sector:
+    # now we know that line goes through sector
+    # find intersections between segment and sector rays
+    intersect_params = []
+    if raypara1 > 0 and 0 < linepara1 and linepara1 < 1:
+        intersect_params.append(linepara1)
+
+    if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
+        intersect_params.append(linepara2)
+
+    # one intersection => one endpoint inside, other outside
+    if len(intersect_params) == 1:
+        if pt_inside(segment[0]):
+            candid_params = [0, intersect_params[0]]
+        else:
+            candid_params = [intersect_params[0], 1]
+    # two intersections => middle section passes through sector
+    elif len(intersect_params) == 2:
+        candid_params = list(sorted(intersect_params))
+
+    # no intersections => entirely inside or outside
+    else:
+        if pt_inside(segment[0]):
+            candid_params = [0, 1]
+        else:
             return None, None, None
 
-        # now we know that line goes through sector
-        # find intersections between segment and sector rays
-        intersect_params = []
-        if raypara1 > 0 and 0 < linepara1 and linepara1 < 1:
-            intersect_params.append(linepara1)
+    # find point on line closest to tip
+    projpara = Geom2.project_to_line(tip, line)
 
-        if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
-            intersect_params.append(linepara2)
+    if candid_params[0] < projpara and projpara < candid_params[1]:
+        candid_params.append(projpara)
 
-        # one intersection => one endpoint inside, other outside
-        if len(intersect_params) == 1:
-            if pt_inside(segment[0]):
-                candid_params = [0, intersect_params[0]]
-            else:
-                candid_params = [intersect_params[0], 1]
-        # two intersections => middle section passes through sector
-        elif len(intersect_params) == 2:
-            candid_params = list(sorted(intersect_params))
+    def para_to_pt(para):
+        return line[0] + (para * line[1])
 
-        # no intersections => entirely inside or outside
-        else:
-            if pt_inside(segment[0]):
-                candid_params = [0, 1]
-            else:
-                return None, None, None
+    distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
 
-        # find point on line closest to tip
-        projpara = Geom2.project_to_line(tip, line)
-
-        if candid_params[0] < projpara and projpara < candid_params[1]:
-            candid_params.append(projpara)
-
-        def para_to_pt(para):
-            return line[0] + (para * line[1])
-
-        distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
-
-        p, d = min(zip(candid_params, distances), key = itemgetter(1))
-        return p, para_to_pt(p), d
+    p, d = min(zip(candid_params, distances), key = itemgetter(1))
+    return p, para_to_pt(p), d
 
 
 
 
+def create_portals(poly, threshold, db_visitor=None):
 
-    @staticmethod
-    def create_portals(poly, threshold, db_visitor=None):
+    """
+    This function uses algorithm from R. Oliva and N. Pelechano - 
+    Automatic Generation of Suboptimal NavMeshes
+    This is work in progress
+    The endpoints of portals can be new vertices,
+    but they are guaranteed to lie on the polygon boundary (not inside the polygon)
+    """
 
-        """
-        This function uses algorithm from R. Oliva and N. Pelechano - 
-        Automatic Generation of Suboptimal NavMeshes
-        This is work in progress
-        The endpoints of portals can be new vertices,
-        but they are guaranteed to lie on the polygon boundary (not inside the polygon)
-        """
+    def find_closest_intersection(start_idx, start_point, far_endpoint):
+        n = far_endpoint - start_point
+        near_cutoff = n.append(-n.dot(start_point))
+        far_cutoff = (-n).append(n.dot(far_endpoint))
 
-        def find_closest_intersection(start_idx, start_point, far_endpoint):
-            n = far_endpoint - start_point
-            near_cutoff = n.append(-n.dot(start_point))
-            far_cutoff = (-n).append(n.dot(far_endpoint))
+        closest_param = 1.
+        closest_edge = None
+        closest_edge_param = None
+        for loop_start in poly.graph.loops:
+            indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
 
-            closest_param = 1.
-            closest_edge = None
-            closest_edge_param = None
-            for loop_start in poly.graph.loops:
-                indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
-
-                for (seg_i1, seg_i2) in pairs(indices):
-                    if start_idx in (seg_i1, seg_i2):
-                        continue
-
-                    (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
-                    seg0x, seg1x = seg0.append(1), seg1.append(1)
-
-                    if \
-                        (seg0x.dot(near_cutoff) < 0 and seg1x.dot(near_cutoff) < 0) or \
-                        (seg0x.dot( far_cutoff) < 0 and seg1x.dot( far_cutoff) < 0):
-                        continue
-
-                    coef0, coef1, _ = Geom2.lines_intersect((start_point, n), (seg0, seg1 - seg0))
-                    if 0 < coef1 and coef1 < 1 and 0 < coef0 and coef0 < closest_param:
-                        closest_param = coef0
-                        closest_edge = (seg_i1, seg_i2)
-                        closest_edge_param = coef1
-                        x_point = start_point + coef0 * n
-                        far_cutoff = (-n).append(n.dot(x_point))
-            return closest_edge, closest_edge_param
-
-
-        def portal_to_contour(start_idx, edge, param):
-            portal = Portal()
-            portal.start_index = start_idx
-            if param == 0 or param == 1:
-                portal.kind = Portal.ToVertex
-                portal.end_info = edge[int(param)]
-            else:
-                portal.kind = Portal.ToSegment
-                portal.end_info = edge, param
-            return portal
-
-        def portal_to_portal_startpoint(start_idx, other_portal):
-            portal = Portal()
-            portal.start_index = start_idx
-            portal.kind = Portal.ToVertex
-            portal.end_info = other_portal.start_index
-            return portal
-
-        def portal_to_portal_endpoint(start_idx, other_portal):
-            portal = Portal()
-            portal.start_index = start_idx
-            if other_portal.kind == Portal.ToVertex:
-                portal.kind = Portal.ToVertex
-                portal.end_info = other_portal.end_info
-            else:
-                portal.kind = Portal.ToPortal
-                portal.end_info = other_portal
-            return portal
-
-        def portal_to_portal_startpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
-            endpoint = poly.vertices[other_portal.start_index]
-            edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
-            if edge is None:
-                return portal_to_portal_startpoint(start_idx, other_portal)
-            elif other_portal.start_index in edge:
-                return portal_to_portal_startpoint(start_idx, other_portal)
-            else:
-                return portal_to_contour(start_idx, edge, param)
-
-
-        def portal_to_portal_endpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
-            endpoint = other_portal.calc_endpoint(poly.vertices)
-            edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
-            if edge is None:
-                return portal_to_portal_endpoint(tip_idx, other_portal)
-            elif other_portal.kind == Portal.ToVertex and other_portal.end_info in edge:
-                return portal_to_portal_endpoint(tip_idx, other_portal)
-            elif other_portal.kind == Portal.ToSegment and other_portal.end_info[0] == edge:
-                return portal_to_portal_endpoint(tip_idx, other_portal)
-            else:
-                return portal_to_contour(tip_idx, edge, param)
-
-
-        spikes = Mesh2d.find_spikes(poly, threshold)
-        portals = []
-
-        for spike in spikes:
-            (_, tip_idx, _) = spike
-            (v0, v1, v2) = (poly.vertices[idx] for idx in spike)
-
-            right_dir, left_dir = Mesh2d.get_sector(v0, v1, v2, threshold)
-
-            # if db_visitor is not None:
-            #     pts = v1 + 50. * right_dir, v1, v1 + 50. * left_dir
-            #     db_visitor.add_polygon(pts, '#ffff22')
-
-            n_right = left_dir - left_dir.dot(right_dir) * right_dir
-            n_left  = right_dir - right_dir.dot(left_dir) * left_dir
-
-            hp1 = n_right.append(-n_right.dot(v1))
-            hp2 = n_left.append(-n_left.dot(v1))
-
-            tip = poly.vertices[tip_idx]
-            sector = (right_dir, tip, left_dir)
-
-            # find closest edge
-            closest_seg, closest_seg_para, closest_seg_dst = \
-                Mesh2d.find_closest_edge_inside_sector(poly, sector, tip_idx, hp1, hp2)
-
-            if closest_seg is None:
-                raise RuntimeError("Could not find a single edge inside sector")
-
-            # find closest portal
-            closest_portal, closest_portal_para, closest_portal_dst = \
-                Mesh2d.find_closest_portal_inside_sector(poly, sector, tip_idx, portals, hp1, hp2)
-
-            # if db_visitor is not None:
-            #     idx0, idx1 = closest_seg
-            #     p0 = poly.vertices[idx0]
-            #     p1 = poly.vertices[idx1]
-            #     db_visitor.add_polygon((p0, tip, p1, tip), color='#119875')
-
-
-            # closest edge always exists (unless something's horribly wrong)
-            # closest portal - not always (there might be no portals inside the sector
-            # or no portals at all)
-            
-            # check if there is a portal closer than the closest edge
-            if closest_portal_dst is not None and closest_portal_dst < closest_seg_dst:
-                # avoid creating zero-length portals
-                if closest_portal_dst == 0:
+            for (seg_i1, seg_i2) in pairs(indices):
+                if start_idx in (seg_i1, seg_i2):
                     continue
 
-                # figure out if we want to create one or two portals
-                # we only want to connect to one or two endpoints,
-                # not to an intermediate point of the portal
+                (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
+                seg0x, seg1x = seg0.append(1), seg1.append(1)
 
-                # If closest point is one of the endpoints of closest_portal:
-                if closest_portal_para == 0:
-                    new_portals = [portal_to_portal_startpoint(tip_idx, closest_portal)]
-                elif closest_portal_para == 1:
-                    new_portals = [portal_to_portal_endpoint(tip_idx, closest_portal)]
+                if \
+                    (seg0x.dot(near_cutoff) < 0 and seg1x.dot(near_cutoff) < 0) or \
+                    (seg0x.dot( far_cutoff) < 0 and seg1x.dot( far_cutoff) < 0):
+                    continue
 
-                # If closest point is not one of the endpoints,
-                # we still create the portal(s) to one or two endpoints:
+                coef0, coef1, _ = Geom2.lines_intersect((start_point, n), (seg0, seg1 - seg0))
+                if 0 < coef1 and coef1 < 1 and 0 < coef0 and coef0 < closest_param:
+                    closest_param = coef0
+                    closest_edge = (seg_i1, seg_i2)
+                    closest_edge_param = coef1
+                    x_point = start_point + coef0 * n
+                    far_cutoff = (-n).append(n.dot(x_point))
+        return closest_edge, closest_edge_param
+
+
+    def portal_to_contour(start_idx, edge, param):
+        portal = Portal()
+        portal.start_index = start_idx
+        if param == 0 or param == 1:
+            portal.kind = Portal.ToVertex
+            portal.end_info = edge[int(param)]
+        else:
+            portal.kind = Portal.ToSegment
+            portal.end_info = edge, param
+        return portal
+
+    def portal_to_portal_startpoint(start_idx, other_portal):
+        portal = Portal()
+        portal.start_index = start_idx
+        portal.kind = Portal.ToVertex
+        portal.end_info = other_portal.start_index
+        return portal
+
+    def portal_to_portal_endpoint(start_idx, other_portal):
+        portal = Portal()
+        portal.start_index = start_idx
+        if other_portal.kind == Portal.ToVertex:
+            portal.kind = Portal.ToVertex
+            portal.end_info = other_portal.end_info
+        else:
+            portal.kind = Portal.ToPortal
+            portal.end_info = other_portal
+        return portal
+
+    def portal_to_portal_startpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
+        endpoint = poly.vertices[other_portal.start_index]
+        edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
+        if edge is None:
+            return portal_to_portal_startpoint(start_idx, other_portal)
+        elif other_portal.start_index in edge:
+            return portal_to_portal_startpoint(start_idx, other_portal)
+        else:
+            return portal_to_contour(start_idx, edge, param)
+
+
+    def portal_to_portal_endpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
+        endpoint = other_portal.calc_endpoint(poly.vertices)
+        edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
+        if edge is None:
+            return portal_to_portal_endpoint(tip_idx, other_portal)
+        elif other_portal.kind == Portal.ToVertex and other_portal.end_info in edge:
+            return portal_to_portal_endpoint(tip_idx, other_portal)
+        elif other_portal.kind == Portal.ToSegment and other_portal.end_info[0] == edge:
+            return portal_to_portal_endpoint(tip_idx, other_portal)
+        else:
+            return portal_to_contour(tip_idx, edge, param)
+
+
+    spikes = find_spikes(poly, threshold)
+    portals = []
+
+    for spike in spikes:
+        (_, tip_idx, _) = spike
+        (v0, v1, v2) = (poly.vertices[idx] for idx in spike)
+
+        right_dir, left_dir = get_sector(v0, v1, v2, threshold)
+
+        # if db_visitor is not None:
+        #     pts = v1 + 50. * right_dir, v1, v1 + 50. * left_dir
+        #     db_visitor.add_polygon(pts, '#ffff22')
+
+        n_right = left_dir - left_dir.dot(right_dir) * right_dir
+        n_left  = right_dir - right_dir.dot(left_dir) * left_dir
+
+        hp1 = n_right.append(-n_right.dot(v1))
+        hp2 = n_left.append(-n_left.dot(v1))
+
+        tip = poly.vertices[tip_idx]
+        sector = (right_dir, tip, left_dir)
+
+        # find closest edge
+        closest_seg, closest_seg_para, closest_seg_dst = \
+            find_closest_edge_inside_sector(poly, sector, tip_idx, hp1, hp2)
+
+        if closest_seg is None:
+            raise RuntimeError("Could not find a single edge inside sector")
+
+        # find closest portal
+        closest_portal, closest_portal_para, closest_portal_dst = \
+            find_closest_portal_inside_sector(poly, sector, tip_idx, portals, hp1, hp2)
+
+        # if db_visitor is not None:
+        #     idx0, idx1 = closest_seg
+        #     p0 = poly.vertices[idx0]
+        #     p1 = poly.vertices[idx1]
+        #     db_visitor.add_polygon((p0, tip, p1, tip), color='#119875')
+
+
+        # closest edge always exists (unless something's horribly wrong)
+        # closest portal - not always (there might be no portals inside the sector
+        # or no portals at all)
+        
+        # check if there is a portal closer than the closest edge
+        if closest_portal_dst is not None and closest_portal_dst < closest_seg_dst:
+            # avoid creating zero-length portals
+            if closest_portal_dst == 0:
+                continue
+
+            # figure out if we want to create one or two portals
+            # we only want to connect to one or two endpoints,
+            # not to an intermediate point of the portal
+
+            # If closest point is one of the endpoints of closest_portal:
+            if closest_portal_para == 0:
+                new_portals = [portal_to_portal_startpoint(tip_idx, closest_portal)]
+            elif closest_portal_para == 1:
+                new_portals = [portal_to_portal_endpoint(tip_idx, closest_portal)]
+
+            # If closest point is not one of the endpoints,
+            # we still create the portal(s) to one or two endpoints:
+            else:
+                def pt_inside_sector(sector, pt):
+                    dir1, tip, dir2 = sector
+                    rel_pt = pt - tip
+                    return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
+
+                other_start_pt = poly.vertices[closest_portal.start_index]
+                other_end_pt = closest_portal.calc_endpoint(poly.vertices)
+
+                start_inside = pt_inside_sector(sector, other_start_pt)
+                end_inside = pt_inside_sector(sector, other_end_pt)
+
+                # if none of the portal endpoints is inside sector, create 2 portals to both ends:
+                if not start_inside and not end_inside:
+                    new_portals = [
+                        portal_to_portal_startpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal),
+                        portal_to_portal_endpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)
+                    ]
+
+                elif start_inside:
+                    new_portals = [portal_to_portal_startpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)]
+
                 else:
-                    def pt_inside_sector(sector, pt):
-                        dir1, tip, dir2 = sector
-                        rel_pt = pt - tip
-                        return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
+                    new_portals = [portal_to_portal_endpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)]
 
-                    other_start_pt = poly.vertices[closest_portal.start_index]
-                    other_end_pt = closest_portal.calc_endpoint(poly.vertices)
+        # if no portals are in the way, attach to edge/vertex
+        else:
+            new_portals = [portal_to_contour(tip_idx, closest_seg, closest_seg_para)]
 
-                    start_inside = pt_inside_sector(sector, other_start_pt)
-                    end_inside = pt_inside_sector(sector, other_end_pt)
+        portals.extend(new_portals)
 
-                    # if none of the portal endpoints is inside sector, create 2 portals to both ends:
-                    if not start_inside and not end_inside:
-                        new_portals = [
-                            portal_to_portal_startpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal),
-                            portal_to_portal_endpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)
-                        ]
+    # remove pairs of opposite portals
+    to_vertex = []
+    to_edge = []
+    for p in portals:
+        if p.kind == Portal.ToVertex:
+            p = tuple(sorted((p.start_index, p.end_info)))
+            to_vertex.append(p)
+        else:
+            to_edge.append(p)
 
-                    elif start_inside:
-                        new_portals = [portal_to_portal_startpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)]
+    to_vertex = list(set(to_vertex))
+    def _to_portal(idx0, idx1):
+        p = Portal()
+        p.kind = Portal.ToVertex
+        p.start_index = idx0
+        p.end_info = idx1
+        return p
 
-                    else:
-                        new_portals = [portal_to_portal_endpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)]
-
-            # if no portals are in the way, attach to edge/vertex
-            else:
-                new_portals = [portal_to_contour(tip_idx, closest_seg, closest_seg_para)]
-
-            portals.extend(new_portals)
-
-        # remove pairs of opposite portals
-        to_vertex = []
-        to_edge = []
-        for p in portals:
-            if p.kind == Portal.ToVertex:
-                p = tuple(sorted((p.start_index, p.end_info)))
-                to_vertex.append(p)
-            else:
-                to_edge.append(p)
-
-        to_vertex = list(set(to_vertex))
-        def _to_portal(idx0, idx1):
-            p = Portal()
-            p.kind = Portal.ToVertex
-            p.start_index = idx0
-            p.end_info = idx1
-            return p
-
-        return list(_to_portal(*p) for p in to_vertex) + to_edge
+    return list(_to_portal(*p) for p in to_vertex) + to_edge
 
 
+
+class Mesh2d(object):
     def __init__(self, poly, convex_relax_thresh = 0.0, db_visitor=None):
         poly = deepcopy(poly)
 
-        portals = Mesh2d.create_portals(poly, convex_relax_thresh, db_visitor)
+        portals = create_portals(poly, convex_relax_thresh, db_visitor)
 
         # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
         segments_to_split = defaultdict(list)

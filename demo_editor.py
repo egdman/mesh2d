@@ -26,31 +26,39 @@ class RecordType:
 def v2col(x, y):
     return Matrix.column_vec((x, y, 1.))
 
-def poly_to_ascii(poly):
-    s = ""
-    loops = ((poly.vertices[idx] for idx in poly.graph.loop_iterator(loop)) for loop in poly.graph.loops)
-    for loop in loops:
-        s += " ".join("{} {}".format(v[0], v[1]) for v in loop)
-        s += "\n"
-    return s
 
-def ascii_to_poly(text):
-    loops = []
-    for line in text.splitlines():
-        loop = []
-        loops.append(loop)
-        crds = (float(el.strip()) for el in line.strip().split())
-        try:
-            while True:
-                v0 = next(crds)
-                v1 = next(crds)
-                loop.append(vec(v0, v1))
-        except StopIteration:
-            pass
-    poly = Polygon2d(loops[0])
-    for hole in loops[1:]:
-        poly.add_hole(hole)
-    return poly
+def polys_to_ascii(polys):
+    def _poly_to_ascii(poly):
+        s = ""
+        loops = ((poly.vertices[idx] for idx in poly.graph.loop_iterator(loop)) for loop in poly.graph.loops)
+        for loop in loops:
+            s += " ".join("{} {}".format(v[0], v[1]) for v in loop)
+            s += "\n"
+        return s
+
+    return "&\n".join(_poly_to_ascii(poly) for poly in polys)
+
+
+def ascii_to_polys(text):
+    def _ascii_to_poly(text):
+        loops = []
+        for line in text.splitlines():
+            loop = []
+            loops.append(loop)
+            crds = (float(el.strip()) for el in line.strip().split())
+            try:
+                while True:
+                    v0 = next(crds)
+                    v1 = next(crds)
+                    loop.append(vec(v0, v1))
+            except StopIteration:
+                pass
+        poly = Polygon2d(loops[0])
+        for hole in loops[1:]:
+            poly.add_hole(hole)
+        return poly
+
+    return list(_ascii_to_poly(substring.strip()) for substring in text.split("&"))
 
 
 def ieee754_ser(floatNumber):
@@ -287,18 +295,18 @@ class Application(tk.Frame):
         if poly_path is not None:
             try:
                 with open(poly_path, 'r') as stream:
-                    poly = ascii_to_poly(stream.read())
-                    self._polygons.append(poly)
-                    num_polys = len(self.find_draw_objects_glob('polys/*'))
+                    for poly in ascii_to_polys(stream.read()):
+                        self._polygons.append(poly)
+                        num_polys = len(self.find_draw_objects_glob('polys/*'))
 
-                    try:
-                        navmesh = Mesh2d(poly, 15, self.debugger)
-                        self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+                        try:
+                            navmesh = Mesh2d(poly, 15, self.debugger)
+                            self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
 
-                    except AnyError as err:
-                        self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
-                        print("error occured during navmesh construction: {}".format(err))
-                        print(traceback.format_exc())
+                        except AnyError as err:
+                            self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
+                            print("error occured during navmesh construction: {}".format(err))
+                            print(traceback.format_exc())
 
             except IOError:
                 print("given file cannot be opened")
@@ -398,7 +406,7 @@ class Application(tk.Frame):
             image=self.saveToolIcon,
             height=31,
             width=31,
-            command = self.save_polygon)
+            command = self.save_polygons)
         self.saveToolBtn.pack()
 
 
@@ -420,11 +428,11 @@ class Application(tk.Frame):
         self.plusBtn.pack(side = tk.BOTTOM)
 
 
-    def save_polygon(self):
+    def save_polygons(self):
         dump_history(self.history)
-        if self._polygons:
+        if len(self._polygons) > 0:
             with open("poly.txt", 'w') as stream:
-                stream.write(poly_to_ascii(self._polygons[0]))
+                stream.write(polys_to_ascii(self._polygons))
 
 
     def get_bool_mode(self):
@@ -712,7 +720,7 @@ class Application(tk.Frame):
                 self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
 
         except AnyError as err:
-            dump_history(self.history)
+            self.save_polygons()
             print("Exception was thrown inside method 'add_polygon': {}".format(err))
             print(traceback.format_exc())
 
