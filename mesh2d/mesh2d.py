@@ -227,8 +227,11 @@ class Portal(object):
         else:
              raise RuntimeError("Portal of unknown kind: {}".format(self.kind))
 
-
-
+    def get_oldest_portal(self):
+        if self.kind == Portal.ToPortal:
+            return self.end_info.get_oldest_portal()
+        else:
+            return self
 
 
 def find_spikes(poly, threshold):
@@ -491,6 +494,11 @@ def create_portals(poly, threshold, db_visitor=None):
         else:
             portal.kind = Portal.ToSegment
             portal.end_info = edge, param
+            # if start_idx in (18, 26):
+            #     print("PORTAL #{}::::::::::{}::::::::::::".format(start_idx, portal))
+            #     import traceback
+            #     traceback.print_stack()
+            #     print("//////////////////////////////////////////////////////")
         return portal
 
     def portal_to_portal_startpoint(start_idx, other_portal):
@@ -501,6 +509,7 @@ def create_portals(poly, threshold, db_visitor=None):
         return portal
 
     def portal_to_portal_endpoint(start_idx, other_portal):
+        other_portal = other_portal.get_oldest_portal()
         portal = Portal()
         portal.start_index = start_idx
         if other_portal.kind == Portal.ToVertex:
@@ -523,8 +532,11 @@ def create_portals(poly, threshold, db_visitor=None):
 
 
     def portal_to_portal_endpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
+        other_portal = other_portal.get_oldest_portal()
         endpoint = other_portal.calc_endpoint(poly.vertices)
         edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
+        # if start_idx == 26:
+        #     print("edge: {}, param: {}, other_portal: {}".format(edge, param, other_portal))
         if edge is None:
             return portal_to_portal_endpoint(tip_idx, other_portal)
         elif other_portal.kind == Portal.ToVertex and other_portal.end_info in edge:
@@ -667,10 +679,16 @@ class Mesh2d(object):
             split_params = list(portal.end_info[1] for portal in seg_portals)
             split_ids = poly.add_vertices_to_border(segment, split_params)
 
+            # if 160 in split_ids:
+            #     print("split_params: {}".format(split_params))
+            #     print("split_ids: {}".format(split_ids))
+            #     print("verts: {}".format(list(poly.vertices[i] for i in split_ids)))
+            #     print("portals: {}".format(seg_portals))
+
+
             for split_idx, portal in zip(split_ids, seg_portals):
                 portal.kind = Portal.ToVertex
                 portal.end_info = split_idx
-
 
         def resolve_chain(portal):
             if portal.kind == Portal.ToPortal:
@@ -743,6 +761,13 @@ class Mesh2d(object):
 
                 e_ids = ways_to_go[tgt]
                 v_ids = list(target_verts[edge_idx] for edge_idx in e_ids)
+
+                try:
+                    for v_idx in (i for i in v_ids if i != src):
+                        (poly.vertices[v_idx] - poly.vertices[tgt]).normalized()
+                except ZeroDivisionError as err:
+                    print("!!!!!PROBLEM: v_idx={}, tgt={}, vert={}".format(v_idx, tgt, poly.vertices[tgt]))
+                    raise err
 
                 direcs = list((e_idx, (poly.vertices[v_idx] - poly.vertices[tgt]).normalized())
                     for e_idx, v_idx in zip(e_ids, v_ids) if v_idx != src) # backtracking not allowed
