@@ -6,6 +6,8 @@ from itertools import chain, repeat, tee
 from copy import deepcopy
 from time import clock
 from contextlib import contextmanager
+from random import randint, seed as randseed
+from collections import namedtuple
 
 try:
     from itertools import izip as zip
@@ -15,6 +17,9 @@ except ImportError:
 from .vector2 import vec, Geom2
 from .utils import pairs, triples
 
+def rand_color(s):
+    randseed(s)
+    return "#{:02x}{:02x}{:02x}".format(randint(0, 255), randint(0, 255), randint(0, 255))
 
 class CallTime:
     def __init__(self):
@@ -76,24 +81,6 @@ class Loops(object):
         return new_idx
 
 
-
-def is_origin_inside_polyline(polyline):
-    # ray from origin along positive x axis
-    x_ray = (vec(0, 0), vec(1, 0))
-    num_inters = 0
-    # iterate over pairs of vertices
-    for curr_v, next_v in pairs(polyline):
-        if curr_v[1] == 0: curr_v += vec(0, 1e-8)
-        if next_v[1] == 0: next_v += vec(0, 1e-8)
-
-        if curr_v[1] * next_v[1] < 0:
-            _, b, _ = Geom2.lines_intersect((curr_v, next_v - curr_v), x_ray)
-            if b > 0: num_inters += 1
-
-    return num_inters % 2 > 0
-
-
-
 class Polygon2d(object):
     def __init__(self, vertices):
         # ensure CCW order - outline must be CCW
@@ -106,7 +93,6 @@ class Polygon2d(object):
         self.graph.add_loop(len(self.vertices))
 
 
-
     def add_hole(self, vertices):
         # ensure CW order - holes must be CW
         if Geom2.poly_signed_area(vertices) < 0:
@@ -117,44 +103,11 @@ class Polygon2d(object):
         self.graph.add_loop(len(vertices))
 
 
-
-    def point_inside_loop(self, point, loop_start):
-        # transform vertices so that query point is at the origin, append start vertex at end to wrap
-        verts = (self.vertices[idx] - point for idx in \
-            chain(self.graph.loop_iterator(loop_start), [loop_start]))
-        return is_origin_inside_polyline(verts)
-        
-
-
-    def _get_segment_helper(self, seg_ids):
-        return tuple(self.vertices[idx] for idx in seg_ids)
-
-
-    def _segments_cross_helper(self, seg1, seg2):
-        seg1 = self._get_segment_helper(seg1)
-        seg2 = self._get_segment_helper(seg2)
-
-        # if segment endpoints match, ignore intersection
-        if seg1[0] in seg2 or seg1[1] in seg2:
-            return None, None
-
-        line1 = (seg1[0], seg1[1] - seg1[0])
-        line2 = (seg2[0], seg2[1] - seg2[0])
-
-        a, b, _ = Geom2.lines_intersect(line1, line2)
-        if 0 < a and a < 1 and 0 < b and b < 1:
-            return a, b
-        else:
-            return None, None
-
-
-
     def insert_vertex(self, vertex, edge_to_split):
         new_idx = self.graph.insert_node(edge_to_split)
         assert new_idx == len(self.vertices)
         self.vertices.append(vertex)
         return new_idx
-
 
 
     def add_vertices_to_border(self, edge, vertex_params):
@@ -176,6 +129,13 @@ class Polygon2d(object):
         return new_ids
 
 
+    def point_inside_loop(self, point, loop_start):
+        # transform vertices so that query point is at the origin, append start vertex at end to wrap
+        verts = (self.vertices[idx] - point for idx in \
+            chain(self.graph.loop_iterator(loop_start), [loop_start]))
+        return is_origin_inside_polyline(verts)
+        
+
     def point_inside(self, point):
         # first check if inside outline
         if not self.point_inside_loop(point, self.graph.loops[0]):
@@ -189,79 +149,23 @@ class Polygon2d(object):
         return True
 
 
-    @staticmethod
-    def check_convex(indices, vertices):
-        indices_wrap = chain(indices, indices[:2])
+def is_origin_inside_polyline(polyline):
+    # ray from origin along positive x axis
+    x_ray = (vec(0, 0), vec(1, 0))
+    num_inters = 0
+    # iterate over pairs of vertices
+    for curr_v, next_v in pairs(polyline):
+        if curr_v[1] == 0: curr_v += vec(0, 1e-8)
+        if next_v[1] == 0: next_v += vec(0, 1e-8)
 
-        for idx0, idx1, idx2 in triples(indices_wrap):
-            if Geom2.signed_area(
-                vertices[idx0],
-                vertices[idx1],
-                vertices[idx2]) < 0: return False
+        if curr_v[1] * next_v[1] < 0:
+            _, b, _ = Geom2.lines_intersect((curr_v, next_v - curr_v), x_ray)
+            if b > 0: num_inters += 1
 
-        return True
-
-
-
-
-class Portal(object):
-    class ToSegment: pass
-    class ToVertex: pass
-    class ToPortal: pass
-    def __repr__(self):
-        return "portal {}, from idx {} to {}".format(self.kind.__name__, self.start_index, self.end_info)
-
-    def calc_endpoint(self, vertices):
-        if self.kind == Portal.ToVertex:
-            return vertices[self.end_info]
-
-        elif self.kind == Portal.ToSegment:
-            edge, para = self.end_info
-            idx1, idx2 = edge
-            return vertices[idx1] + (para * (vertices[idx2] - vertices[idx1]))
-
-        elif self.kind == Portal.ToPortal:
-            other_portal = self.end_info
-            return other_portal.calc_endpoint(vertices)
-
-        else:
-             raise RuntimeError("Portal of unknown kind: {}".format(self.kind))
-
-    def get_original_portal(self):
-        if self.kind == Portal.ToPortal:
-            return self.end_info.get_original_portal()
-        else:
-            return self
+    return num_inters % 2 > 0
 
 
-def find_spikes(poly, threshold):
-    spikes = []
-    accum_angle = 0.
-    for loop_start in poly.graph.loops:
-        indices = chain(poly.graph.loop_iterator(loop_start),
-            [loop_start, poly.graph.next[loop_start]])
-
-        for i0, i1, i2 in triples(indices):
-            prev_v = poly.vertices[i0]
-            cand_v = poly.vertices[i1]
-            next_v = poly.vertices[i2]
-
-            signed_area = Geom2.signed_area(prev_v, cand_v, next_v)
-            if signed_area < 0.0:
-                side1 = cand_v - prev_v
-                side2 = next_v - cand_v
-
-                # positive external angle indicates concavity
-                external_angle = math.acos(Geom2.cos_angle(side1, side2))
-                external_angle = external_angle*180.0 / math.pi
-                accum_angle = max(0., accum_angle + external_angle)
-                if accum_angle > threshold:
-                    spikes.append((i0, i1, i2))
-                    accum_angle = 0.
-    return spikes
-
-
-def get_sector(prev_v, spike_v, next_v, threshold=0.0):
+def get_sector(prev_v, spike_v, next_v, threshold):
     '''
     Returns 2 vectors that define the sector rays.
     The vectors have unit lengths
@@ -274,11 +178,7 @@ def get_sector(prev_v, spike_v, next_v, threshold=0.0):
     sine = Geom2.sin_angle(vec1, vec2)
 
     sector_angle = 2 * math.pi - math.acos(cosine) if sine < 0 else math.acos(cosine)
-
-    # degrees to radian
-    clearance = math.pi * threshold / 180.0
-    sector_angle_plus = sector_angle + clearance
-
+    sector_angle_plus = sector_angle + threshold
     
     # limit sector opening to 180 degrees:
     sector_angle_plus = min(sector_angle_plus, math.pi)
@@ -293,91 +193,6 @@ def get_sector(prev_v, spike_v, next_v, threshold=0.0):
         Geom2.mul_mtx_2x2((cosine, sine, -sine, cosine), vec1),
         Geom2.mul_mtx_2x2((cosine, -sine, sine, cosine), vec2)
     )
-
-
-def find_closest_edge_inside_sector(poly, sector, tip_idx, cutoff1, cutoff2):
-    _, tip, _ = sector
-    cutoff_plane = None
-    closest_para, closest_distSq, closest_edge = None, None, None
-
-    for loop_start in poly.graph.loops:
-        indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
-
-        for (seg_i1, seg_i2) in pairs(indices):
-            if tip_idx in (seg_i1, seg_i2):
-                continue
-
-            (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
-
-
-            seg0x, seg1x = seg0.append(1), seg1.append(1)
-
-            if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
-                continue
-
-            elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
-                continue
-
-            para, point, distSq = _segment_closest_point_inside_sector((seg0, seg1), sector)
-
-            if para is None: continue
-            if closest_distSq is None or distSq < closest_distSq:
-                closest_distSq = distSq
-                closest_para = para
-                closest_edge = (seg_i1, seg_i2)
-
-                # make cutoff line
-                n = point - tip
-                cutoff_plane = n.append(-n.dot(point))
-
-    return closest_edge, closest_para, closest_distSq
-
-
-def find_closest_portal_inside_sector(poly, sector, tip_idx, portals, cutoff1, cutoff2):
-    dir1, tip, dir2 = sector
-    cutoff_plane = None
-    closest_portal, closest_distSq, closest_para = None, None, None
-
-    for portal in portals:
-        if tip_idx == portal.start_index: continue
-
-        (seg0, seg1) = (poly.vertices[portal.start_index], portal.calc_endpoint(poly.vertices))
-        if seg0 == seg1: continue
-
-        # special case: portal endpoint is at the sector tip
-        # if other endpoint is inside sector, return portal as closest with distance = 0
-        # if other endpoint is outside sector, skip this portal
-        if seg1 == tip:
-            dir_p = seg0 - tip
-            seg0_inside = vec.cross2(dir1, dir_p) > 0 and vec.cross2(dir2, dir_p) < 0
-            if seg0_inside:
-                return portal, 1., 0.
-            else:
-                continue
-
-        seg0x, seg1x = seg0.append(1), seg1.append(1)
-
-        if (seg0x.dot(cutoff1) < 0 and seg1x.dot(cutoff1) < 0) or (seg0x.dot(cutoff2) < 0 and seg1x.dot(cutoff2) < 0):
-            continue
-
-        elif cutoff_plane and seg0x.dot(cutoff_plane) > 0 and seg1x.dot(cutoff_plane) > 0:
-            continue
-
-        para, point, distSq = _segment_closest_point_inside_sector((seg0, seg1), sector)
-
-        if para is None: continue
-
-        # update closest portal
-        if closest_distSq is None or distSq < closest_distSq:
-            closest_distSq = distSq
-            closest_para = para
-            closest_portal = portal
-
-            # make cutoff line
-            n = point - tip
-            cutoff_plane = n.append(-n.dot(point))
-
-    return closest_portal, closest_para, closest_distSq
 
 
 
@@ -440,10 +255,111 @@ def _segment_closest_point_inside_sector(segment, sector):
     return p, para_to_pt(p), d
 
 
+def calc_external_angle(verts, topo, eid):
+    vid0, vid1 = topo.edge_verts(eid)
+    vid2 = topo.target(topo.next_edge(eid))
+
+    prev_v = verts[vid0]
+    this_v = verts[vid1]
+    next_v = verts[vid2]
+    dir0 = this_v - prev_v
+    dir1 = next_v - this_v
+
+    if vec.cross2(dir0, dir1) > 0:
+        return math.acos(Geom2.cos_angle(dir0, dir1))
+    else:
+        return math.acos(Geom2.cos_angle(dir0, dir1)) * (-1.)
 
 
-def create_portals(poly, threshold, db_visitor=None):
+def find_spikes(topo, extern_angles, threshold):
+    spikes = []
+    accum_angle = 0.
 
+    for eid in topo.iterate_all_internal_edges():
+        accum_angle = max(0., accum_angle + extern_angles[eid])
+        if accum_angle > threshold:
+            spikes.append(topo.target(eid))
+            accum_angle = 0.
+    return spikes
+
+
+def calc_accumulated_extern_angle(topo, extern_angles, eid):
+    angle = extern_angles[eid]
+    accumulated = max(0, angle)
+
+    eid0 = eid
+    eid = topo.prev_edge(eid)
+    while angle > 0. and eid != eid0:
+        angle = extern_angles[eid]
+        accumulated += max(0, angle)
+        eid = topo.prev_edge(eid)
+    return accumulated
+
+
+def find_closest_edge_for_spike(verts, topo, extern_angles, vertex_idx, threshold):
+    inbound_edges = topo.edges_around_vertex(vertex_idx)
+    border_edge = next(inbound_edges) # skip the external edge
+
+    for eid0 in inbound_edges:
+
+        extern_angle = calc_accumulated_extern_angle(topo, extern_angles, eid0)
+        if extern_angle <= threshold: continue # not a spike
+
+        vid0, vid1 = topo.edge_verts(eid0)
+        vid2 = topo.target(topo.next_edge(eid0))
+        tip_vertex = verts[vid1]
+
+        right_dir, left_dir = get_sector(verts[vid2], tip_vertex, verts[vid0], threshold)
+        sector = (right_dir, tip_vertex, left_dir)
+
+        far_cutoff_plane = None
+        closest_para, closest_distSq, closest_edge = None, None, None
+
+        for eid in topo.iterate_room_edges(eid0):
+            with timed_exec("inner routine"):
+                seg_i1, seg_i2 = topo.edge_verts(eid)
+
+                if vertex_idx in (seg_i1, seg_i2):
+                    continue
+
+                seg0, seg1 = verts[seg_i1], verts[seg_i2]
+                seg0x, seg1x = seg0.append(1), seg1.append(1)
+
+                if far_cutoff_plane and seg0x.dot(far_cutoff_plane) > 0 and seg1x.dot(far_cutoff_plane) > 0:
+                    continue
+
+                para, point, distSq = _segment_closest_point_inside_sector((seg0, seg1), sector)
+
+                if para is None: continue
+                if closest_distSq is None or distSq < closest_distSq:
+                    closest_distSq = distSq
+                    closest_para = para
+                    closest_edge = eid
+
+                    # make cutoff line
+                    n = point - tip_vertex
+                    far_cutoff_plane = n.append(-n.dot(point))
+
+        if closest_edge is None:
+            raise RuntimeError("Could not find a single edge inside the sector ({}, {}, {})".format(vid0, vid1, vid2))
+
+        return ((eid0, sector, closest_edge, closest_para),) # there can be at most 1 spike at a vertex
+
+    return ()
+
+
+def choose_closer_side_of_edge(topo, verts, seen_from_point, eid, param):
+    if topo.room_id(eid) == topo.room_id(topo.opposite(eid)):
+        vid0, vid1 = topo.edge_verts(eid)
+        v0, v1 = verts[vid0], verts[vid1]
+
+        if vec.cross2(v0 - seen_from_point, v1 - seen_from_point) > 0:
+            return topo.opposite(eid), 1 - param
+
+    return eid, param
+
+
+def create_portals(verts, topo, threshold, db_visitor=None):
     """
     This function uses algorithm from R. Oliva and N. Pelechano - 
     Automatic Generation of Suboptimal NavMeshes
@@ -452,158 +368,171 @@ def create_portals(poly, threshold, db_visitor=None):
     but they are guaranteed to lie on the polygon boundary (not inside the polygon)
     """
 
-    def find_closest_intersection(start_idx, start_point, far_endpoint):
-        n = far_endpoint - start_point
-        near_cutoff = n.append(-n.dot(start_point))
-        far_cutoff = (-n).append(n.dot(far_endpoint))
+    extern_angles = [None] * topo.num_edges()
+    for eid in topo.iterate_all_internal_edges():
+        extern_angles[eid] = calc_external_angle(verts, topo, eid)
+
+
+    def check_line_of_sight(from_eid, to_eid):
+        vid0 = topo.target(from_eid)
+        vid1 = topo.target(to_eid)
+        from_point, to_point = verts[vid0], verts[vid1]
+        n = to_point - from_point
+        near_cutoff = n.append(-n.dot(from_point))
+        far_cutoff = (-n).append(n.dot(to_point))
 
         closest_param = 1.
-        closest_edge = None
-        closest_edge_param = None
-        for loop_start in poly.graph.loops:
-            indices = chain(poly.graph.loop_iterator(loop_start), [loop_start])
+        closest_edge, closest_edge_param = None, None
+        for eid in topo.iterate_room_edges(from_eid):
+            seg_vid0, seg_vid1 = topo.edge_verts(eid)
 
-            for (seg_i1, seg_i2) in pairs(indices):
-                if start_idx in (seg_i1, seg_i2):
-                    continue
+            if vid0 in (seg_vid0, seg_vid1) or vid1 in (seg_vid0, seg_vid1):
+                continue
 
-                (seg0, seg1) = (poly.vertices[seg_i1], poly.vertices[seg_i2])
-                seg0x, seg1x = seg0.append(1), seg1.append(1)
+            seg0, seg1 = verts[seg_vid0], verts[seg_vid1]
+            seg0x, seg1x = seg0.append(1), seg1.append(1)
 
-                if \
-                    (seg0x.dot(near_cutoff) < 0 and seg1x.dot(near_cutoff) < 0) or \
-                    (seg0x.dot( far_cutoff) < 0 and seg1x.dot( far_cutoff) < 0):
-                    continue
+            if \
+                (seg0x.dot(near_cutoff) < 0 and seg1x.dot(near_cutoff) < 0) or \
+                (seg0x.dot( far_cutoff) < 0 and seg1x.dot( far_cutoff) < 0):
+                continue
 
-                coef0, coef1, _ = Geom2.lines_intersect((start_point, n), (seg0, seg1 - seg0))
-                if 0 < coef1 and coef1 < 1 and 0 < coef0 and coef0 < closest_param:
+            coef0, coef1, dist = Geom2.lines_intersect((from_point, n), (seg0, seg1 - seg0))
+
+            if math.isnan(coef0) and dist < 1e-20:
+                d0 = (seg0 - from_point).normSq()
+                d1 = (seg1 - from_point).normSq()
+                coef0 = math.sqrt(min(d0, d1)) / n.norm()
+
+                if coef0 < closest_param:
                     closest_param = coef0
-                    closest_edge = (seg_i1, seg_i2)
-                    closest_edge_param = coef1
-                    x_point = start_point + coef0 * n
+                    closest_edge = eid
+                    if d0 < d1:
+                        closest_edge_param = 0
+                        x_point = seg0
+                    else:
+                        closest_edge_param = 1
+                        x_point = seg1
                     far_cutoff = (-n).append(n.dot(x_point))
+
+
+            elif 0 < coef1 and coef1 < 1 and 0 < coef0 and coef0 < closest_param:
+                closest_param = coef0
+                closest_edge = eid
+                closest_edge_param = coef1
+                x_point = from_point + coef0 * n
+                far_cutoff = (-n).append(n.dot(x_point))
+
+        # choose correct side of edge
+        if closest_edge is not None:
+            closest_edge, closest_edge_param = choose_closer_side_of_edge(topo, verts, from_point, closest_edge, closest_edge_param)
+
         return closest_edge, closest_edge_param
 
 
-    def portal_to_contour(start_idx, edge, param):
-        portal = Portal()
-        portal.start_index = start_idx
-        if param == 0 or param == 1:
-            portal.kind = Portal.ToVertex
-            portal.end_info = edge[int(param)]
+    def update_angles(eid):
+        eid_ = topo.opposite(eid)
+        extern_angles.extend((None, None))
+        extern_angles[eid] = calc_external_angle(verts, topo, eid)
+        extern_angles[eid_] = calc_external_angle(verts, topo, eid_)
+        eprev = topo.prev_edge(eid)
+        eprev_ = topo.prev_edge(eid_)
+        extern_angles[eprev] = calc_external_angle(verts, topo, eprev)
+        extern_angles[eprev_] = calc_external_angle(verts, topo, eprev_)
+
+    def connect_to_startpoint(start_eid, edge):
+        update_angles(topo.connect(start_eid, topo.prev_edge(edge), verts))
+
+
+    def connect_to_endpoint(start_eid, edge):
+        update_angles(topo.connect(start_eid, edge, verts))
+
+
+    def connect_to_exterior_wall(start_eid, edge, param):
+        seg0, seg1 = topo.edge_verts(edge)
+
+        if param == 0:
+            connect_to_startpoint(start_eid, edge)
+        elif param == 1:
+            connect_to_endpoint(start_eid, edge)
         else:
-            portal.kind = Portal.ToSegment
-            portal.end_info = edge, param
-        return portal
+            v0, v1 = verts[seg0], verts[seg1]
+            new_vert = v0 + param * (v1 - v0)
+            new_eid = topo.insert_vertex(edge)
 
-    def portal_to_portal_startpoint(start_idx, other_portal):
-        portal = Portal()
-        portal.start_index = start_idx
-        portal.kind = Portal.ToVertex
-        portal.end_info = other_portal.start_index
-        return portal
+            # update external angles
+            extern_angles.extend((None, None))
+            extern_angles[topo.opposite(new_eid)] = extern_angles[edge]
+            extern_angles[edge] = 0.
 
-    def portal_to_portal_endpoint(start_idx, other_portal):
-        other_portal = other_portal.get_original_portal()
-        portal = Portal()
-        portal.start_index = start_idx
-        if other_portal.kind == Portal.ToVertex:
-            portal.kind = Portal.ToVertex
-            portal.end_info = other_portal.end_info
+            new_vid = topo.target(new_eid)
+            assert len(verts) == new_vid, "something went wrong here"
+
+            verts.append(new_vert)
+
+            new_eid_internal = topo.prev_edge(topo.opposite(new_eid))
+            update_angles(topo.connect(start_eid, new_eid_internal, verts))
+
+
+    def connect_to_closest_portal_endpoint(from_eid, target_eid):
+        vid0, vid1 = topo.edge_verts(target_eid)
+        start_vert = verts[topo.target(from_eid)]
+        if (verts[vid0] - start_vert).normSq() < (verts[vid1] - start_vert).normSq():
+            return portal_to_portal_startpoint_if_los_is_free(from_eid, target_eid)
         else:
-            '''
-            other_portal.kind == ToSegment, but the new portal cannot
-            be ToSegment (because it will create duplicate vertices).
-            Therefore new portal shall be ToPortal.
-            '''
-            portal.kind = Portal.ToPortal
-            portal.end_info = other_portal
-        return portal
+            return portal_to_portal_endpoint_if_los_is_free(from_eid, target_eid)
 
-    def portal_to_portal_startpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
-        endpoint = poly.vertices[other_portal.start_index]
-        edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
-        if edge is None:
-            return portal_to_portal_startpoint(start_idx, other_portal)
-        elif other_portal.start_index in edge:
-            return portal_to_portal_startpoint(start_idx, other_portal)
+
+    def portal_to_portal_startpoint_if_los_is_free(start_eid, portal_eid):
+        with timed_exec("LOS"):
+            closest_eid, param = check_line_of_sight(start_eid, topo.prev_edge(portal_eid))
+        if closest_eid is None or closest_eid == portal_eid:
+            return connect_to_startpoint(start_eid, portal_eid)
+
+        if topo.is_portal(closest_eid):
+            return connect_to_closest_portal_endpoint(start_eid, closest_eid)
         else:
-            return portal_to_contour(start_idx, edge, param)
+            return connect_to_exterior_wall(start_eid, closest_eid, param)
 
 
-    def portal_to_portal_endpoint_or_contour_if_its_in_the_way(start_idx, other_portal):
-        other_portal = other_portal.get_original_portal()
-        endpoint = other_portal.calc_endpoint(poly.vertices)
-        edge, param = find_closest_intersection(start_idx, poly.vertices[start_idx], endpoint)
-        if edge is None:
-            return portal_to_portal_endpoint(tip_idx, other_portal)
-        elif other_portal.kind == Portal.ToVertex and other_portal.end_info in edge:
-            return portal_to_portal_endpoint(tip_idx, other_portal)
-        elif other_portal.kind == Portal.ToSegment and other_portal.end_info[0] == edge:
-            return portal_to_portal_endpoint(tip_idx, other_portal)
+    def portal_to_portal_endpoint_if_los_is_free(start_eid, portal_eid):
+        with timed_exec("LOS"):
+            closest_eid, param = check_line_of_sight(start_eid, portal_eid)
+        if closest_eid is None or closest_eid == portal_eid:
+            return connect_to_endpoint(start_eid, portal_eid)
+
+        if topo.is_portal(closest_eid):
+            return connect_to_closest_portal_endpoint(start_eid, closest_eid)
         else:
-            return portal_to_contour(tip_idx, edge, param)
+            return connect_to_exterior_wall(start_eid, closest_eid, param)
 
 
-    spikes = find_spikes(poly, threshold)
-    portals = []
-
-    for spike in spikes:
-        (_, tip_idx, _) = spike
-        (v0, v1, v2) = (poly.vertices[idx] for idx in spike)
-
-        right_dir, left_dir = get_sector(v0, v1, v2, threshold)
-
-        # if db_visitor is not None:
-        #     pts = v1 + 50. * right_dir, v1, v1 + 50. * left_dir
-        #     db_visitor.add_polygon(pts, '#ffff22')
-
-        n_right = left_dir - left_dir.dot(right_dir) * right_dir
-        n_left  = right_dir - right_dir.dot(left_dir) * left_dir
-
-        hp1 = n_right.append(-n_right.dot(v1))
-        hp2 = n_left.append(-n_left.dot(v1))
-
-        tip = poly.vertices[tip_idx]
-        sector = (right_dir, tip, left_dir)
-
-        # find closest edge
-        closest_seg, closest_seg_para, closest_seg_dst = \
-            find_closest_edge_inside_sector(poly, sector, tip_idx, hp1, hp2)
-
-        if closest_seg is None:
-            raise RuntimeError("Could not find a single edge inside sector")
-
-        # find closest portal
-        closest_portal, closest_portal_para, closest_portal_dst = \
-            find_closest_portal_inside_sector(poly, sector, tip_idx, portals, hp1, hp2)
-
-        # if db_visitor is not None:
-        #     idx0, idx1 = closest_seg
-        #     p0 = poly.vertices[idx0]
-        #     p1 = poly.vertices[idx1]
-        #     db_visitor.add_polygon((p0, tip, p1, tip), color='#119875')
+    if db_visitor:
+        for eid in topo.iterate_all_internal_edges():
+            vid = topo.target(eid)
+            db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
 
-        # closest edge always exists (unless something's horribly wrong)
-        # closest portal - not always (there might be no portals inside the sector
-        # or no portals at all)
-        
-        # check if there is a portal closer than the closest edge
-        if closest_portal_dst is not None and closest_portal_dst < closest_seg_dst:
-            # avoid creating zero-length portals
-            if closest_portal_dst == 0:
-                continue
+    spikes = find_spikes(topo, extern_angles, threshold)
 
-            # figure out if we want to create one or two portals
-            # we only want to connect to one or two endpoints,
-            # not to an intermediate point of the portal
+    for spike_idx in spikes:
+        closest_edge_info = find_closest_edge_for_spike(verts, topo, extern_angles, spike_idx, threshold)
 
-            # If closest point is one of the endpoints of closest_portal:
-            if closest_portal_para == 0:
-                new_portals = [portal_to_portal_startpoint(tip_idx, closest_portal)]
-            elif closest_portal_para == 1:
-                new_portals = [portal_to_portal_endpoint(tip_idx, closest_portal)]
+        if not closest_edge_info: continue
+        closest_edge_info, = closest_edge_info
+        eid, sector, closest_edge, closest_param = closest_edge_info
+
+        # if closest edge is a portal
+        if topo.is_portal(closest_edge):
+            _, tip, _ = sector
+
+            # choose the correct side of the portal
+            closest_edge, closest_param = choose_closer_side_of_edge(topo, verts, tip, closest_edge, closest_param)
+
+            if closest_param == 0:
+                connect_to_startpoint(eid, closest_edge)
+            elif closest_param == 1:
+                connect_to_endpoint(eid, closest_edge)
 
             # If closest point is not one of the endpoints,
             # we still create the portal(s) to one or two endpoints:
@@ -613,270 +542,428 @@ def create_portals(poly, threshold, db_visitor=None):
                     rel_pt = pt - tip
                     return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
 
-                other_start_pt = poly.vertices[closest_portal.start_index]
-                other_end_pt = closest_portal.calc_endpoint(poly.vertices)
+                other_start_pt, other_end_pt = topo.edge_verts(closest_edge)
+                other_start_pt, other_end_pt = verts[other_start_pt], verts[other_end_pt]
 
                 start_inside = pt_inside_sector(sector, other_start_pt)
                 end_inside = pt_inside_sector(sector, other_end_pt)
 
                 # if none of the portal endpoints is inside sector, create 2 portals to both ends:
                 if not start_inside and not end_inside:
-                    new_portals = [
-                        portal_to_portal_startpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal),
-                        portal_to_portal_endpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)
-                    ]
+                        portal_to_portal_startpoint_if_los_is_free(eid, closest_edge),
+                        portal_to_portal_endpoint_if_los_is_free(eid, closest_edge)
 
                 elif start_inside:
-                    new_portals = [portal_to_portal_startpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)]
+                    portal_to_portal_startpoint_if_los_is_free(eid, closest_edge)
 
                 else:
-                    new_portals = [portal_to_portal_endpoint_or_contour_if_its_in_the_way(tip_idx, closest_portal)]
+                    portal_to_portal_endpoint_if_los_is_free(eid, closest_edge)
 
-        # if no portals are in the way, attach to edge/vertex
+        # if no portals are in the way, attach to an edge/vertex on the exterior wall
         else:
-            new_portals = [portal_to_contour(tip_idx, closest_seg, closest_seg_para)]
+            connect_to_exterior_wall(eid, closest_edge, closest_param)
 
-        portals.extend(new_portals)
+    return extern_angles
 
-    # remove pairs of opposite portals
-    to_vertex = []
-    to_edge = []
-    for p in portals:
-        if p.kind == Portal.ToVertex:
-            p = tuple(sorted((p.start_index, p.end_info)))
-            to_vertex.append(p)
+
+r'''
+        |
+       /|
+      //|
+     ///|
+    ////|
+   /////|
+        |
+        |
+        |
+        |
+        |
+        |/////
+        |   /
+        |  /
+        | /
+        |/
+        |
+'''
+
+class EdgeStruct(object):
+    def __init__(self, prev, next, target, room_id):
+        self.prev = prev
+        self.next = next
+        self.target = target
+        self.room_id = room_id
+
+    def __repr__(self):
+        return "p:{}, n:{}, t:{}, r:{}".format(self.prev, self.next, self.target, self.room_id)
+
+
+class Room():
+    def __init__(self, outline, holes):
+        self.outline = outline
+        self.holes = list(holes)
+
+    def debug_repr(self, topo):
+        outl = topo.debug_repr(self.outline)
+        holes = ", ".join((topo.debug_repr(h) for h in self.holes))
+        return "outline: {}, holes: {}".format(outl, holes)
+
+
+
+class Topology(object):
+
+    def debug_repr(self, eid):
+        vid0 = self.edges[self.opposite(eid)].target
+        vid1 = self.edges[eid].target
+        return "{}->{} @ room {}".format(vid0, vid1, self.edges[eid].room_id)
+
+    def debug_verbose(self, eid):
+        e = self.edges[eid]
+        return "edge {}, prv {}, nxt {}".format(self.debug_repr(eid), self.debug_repr(e.prev), self.debug_repr(e.next))
+
+    @staticmethod
+    def opposite(eid):
+        return eid - 1 if eid & 1 else eid + 1
+
+    def next_edge(self, eid):
+        return self.edges[eid].next
+
+    def prev_edge(self, eid):
+        return self.edges[eid].prev
+
+    def num_edges(self):
+        return len(self.edges)
+
+    def target(self, eid):
+        '''
+        Get vid of the target vertex for the given half-edge.
+        '''
+        return self.edges[eid].target
+
+    def edge_verts(self, eid):
+        return self.edges[self.opposite(eid)].target, self.edges[eid].target
+
+    def inbound(self, vid):
+        '''
+        Get eid of an inbound half-edge for the given vertex.
+        The returned half-edge is always from a border loop.
+        '''
+        return self.inbound_edges[vid]
+
+    def room_id(self, eid):
+        return self.edges[eid].room_id
+
+    def is_portal(self, eid):
+        return self.edges[eid].room_id is not None and \
+               self.edges[self.opposite(eid)].room_id is not None
+
+    def _iterate_loop_edges(self, eid0):
+        yield eid0
+        eid = self.edges[eid0].next
+        while eid != eid0:
+            yield eid
+            eid = self.edges[eid].next
+
+    def iterate_all_internal_edges(self):
+        edge_ids = list(chain(*([room.outline] + room.holes for room in self.rooms if room is not None)))
+        return chain(*(self._iterate_loop_edges(eid) for eid in edge_ids))
+
+    def iterate_room_edges(self, eid):
+        room = self.rooms[self.edges[eid].room_id]
+        edge_ids = [room.outline] + room.holes
+        return chain(*(self._iterate_loop_edges(eid) for eid in edge_ids))
+
+    def edges_around_vertex(self, vid):
+        eid0 = self.inbound_edges[vid]
+        yield eid0
+        eid = self.edges[self.opposite(eid0)].prev
+        while eid != eid0:
+            yield eid
+            eid = self.edges[self.opposite(eid)].prev
+
+
+    def insert_vertex(self, eid):
+        eid_ = self.opposite(eid)
+        if self.edges[eid].room_id is not None:
+            eid, eid_ = eid_, eid
+
+        new_vid = len(self.inbound_edges)
+
+        eprv = self.edges[eid].prev
+        enxt_ = self.edges[eid_].next
+
+        eplus  = EdgeStruct(prev=eprv, next=eid, target=new_vid, room_id=None)
+        eplus_ = EdgeStruct(prev=eid_, next=enxt_, target=self.edges[eid_].target, room_id=self.edges[eid_].room_id)
+
+        idxof_eplus = len(self.edges)
+        idxof_eplus_ = len(self.edges) + 1
+        self.edges.append(eplus)
+        self.edges.append(eplus_)
+
+        self.edges[eprv].next = idxof_eplus
+        self.edges[enxt_].prev = idxof_eplus_
+        self.edges[eid].prev = idxof_eplus
+        self.edges[eid_].next = idxof_eplus_
+        self.edges[eid_].target = new_vid
+
+        self.inbound_edges.append(idxof_eplus)
+
+        assert self.room_id(eid) is None
+        assert self.room_id(eid_) is not None
+        assert self.room_id(idxof_eplus) is None
+        assert self.room_id(idxof_eplus_) is not None
+
+        assert self.room_id(eprv) is None
+        assert self.room_id(enxt_) is not None
+
+        return idxof_eplus
+
+
+    def same_loop(self, eid0, eid1):
+        for eid in self._iterate_loop_edges(eid0):
+            if eid == eid1:
+                return True
+        return False
+
+    def inside_loop(self, query_eid, loop_eid, verts):
+        query_pt = verts[self.edges[query_eid].target]
+        first_vid = self.edges[loop_eid].target
+        vert_ids = chain((self.edges[eid].target for eid in self._iterate_loop_edges(loop_eid)), [first_vid])
+        polyline = (verts[vid] - query_pt for vid in vert_ids)
+        return is_origin_inside_polyline(polyline)
+
+    def loop_is_ccw(self, loop_eid, verts):
+        vert_ids = (self.edges[eid].target for eid in self._iterate_loop_edges(loop_eid))
+        points = tuple(verts[vid] for vid in vert_ids)
+        return Geom2.poly_signed_area(points) > 0
+
+    def get_outline(self, eid):
+        return self.rooms[self.edges[eid].room_id].outline
+
+    def connect(self, e0, e1, verts):
+        def _change_topology():
+            vid0 = self.target(e0)
+            vid1 = self.target(e1)
+
+            enxt0 = self.edges[e0].next
+            enxt1 = self.edges[e1].next
+
+            new_eid = len(self.edges)
+            new_eid_oppo = new_eid + 1
+            self.edges.append(EdgeStruct(prev=e0, next=enxt1, target=vid1, room_id=None))
+            self.edges.append(EdgeStruct(prev=e1, next=enxt0, target=vid0, room_id=None))
+
+            self.edges[e0].next = new_eid
+            self.edges[enxt0].prev = new_eid_oppo
+            self.edges[e1].next = new_eid_oppo
+            self.edges[enxt1].prev = new_eid
+            return new_eid, new_eid_oppo
+
+        assert self.room_id(e0) is not None
+        assert self.room_id(e1) is not None
+        assert self.room_id(e0) == self.room_id(e1)
+
+        old_room_id = self.edges[e0].room_id
+
+        # splitting one loop into two, therefore creating a new room
+        if self.same_loop(e0, e1):
+
+            # splitting the outline
+            if self.same_loop(e0, self.get_outline(e0)):
+                unsorted_holes = self.rooms[old_room_id].holes
+                old_outline, new_outline = _change_topology()
+                old_loops = [old_outline]
+                new_loops = [new_outline]
+
+
+            # splitting one of holes
+            else:
+                # find out which hole we are splitting and remove it from the room
+                unsorted_holes = [hole_eid for hole_eid in self.rooms[old_room_id].holes if not self.same_loop(hole_eid, e0)]
+                modified_hole, new_outline = _change_topology()
+                if not self.loop_is_ccw(modified_hole, verts):
+                    modified_hole, new_outline = new_outline, modified_hole
+
+                old_loops = [self.rooms[old_room_id].outline, modified_hole]
+                new_loops = [new_outline]
+
+            # sort holes
+            for hole_eid in unsorted_holes:
+                if self.inside_loop(hole_eid, new_loops[0], verts):
+                    new_loops.append(hole_eid)
+                else:
+                    old_loops.append(hole_eid)
+
+            for loop in old_loops:
+                for eid in self._iterate_loop_edges(loop):
+                    self.edges[eid].room_id = old_room_id
+
+            new_room_id = len(self.rooms)
+            for loop in new_loops:
+                for eid in self._iterate_loop_edges(loop):
+                    self.edges[eid].room_id = new_room_id
+
+            self.rooms[old_room_id] = Room(outline=old_loops[0], holes=old_loops[1:])
+            self.rooms.append(Room(outline=new_loops[0], holes=new_loops[1:]))
+            return new_loops[0]
+
+        # joining two loops into one, therefore no new room is created
         else:
-            to_edge.append(p)
+            remaining_holes = []
+            for hole_eid in self.rooms[old_room_id].holes:
+                if not self.same_loop(hole_eid, e0) and not self.same_loop(hole_eid, e1):
+                    remaining_holes.append(hole_eid)
 
-    to_vertex = list(set(to_vertex))
-    def _to_portal(idx0, idx1):
-        p = Portal()
-        p.kind = Portal.ToVertex
-        p.start_index = idx0
-        p.end_info = idx1
-        return p
+            e0, e1 = _change_topology()
+            outline = self.rooms[old_room_id].outline
+            if not self.same_loop(outline, e0):
+                remaining_holes.append(e0)
 
-    return list(_to_portal(*p) for p in to_vertex) + to_edge
+            self.edges[e0].room_id = self.edges[e1].room_id = old_room_id
+            self.rooms[old_room_id] = Room(outline=outline, holes=remaining_holes)
+            return e0
+ 
 
+    def remove_edge(self, eid):
+        eid_ = self.opposite(eid)
+        room0, room1 = self.edges[eid].room_id, self.edges[eid_].room_id
+
+        # keep the room which is None. If both aren't, keep room0
+        if room1 is None:
+            eid, eid_ = eid_, eid
+            room0, room1 = room1, room0
+        else:
+            assert len(self.rooms[room1].holes) == 0
+
+        for eid0 in self.iterate_room_edges(eid_):
+            self.edges[eid0].room_id = room0
+
+        eid1 = self.next_edge(eid)
+        eid2 = self.prev_edge(eid_)
+        eid3 = self.next_edge(eid_)
+        eid4 = self.prev_edge(eid)
+
+        if room0 is not None:
+            room = self.rooms[room0]
+            assert len(room.holes) == 0
+
+            if room.outline == eid:
+                room.outline = eid1
+
+        if room1 is not None:
+            self.rooms[room1] = None
+
+        self.edges[eid1].prev = eid2
+        self.edges[eid2].next = eid1
+        self.edges[eid3].prev = eid4
+        self.edges[eid4].next = eid3  
+
+        self.edges[eid] = self.edges[eid_] = None
+
+
+
+    @staticmethod
+    def of_a_polygon(poly):
+        t = Topology()
+        t.edges = []
+        t.inbound_edges = [None for _ in poly.graph.all_nodes_iterator()]
+        loops = []
+
+        for loop_start in poly.graph.loops:
+            loop_verts = poly.graph.loop_iterator(loop_start)
+            first_eid = len(t.edges)
+            loops.append(first_eid + 1)
+
+            src0 = next(loop_verts)
+            tgt0 = poly.graph.next[src0]
+            t.inbound_edges[tgt0] = len(t.edges)
+            t.edges.append(EdgeStruct(target=tgt0, room_id=None, prev=None, next=None))
+            t.edges.append(EdgeStruct(target=src0, room_id=0, prev=None, next=None))
+
+            for src in loop_verts:
+                tgt = poly.graph.next[src]
+
+                t.edges[-2].next = len(t.edges)
+                t.edges[-1].prev = len(t.edges) + 1
+                t.inbound_edges[tgt] = len(t.edges)
+                t.inbound_edges[src] = len(t.edges) - 2
+                t.edges.append(EdgeStruct(target=tgt, room_id=None, prev=len(t.edges)-2, next=None))
+                t.edges.append(EdgeStruct(target=src, room_id=0, prev=None, next=len(t.edges)-2))
+
+
+            t.inbound_edges[src0] = len(t.edges) - 2
+            t.edges[-2].next = first_eid
+            t.edges[-1].prev = first_eid + 1
+            t.edges[first_eid].prev = len(t.edges) - 2
+            t.edges[first_eid + 1].next = len(t.edges) - 1
+
+        t.rooms = [Room(outline=loops[0], holes=loops[1:])]
+        return t
+
+
+def delete_redundant_portals(topo, external_angles, convex_relax_thresh):
+    deleted = [False] * topo.num_edges()
+
+    def calc_extern_angle_ignoring_deleted(eid):
+        eid_adj = topo.prev_edge(topo.opposite(eid))
+        angle = external_angles[eid_adj]
+
+        while deleted[eid_adj]:
+            eid_adj = topo.prev_edge(topo.opposite(eid_adj))
+            angle += math.pi + external_angles[eid_adj]
+
+        angle += math.pi + external_angles[eid]
+        eid_adj = topo.opposite(topo.next_edge(eid))
+        while deleted[eid_adj]:
+            angle += math.pi + external_angles[eid_adj]
+            eid_adj = topo.opposite(topo.next_edge(eid_adj))
+
+        return angle
+
+
+    for eid in topo.iterate_all_internal_edges():
+        if not topo.is_portal(eid): continue
+        if deleted[eid]: continue
+
+        eid_ = topo.opposite(eid)
+        angle0 = calc_extern_angle_ignoring_deleted(eid)
+        angle1 = calc_extern_angle_ignoring_deleted(eid_)
+
+        if angle0 <= convex_relax_thresh and angle1 <= convex_relax_thresh:
+            deleted[eid] = deleted[eid_] = True
+
+    for eid, d in enumerate(deleted):
+        if d and topo.edges[eid] is not None:
+            topo.remove_edge(eid)
 
 
 class Mesh2d(object):
     def __init__(self, poly, convex_relax_thresh = 0.0, db_visitor=None):
-        poly = deepcopy(poly)
+        self.vertices = deepcopy(poly.vertices)
 
-        portals = create_portals(poly, convex_relax_thresh, db_visitor)
+        # degrees to radian
+        convex_relax_thresh = math.pi * convex_relax_thresh / 180.
 
-        # insert new vertices for all 'ToSegment' portals and switch them to 'ToVertex'
-        segments_to_split = defaultdict(list)
-        for portal in portals:
-            if portal.kind == Portal.ToSegment:
-                segment, _ = portal.end_info
-                segments_to_split[segment].append(portal)
+        topo = Topology.of_a_polygon(poly)
 
-        for segment, seg_portals in segments_to_split.items():
-            split_params = list(portal.end_info[1] for portal in seg_portals)
-            split_ids = poly.add_vertices_to_border(segment, split_params)
+        with timed_exec("create_portals"):
+            external_angles = create_portals(self.vertices, topo, convex_relax_thresh, db_visitor)
 
-            for split_idx, portal in zip(split_ids, seg_portals):
-                portal.kind = Portal.ToVertex
-                portal.end_info = split_idx
-
-
-        def resolve_chain(portal):
-            if portal.kind == Portal.ToPortal:
-                next_portal = portal.end_info
-                resolve_chain(next_portal)
-                portal.kind = Portal.ToVertex
-                portal.end_info = next_portal.end_info
-
-        # convert all 'ToPortal' portals to 'ToVertex' portals
-        for portal in portals:
-            # travel down the chain of linked portals until arrive to 'ToVertex' portal
-            resolve_chain(portal)
-        # now all portals are 'ToVertex'
-
-        portals = list((p.start_index, p.end_info) for p in portals)
-
-        # list of half-edges
-        target_verts = list()
-        is_border = list()
-
-        def opposite(eid):
-            return eid - 1 if eid & 1 else eid + 1
-
-        # lists of indices of outgoing edges for each vertex index
-        ways_to_go = list([] for _ in xrange(len(poly.graph.next)))
-
-        for src in poly.graph.all_nodes_iterator():
-            tgt = poly.graph.next[src]
-
-            ways_to_go[src].append(len(target_verts))
-            target_verts.append(tgt)
-            is_border.append(True)
-
-            ways_to_go[tgt].append(len(target_verts))
-            target_verts.append(src)
-            is_border.append(False)
-
-        for src, tgt in portals:
-
-            ways_to_go[src].append(len(target_verts))
-            target_verts.append(tgt)
-            is_border.append(False)
-
-            ways_to_go[tgt].append(len(target_verts))
-            target_verts.append(src)
-            is_border.append(False)
-
-
-        next_edges = list(None for _ in xrange(len(target_verts)))
-        prev_edges = list(None for _ in xrange(len(target_verts)))
-        inbound_edges = list(None for _ in xrange(len(poly.graph.next)))
-
-        if db_visitor is not None:
-            for idx in poly.graph.all_nodes_iterator():
-                db_visitor.add_text(loc=poly.vertices[idx], text=str(idx), scale=False)
-
-
-        consumed = [False] * len(target_verts)
-        for idx, _ in enumerate(target_verts):
-            if consumed[idx]: continue
-
-            while not consumed[idx]:
-                consumed[idx] = True
-                tgt = target_verts[idx]
-                src = target_verts[opposite(idx)]
-                if is_border[idx]:
-                    inbound_edges[tgt] = idx
-
-                in_dir = poly.vertices[tgt] - poly.vertices[src]
-
-                e_ids = ways_to_go[tgt]
-                v_ids = list(target_verts[edge_idx] for edge_idx in e_ids)
-
-                direcs = list((e_idx, (poly.vertices[v_idx] - poly.vertices[tgt]).normalized())
-                    for e_idx, v_idx in zip(e_ids, v_ids) if v_idx != src) # backtracking not allowed
-
-
-                r'''
-                pick the first direction in clockwise order as the next edge:
-
-
-                              \      /
-                               \    /
-                                \  /
-                                 \/_ _ _ _ _
-                                 /|
-                                / |
-                               /  |
-    pick this edge as next -- /   ^
-                                  ^
-                                  ^  --  coming in along this edge
-                '''
-
-                left, right = [], []
-                for e_idx, out_dir in direcs:
-                    if vec.cross2(in_dir, out_dir) < 0:
-                        left.append((e_idx, out_dir))
-                    else:
-                        right.append((e_idx, out_dir))
-
-                if left:
-                    candidates = left
-                    pick = min
-                else:
-                    candidates = right
-                    pick = max
-
-                projections = (out_dir.dot(in_dir) for _, out_dir in candidates)
-                picked_idx, _ = pick(enumerate(projections), key=itemgetter(1))
-                next_idx, _ = candidates[picked_idx]
-
-                next_edges[idx] = next_idx
-                prev_edges[next_idx] = idx
-                idx = next_idx
-
-        def next_edge(eid):
-            return next_edges[eid]
-
-        def prev_edge(eid):
-            return prev_edges[eid]
-
-        # find and delete redundant portals
-        for vid in poly.graph.all_nodes_iterator():
-            p = prev_edge(opposite(inbound_edges[vid]))
-
-            while not is_border[opposite(p)]:
-                p_next = prev_edge(opposite(p))
-
-                def calc_external_angle_if_portal_is_removed(p):
-                    '''
-                    This calculates the sum of 2 angles - one before and one after
-                    the portal p, adjacent to the target vertex of p, in degrees.
-                    It returns max((sum_of_2_angles - 180_degrees), 0).
-                    '''
-                    eid_before = next_edge(p)
-                    eid_after = opposite(prev_edge(opposite(p)))
-
-                    vid_before = target_verts[eid_before]
-                    vid_after = target_verts[eid_after]
-
-                    prev_v = poly.vertices[vid_before]
-                    cand_v = poly.vertices[target_verts[p]]
-                    next_v = poly.vertices[vid_after]
-
-                    signed_area = Geom2.signed_area(prev_v, cand_v, next_v)
-                    if signed_area < 0.0:
-                        side1 = cand_v - prev_v
-                        side2 = next_v - cand_v
-
-                        # positive external angle indicates concavity
-                        external_angle = math.acos(Geom2.cos_angle(side1, side2))
-                        external_angle = external_angle*180.0 / math.pi
-                        return external_angle, eid_before, eid_after
-                    else:
-                        return 0., eid_before, eid_after
-
-                xa0, bef0, aft0 = calc_external_angle_if_portal_is_removed(p)
-                if xa0 <= convex_relax_thresh:
-
-                    xa1, bef1, aft1 = calc_external_angle_if_portal_is_removed(opposite(p))
-                    if xa1 <= convex_relax_thresh:
-                        # this portal is redundant, delete it (by rewiring the connectivity)
-
-                        prev_edges[bef0] = opposite(aft0)
-                        next_edges[opposite(aft0)] = bef0
-
-                        prev_edges[bef1] = opposite(aft1)
-                        next_edges[opposite(aft1)] = bef1
-
-                        next_edges[p] = prev_edges[p] = opposite(p)
-                        next_edges[opposite(p)] = prev_edges[opposite(p)] = p
-
-                p = p_next
-
+        delete_redundant_portals(topo, external_angles, convex_relax_thresh)
 
         self.portals = list()
-        for eid in range(len(is_border))[::2]:
-            if not is_border[eid] and not is_border[eid + 1] and next_edges[eid] != eid + 1:
-                self.portals.append((target_verts[eid], target_verts[eid + 1]))
+        for eid in topo.iterate_all_internal_edges():
+            if topo.is_portal(eid):
+                self.portals.append(topo.edge_verts(eid))
 
         # make rooms (a room is just a list of vertex ids that form a nearly convex polygon)
-        self.rooms = list()
-        consumed = list(False for _ in xrange(len(target_verts)))
+        self.rooms = []
+        for room in topo.rooms:
+            if room is None: continue
+            room_eid = room.outline
+            vert_ids = list(topo.target(eid) for eid in topo.iterate_room_edges(room_eid))
+            self.rooms.append(list(vert_ids))
 
-        for eid, _ in enumerate(target_verts):
-            if is_border[eid] or consumed[eid]:
-                continue
-
-            room = list()
-            self.rooms.append(room)
-            while not consumed[eid]:
-                consumed[eid] = True
-                room.append(target_verts[eid])
-                eid = next_edge(eid)
-
-
-        self.vertices = poly.vertices
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
+        for name, t in timing.items():
+            print("{}, {} times, average time {}".format(name, t.n, t.average()*1000))

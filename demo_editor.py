@@ -19,6 +19,10 @@ try:
 except NameError:
     AnyError = Exception
 
+
+RELAX_ANGLE = 8 # degrees
+
+
 class RecordType:
     class AddVertex: pass
     class AddPoly: pass
@@ -235,7 +239,7 @@ class VisualDebug(object):
         self.app = app
         self.counter = 0
 
-    def add_text(self, loc, text, size=18, scale=True, color='#ffffff'):
+    def add_text(self, loc, text, size=18, scale=False, color='#ffffff'):
         self.app.add_draw_object(
             'debug_text_{}'.format(self.counter),
             TextView(loc=loc, text=text, size=size, scale=scale, color=color))
@@ -251,7 +255,7 @@ class Application(tk.Frame):
     def __init__(self, master=None, poly_path=None, db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
-        self.debugger = None # VisualDebug(self)
+        self.debugger = None#VisualDebug(self)
 
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
@@ -300,8 +304,9 @@ class Application(tk.Frame):
                         num_polys = len(self.find_draw_objects_glob('polys/*'))
 
                         try:
-                            navmesh = Mesh2d(poly, 15, self.debugger)
+                            navmesh = Mesh2d(poly, RELAX_ANGLE, self.debugger)
                             self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+                            # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
 
                         except AnyError as err:
                             self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
@@ -345,12 +350,12 @@ class Application(tk.Frame):
 
         # bind right and left mouse clicks
         self.canvas.bind('<ButtonRelease-1>', self._left_up)
-        self.canvas.bind('<ButtonRelease-3>', self._right_up)
+        self.canvas.bind('<ButtonRelease-2>', self._right_up)
 
 
         # bind camera controls
         self.canvas.bind('<Control-Button-1>', self._ctrl_left_down)
-        self.canvas.bind('<Control-Button-3>', self._ctrl_right_down)
+        self.canvas.bind('<Control-Button-2>', self._ctrl_right_down)
         self.canvas.bind('<Motion>', self._mouse_moved)
 
 
@@ -360,6 +365,9 @@ class Application(tk.Frame):
         else:
             self.canvas.bind_all('<Button-4>', self._mousewheel_up)
             self.canvas.bind_all('<Button-5>', self._mousewheel_down)
+
+        self.canvas.bind_all('-', self._zoom_out)
+        self.canvas.bind_all('=', self._zoom_in)
 
         # escape button resets the active tool
         self.bind_all('<Escape>', lambda _: self.change_active_tool(type(self.active_tool)))
@@ -598,17 +606,29 @@ class Application(tk.Frame):
 
 
     def _mousewheel_up(self, event):
-        self._scale_around_pointer(1./self.zoom_rate, event)
+        self._scale_around_pointer(1./self.zoom_rate, event.x, event.y)
         
 
     def _mousewheel_down(self, event):
-        self._scale_around_pointer(self.zoom_rate, event)
+        self._scale_around_pointer(self.zoom_rate, event.x, event.y)
 
 
-    def _scale_around_pointer(self, rate, event):
+    def _zoom_in(self, event):
+        x = self.canvas.winfo_pointerx()
+        y = self.canvas.winfo_pointery()
+        self._scale_around_pointer(.8/self.zoom_rate, x, y)
+
+
+    def _zoom_out(self, event):
+        x = self.canvas.winfo_pointerx()
+        y = self.canvas.winfo_pointery()
+        self._scale_around_pointer(1.25*self.zoom_rate, x, y)
+
+
+    def _scale_around_pointer(self, rate, x_screen, y_screen):
         self.camera_size *= rate
 
-        scale_cntr_world = self.get_world_crds(event.x, event.y)
+        scale_cntr_world = self.get_world_crds(x_screen, y_screen)
         camera_new_pos = (
             Matrix.scale2d(scale_cntr_world, (rate, rate))
             .dot(v2col(*self.camera_pos[:2]))
@@ -715,9 +735,10 @@ class Application(tk.Frame):
 
             # draw navmeshes
             for poly in self._polygons:
-                navmesh = Mesh2d(poly, 15, self.debugger)
+                navmesh = Mesh2d(poly, RELAX_ANGLE, self.debugger)
                 num_polys = len(self.find_draw_objects_glob('polys/*'))
                 self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+                # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
 
         except AnyError as err:
             self.save_polygons()

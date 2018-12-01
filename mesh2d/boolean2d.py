@@ -69,7 +69,7 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 
 
-def _bool_do(A, B, op, canvas=None):
+def _bool_impl(A, B, op, canvas=None):
     # Copy the original polygons because they will be changed by this algorithm.
     A = deepcopy(A)
     B = deepcopy(B)
@@ -243,7 +243,7 @@ def bool_subtract(A, B, canvas=None):
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-    return _bool_do(A, B, Subtraction, canvas)
+    return _bool_impl(A, B, Subtraction, canvas)
 
 
 def bool_add(A, B, canvas=None):
@@ -251,4 +251,4 @@ def bool_add(A, B, canvas=None):
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-    return _bool_do(A, B, Union, canvas)
+    return _bool_impl(A, B, Union, canvas)
