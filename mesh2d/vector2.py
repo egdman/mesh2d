@@ -82,19 +82,24 @@ class vec(object):
         return vec(*chain(head, self.comps))
 
     @staticmethod
-    def aabb(*points):
+    def aabb(points):
         """
         returns min and max corners of the axis-aligned bounding box of points
         """
-        ndim = len(points[0].comps)
-        min_corner, max_corner = [], []
-        for dim in range(ndim):
-            min_corner.append(min(points, key = itemgetter(dim)) [dim])
-            max_corner.append(max(points, key = itemgetter(dim)) [dim])
-        return (vec(*min_corner), vec(*max_corner))
+        points = iter(points)
+        p_min = list(next(points).comps)
+        p_max = p_min[:]
+        ndim = len(p_min)
+
+        for point in points:
+            for dim in range(ndim):
+                component = point[dim]
+                p_min[dim] = min(p_min[dim], component)
+                p_max[dim] = max(p_max[dim], component)
+        return vec(*p_min), vec(*p_max)
 
 
-    
+
     @staticmethod
     def cross3(u, v):
         """

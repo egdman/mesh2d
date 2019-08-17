@@ -264,6 +264,7 @@ class Application(tk.Frame):
         self.createWidgets()
 
         self._polygons = []
+        self.navmeshes = []
         self._dots_ids = []
         self.dot_size = 3
 
@@ -296,25 +297,30 @@ class Application(tk.Frame):
 
         self.pointer_over_poly = False
 
+        input_polys = ()
+
         if poly_path is not None:
             try:
                 with open(poly_path, 'r') as stream:
-                    for poly in ascii_to_polys(stream.read()):
-                        self._polygons.append(poly)
-                        num_polys = len(self.find_draw_objects_glob('polys/*'))
-
-                        try:
-                            navmesh = Mesh2d(poly, RELAX_ANGLE, self.debugger)
-                            self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
-                            # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
-
-                        except AnyError as err:
-                            self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
-                            print("error occured during navmesh construction: {}".format(err))
-                            print(traceback.format_exc())
-
+                    input_polys = ascii_to_polys(stream.read())
+                   
             except IOError:
                 print("given file cannot be opened")
+
+        for poly in input_polys:
+            self._polygons.append(poly)
+            num_polys = len(self.find_draw_objects_glob('polys/*'))
+
+            try:
+                navmesh = Mesh2d(poly, RELAX_ANGLE, self.debugger)
+                self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+                self.navmeshes.append(navmesh)
+                # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
+
+            except AnyError as err:
+                self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
+                print("error occured during navmesh construction: {}".format(err))
+                print(traceback.format_exc())
 
         self.draw_all()
 
@@ -738,6 +744,7 @@ class Application(tk.Frame):
                 navmesh = Mesh2d(poly, RELAX_ANGLE, self.debugger)
                 num_polys = len(self.find_draw_objects_glob('polys/*'))
                 self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+                self.navmeshes.append(navmesh)
                 # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
 
         except AnyError as err:

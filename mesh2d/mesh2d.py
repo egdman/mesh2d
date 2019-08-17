@@ -936,6 +936,13 @@ def delete_redundant_portals(topo, external_angles, convex_relax_thresh):
             topo.remove_edge(eid)
 
 
+def inside_bbox(bbox, query_point):
+    p0, p1 = bbox
+    a = all(comp >= 0 for comp in (query_point - p0).comps)
+    b = all(comp >= 0 for comp in (p1 - query_point).comps)
+    return a and b
+
+
 class Mesh2d(object):
     def __init__(self, poly, convex_relax_thresh = 0.0, db_visitor=None):
         self.vertices = deepcopy(poly.vertices)
@@ -953,17 +960,35 @@ class Mesh2d(object):
         self.portals = list()
         for eid in topo.iterate_all_internal_edges():
             if topo.is_portal(eid):
-                self.portals.append(topo.edge_verts(eid))
+                vid0, vid1 = topo.edge_verts(eid)
+                if vid0 < vid1:
+                    self.portals.append((vid0, vid1))
 
         # make rooms (a room is just a list of vertex ids that form a nearly convex polygon)
         self.rooms = []
+        self.bboxes = []
+
         for room in topo.rooms:
             if room is None: continue
             room_eid = room.outline
-            vert_ids = list(topo.target(eid) for eid in topo.iterate_room_edges(room_eid))
-            self.rooms.append(list(vert_ids))
+            vert_ids = tuple(topo.target(eid) for eid in topo.iterate_room_edges(room_eid))
+            self.rooms.append(vert_ids)
+            self.bboxes.append(vec.aabb(self.vertices[vid] for vid in vert_ids))
 
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
+
         for name, t in timing.items():
             print("{}, {} times, average time {}".format(name, t.n, t.average()*1000))
+
+
+    def get_room_id(self, point):
+        for room_id, bbox in enumerate(self.bboxes):
+            if not inside_bbox(bbox, point):
+                continue
+
+            room = self.rooms[room_id]
+            verts = (self.vertices[vid] - point for vid in chain(room, room[:1]))
+            if is_origin_inside_polyline(verts):
+                return room_id
+        return None
