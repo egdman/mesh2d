@@ -827,6 +827,15 @@ class Topology(object):
         eid_ = self.opposite(eid)
         room0, room1 = self.edges[eid].room_id, self.edges[eid_].room_id
 
+        # pick other inbound edges for 2 adjacent verts if necessary
+        vid = self.target(eid)
+        vid_ = self.target(eid_)
+        if self.inbound_edges[vid] == eid:
+            self.inbound_edges[vid] = self.prev_edge(eid_)
+        if self.inbound_edges[vid_] == eid_:
+            self.inbound_edges[vid_] = self.prev_edge(eid)
+
+
         # keep the room which is None. If both aren't, keep room0
         if room1 is None:
             eid, eid_ = eid_, eid
@@ -967,13 +976,32 @@ class Mesh2d(object):
         # make rooms (a room is just a list of vertex ids that form a nearly convex polygon)
         self.rooms = []
         self.bboxes = []
+        self.adjacent_rooms = []
+        self.adjacent_rooms = defaultdict(list)
+        room_id_map = {}
 
-        for room in topo.rooms:
+        for room_id, room in enumerate(topo.rooms):
             if room is None: continue
-            room_eid = room.outline
-            vert_ids = tuple(topo.target(eid) for eid in topo.iterate_room_edges(room_eid))
+
+            vert_ids = tuple(topo.target(eid) for eid in topo.iterate_room_edges(room.outline))
             self.rooms.append(vert_ids)
             self.bboxes.append(vec.aabb(self.vertices[vid] for vid in vert_ids))
+            room_id_map[room_id] = len(self.rooms) - 1
+
+        for room_id, room in enumerate(topo.rooms):
+            if room is None: continue
+
+            room_id = room_id_map[room_id] 
+            for eid in topo.iterate_room_edges(room.outline):
+                adj_room_id = topo.room_id(topo.opposite(eid))
+                if adj_room_id is None: continue
+
+                adj_room_id = room_id_map[adj_room_id]
+
+                # store the portal endpoints along with the adjacent room index
+                portal = tuple(sorted(topo.edge_verts(eid)))
+                self.adjacent_rooms[room_id].append((adj_room_id, portal))
+
 
         self.outline = list(poly.graph.loop_iterator(poly.graph.loops[0]))
         self.holes = list(list(poly.graph.loop_iterator(h)) for h in poly.graph.loops[1:])
