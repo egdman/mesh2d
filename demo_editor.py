@@ -584,14 +584,10 @@ class Application(tk.Frame):
     def _mouse_moved(self, event):
         delta_x = event.x - self.last_x
         delta_y = event.y - self.last_y
-
-        last_pointer_world = self.get_world_crds(self.last_x, self.last_y)
-        pointer_world = self.get_world_crds(event.x, event.y)
-
         self.last_x = event.x
         self.last_y = event.y
 
-
+        pointer_world = self.get_world_crds(event.x, event.y)
         ptr_over_poly_now = False
         for poly in self._polygons:
             if poly.point_inside(pointer_world):
@@ -752,9 +748,7 @@ class Application(tk.Frame):
                     new_polys.extend(bool_subtract(old_poly, new_poly, self.debug_canvas))
                 
             elif mode == Bool.Add:
-                while len(self._polygons):
-                    old_poly = self._polygons.pop()
-
+                for old_poly in self._polygons:
                     # add 2 polys, get either 1 or 2 polys
                     added = bool_add(old_poly, new_poly, self.debug_canvas)
                     if len(added) == 1:
@@ -768,6 +762,7 @@ class Application(tk.Frame):
                 return
 
             self._polygons = new_polys
+            self.navmeshes = []
 
             # draw navmeshes
             for poly in self._polygons:

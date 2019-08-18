@@ -947,9 +947,9 @@ def delete_redundant_portals(topo, external_angles, convex_relax_thresh):
 
 def inside_bbox(bbox, query_point):
     p0, p1 = bbox
-    a = all(comp >= 0 for comp in (query_point - p0).comps)
-    b = all(comp >= 0 for comp in (p1 - query_point).comps)
-    return a and b
+    return \
+    all(comp >= 0 for comp in (query_point - p0).comps) and \
+    all(comp >= 0 for comp in (p1 - query_point).comps)
 
 
 class Mesh2d(object):
@@ -976,7 +976,6 @@ class Mesh2d(object):
         # make rooms (a room is just a list of vertex ids that form a nearly convex polygon)
         self.rooms = []
         self.bboxes = []
-        self.adjacent_rooms = []
         self.adjacent_rooms = defaultdict(list)
         room_id_map = {}
 
@@ -1020,3 +1019,11 @@ class Mesh2d(object):
             if is_origin_inside_polyline(verts):
                 return room_id
         return None
+
+    def visible_points(self, point):
+        room_id = self.get_room_id(point)
+        if room_id is None:
+            return ()
+
+        for adj_room, portal in self.adjacent_rooms(room_id):
+            pass
