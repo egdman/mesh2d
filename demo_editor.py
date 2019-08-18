@@ -212,13 +212,40 @@ class FreePolyTool(Tool):
 
 
 class SelectTool(Tool):
+    def __init__(self, parent):
+        super(SelectTool, self).__init__(parent)
+        self.rays = []
 
     def right_click(self, event):
         print("SELECT: right click")
 
-
     def left_click(self, event):
         print("SELECT: left click")
+
+    def mouse_moved(self, event, dx, dy):
+        self.rays = []
+        app = self.parent
+        pt = app.get_world_crds(event.x, event.y)
+        for navmesh in app.navmeshes:
+            room_id = navmesh.get_room_id(pt)
+            if room_id is None: continue
+
+            for _, portal in navmesh.adjacent_rooms[room_id]:
+                p0, p1 = portal
+                self.rays.append((pt, navmesh.vertices[p0]))
+                self.rays.append((pt, navmesh.vertices[p1])) 
+        self.redraw()
+
+    def redraw(self):
+        app = self.parent
+        app.remove_draw_objects_glob('tool_helpers/select/line_of_sight/*')
+        for idx, ray in enumerate(self.rays):
+            r0, r1 = ray
+
+            app.add_draw_object('tool_helpers/select/line_of_sight/{}'.format(idx),
+                SegmentHelperView(r0, r1, color='#226622'))
+
+        app.draw_all()
 
 
 def get_event_modifiers(event):
