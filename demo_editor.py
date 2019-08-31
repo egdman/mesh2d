@@ -259,6 +259,7 @@ class Application(tk.Frame):
 
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
+        self.this_is_osx = "darwin" in platform.system().lower()
 
         self.grid()
         self.createWidgets()
@@ -366,7 +367,7 @@ class Application(tk.Frame):
 
 
         # mouse wheel
-        if self.this_is_windows:
+        if self.this_is_windows or self.this_is_osx:
             self.canvas.bind_all('<MouseWheel>', self._windows_mousewheel)
         else:
             self.canvas.bind_all('<Button-4>', self._mousewheel_up)
