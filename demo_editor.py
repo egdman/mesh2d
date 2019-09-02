@@ -358,11 +358,13 @@ class Application(tk.Frame):
         # bind right and left mouse clicks
         self.canvas.bind('<ButtonRelease-1>', self._left_up)
         self.canvas.bind('<ButtonRelease-2>', self._right_up)
+        self.canvas.bind('<ButtonRelease-3>', self._right_up)
 
 
         # bind camera controls
         self.canvas.bind('<Control-Button-1>', self._ctrl_left_down)
         self.canvas.bind('<Control-Button-2>', self._ctrl_right_down)
+        self.canvas.bind('<Control-Button-3>', self._ctrl_right_down)
         self.canvas.bind('<Motion>', self._mouse_moved)
 
 
