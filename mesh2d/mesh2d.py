@@ -2,12 +2,11 @@ import math
 
 from collections import defaultdict
 from operator import itemgetter
-from itertools import chain, repeat, tee
+from itertools import chain
 from copy import deepcopy
 from time import clock
 from contextlib import contextmanager
 from random import randint, seed as randseed
-from collections import namedtuple
 
 try:
     from itertools import izip as zip
@@ -15,7 +14,7 @@ except ImportError:
     pass
 
 from .vector2 import vec, Geom2
-from .utils import pairs, triples
+from .utils import pairs
 
 def rand_color(s):
     randseed(s)

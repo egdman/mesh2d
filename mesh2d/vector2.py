@@ -1,6 +1,5 @@
 import math
 from itertools import chain
-from operator import itemgetter
 from .utils import pairs
 
 try:

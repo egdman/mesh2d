@@ -1,19 +1,23 @@
 import Tkinter as tk
 from tkFont import Font as font
-from itertools import chain, izip, tee
+from itertools import chain, tee
 
+try:
+    from itertools import izip as zip
+except ImportError:
+    pass
 
 def pairs(iterable):
     a, b = tee(iterable, 2)
     next(b, None)
-    return izip(a, b)
+    return zip(a, b)
 
 def triples(iterable):
     a, b, c = tee(iterable, 3)
     next(b, None)
     next(c, None)
     next(c, None)
-    return izip(a, b, c)
+    return zip(a, b, c)
 
 
 def get_crds(poly, loop, closed=True):
@@ -46,7 +50,6 @@ def draw_poly(poly, cv, no_draw_these=None):
 
 
 
-
 def debug_draw_bool(A, B, A_pieces, B_pieces, x_map, cv):
     for A_piece in A_pieces:
         A_piece_crds = get_crds(A, A_piece, False)
@@ -72,13 +75,9 @@ def debug_draw_bool(A, B, A_pieces, B_pieces, x_map, cv):
 
 
 
-
-
 def debug_draw_room(poly, loops, cv):
     outl = loops[0]
     holes = loops[1:]
-
-   
 
     cv.create_line(get_crds(poly, outl), fill='cyan')
     for h in holes:
