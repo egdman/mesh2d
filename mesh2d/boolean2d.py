@@ -8,7 +8,7 @@ try:
 except ImportError:
     pass
 
-from .mesh2d import Polygon2d
+from .polygon import Polygon2d
 from .vector2 import Geom2
 from .utils import debug_draw_bool
 

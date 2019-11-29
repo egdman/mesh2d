@@ -252,3 +252,20 @@ class Geom2:
             a = (r2s2 - r2s1) / r2r1
             b = (r1s1 - r1s2) / r1r2
             return (a, b, 0)
+
+
+    @staticmethod
+    def is_origin_inside_polyline(polyline):
+        # ray from origin along positive x axis
+        x_ray = (vec(0, 0), vec(1, 0))
+        num_inters = 0
+        # iterate over pairs of vertices
+        for curr_v, next_v in pairs(polyline):
+            if curr_v[1] == 0: curr_v += vec(0, 1e-8)
+            if next_v[1] == 0: next_v += vec(0, 1e-8)
+
+            if curr_v[1] * next_v[1] < 0:
+                _, b, _ = Geom2.lines_intersect((curr_v, next_v - curr_v), x_ray)
+                if b > 0: num_inters += 1
+
+        return num_inters % 2 > 0
