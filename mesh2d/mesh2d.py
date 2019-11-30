@@ -607,7 +607,7 @@ class Topology(object):
 
     def loop_is_ccw(self, loop_eid, verts):
         vert_ids = (self.edges[eid].target for eid in self._iterate_loop_edges(loop_eid))
-        points = tuple(verts[vid] for vid in vert_ids)
+        points = (verts[vid] for vid in vert_ids)
         return Geom2.poly_signed_area(points) > 0
 
     def get_outline(self, eid):

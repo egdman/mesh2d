@@ -133,34 +133,12 @@ class Geom2:
     """
 
     @staticmethod
-    def signed_area(v1, v2, v3):
-        return .5 * vec.cross2(v2 - v1, v3 - v1)
-
-
-    @staticmethod
     def poly_signed_area(vertices):
         area = 0.
-        for vert1, vert2 in pairs(vertices):
-            area += (vert1[0] - vert2[0]) * (vert1[1] + vert2[1])
+        for a, b in pairs(vertices):
+            area += (a[0] - b[0]) * (a[1] + b[1])
 
         return .5 * area
-
-
-    @staticmethod
-    def are_points_ccw(v1, v2, v3):
-        return Geom2.signed_area(v1, v2, v3) > 0
-
-
-    @staticmethod
-    def point_inside(v0, v1, v2, v3):
-        """
-        Returns True iff v0 is inside the [v1, v2, v3] triangle
-        """
-        triangle_ccw = Geom2.are_points_ccw(v1, v2, v3)
-        return (Geom2.are_points_ccw(v0, v1, v2) == triangle_ccw) and \
-               (Geom2.are_points_ccw(v0, v2, v3) == triangle_ccw) and \
-               (Geom2.are_points_ccw(v0, v3, v1) == triangle_ccw)
-
 
 
     @staticmethod
@@ -259,16 +237,14 @@ class Geom2:
 
     @staticmethod
     def is_origin_inside_polyline(polyline):
-        # ray from origin along positive x axis
-        x_ray = (vec(0, 0), vec(1, 0))
         num_inters = 0
         # iterate over polyline segments
-        for curr_v, next_v in pairs(polyline):
-            if curr_v[1] == 0: curr_v += vec(0, 1e-8)
-            if next_v[1] == 0: next_v += vec(0, 1e-8)
+        for a, b in pairs(polyline):
+            if a[1] >= 0:
+                if b[1] < 0 and a[0] * b[1] < a[1] * b[0]:
+                    num_inters += 1
 
-            if curr_v[1] * next_v[1] < 0:
-                _, b, _ = Geom2.lines_intersect((curr_v, next_v - curr_v), x_ray)
-                if b > 0: num_inters += 1
+            elif b[1] >= 0 and a[0] * b[1] > a[1] * b[0]:
+                num_inters += 1
 
         return num_inters % 2 > 0
