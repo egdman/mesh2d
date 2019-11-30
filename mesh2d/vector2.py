@@ -1,11 +1,16 @@
 import math
-from itertools import chain
-from .utils import pairs
+from itertools import chain, tee
 
 try:
     from itertools import izip as zip
 except ImportError:
     pass
+
+def pairs(iterable):
+    a, b = tee(iterable, 2)
+    first = next(b, None)
+    return zip(a, chain(b, [first]))
+
 
 class vec(object):
     """
@@ -135,8 +140,6 @@ class Geom2:
     @staticmethod
     def poly_signed_area(vertices):
         area = 0.
-        vertices = chain(vertices, vertices[:1])
-
         for vert1, vert2 in pairs(vertices):
             area += (vert1[0] - vert2[0]) * (vert1[1] + vert2[1])
 
@@ -259,7 +262,7 @@ class Geom2:
         # ray from origin along positive x axis
         x_ray = (vec(0, 0), vec(1, 0))
         num_inters = 0
-        # iterate over pairs of vertices
+        # iterate over polyline segments
         for curr_v, next_v in pairs(polyline):
             if curr_v[1] == 0: curr_v += vec(0, 1e-8)
             if next_v[1] == 0: next_v += vec(0, 1e-8)

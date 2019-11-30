@@ -601,8 +601,7 @@ class Topology(object):
 
     def inside_loop(self, query_eid, loop_eid, verts):
         query_pt = verts[self.edges[query_eid].target]
-        first_vid = self.edges[loop_eid].target
-        vert_ids = chain((self.edges[eid].target for eid in self._iterate_loop_edges(loop_eid)), [first_vid])
+        vert_ids = (self.edges[eid].target for eid in self._iterate_loop_edges(loop_eid))
         polyline = (verts[vid] - query_pt for vid in vert_ids)
         return Geom2.is_origin_inside_polyline(polyline)
 
@@ -891,7 +890,7 @@ class Mesh2d(object):
                 continue
 
             room = self.rooms[room_id]
-            verts = (self.vertices[vid] - point for vid in chain(room, room[:1]))
+            verts = (self.vertices[vid] - point for vid in room)
             if Geom2.is_origin_inside_polyline(verts):
                 return room_id
         return None

@@ -92,8 +92,7 @@ class Polygon2d(object):
 
     def point_inside_loop(self, point, loop_start):
         # transform vertices so that query point is at the origin, append start vertex at end to wrap
-        verts = (self.vertices[idx] - point for idx in \
-            chain(self.graph.loop_iterator(loop_start), [loop_start]))
+        verts = (self.vertices[idx] - point for idx in self.graph.loop_iterator(loop_start))
         return Geom2.is_origin_inside_polyline(verts)
 
 
