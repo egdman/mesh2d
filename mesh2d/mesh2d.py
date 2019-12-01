@@ -382,10 +382,10 @@ def create_portals(verts, topo, threshold, db_visitor=None):
             return connect_to_exterior_wall(start_eid, closest_eid, param)
 
 
-    if db_visitor:
-        for eid in topo.iterate_all_internal_edges():
-            vid = topo.target(eid)
-            db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
+    # if db_visitor:
+    #     for eid in topo.iterate_all_internal_edges():
+    #         vid = topo.target(eid)
+    #         db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
 
     spikes = find_spikes(topo, extern_angles, threshold)
@@ -835,10 +835,21 @@ class Mesh2d(object):
 
         topo = Topology.of_a_polygon(poly)
 
+        num_orig_verts = len(self.vertices)
+        print("{} verts before".format(num_orig_verts))
+
         with timed_exec("create_portals"):
             external_angles = create_portals(self.vertices, topo, convex_relax_thresh, db_visitor)
 
+        print("{} verts after".format(len(self.vertices)))
         delete_redundant_portals(topo, external_angles, convex_relax_thresh)
+
+
+        for vid in range(num_orig_verts, len(self.vertices)):
+            degree = len(tuple(topo.edges_around_vertex(vid)))
+            if degree < 3:
+                if db_visitor:
+                    db_visitor.add_text(self.vertices[vid], "{} ({})".format(vid, degree), color="#93f68b")
 
         self.portals = list()
         for eid in topo.iterate_all_internal_edges():
