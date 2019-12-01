@@ -382,13 +382,94 @@ def create_portals(verts, topo, threshold, db_visitor=None):
             return connect_to_exterior_wall(start_eid, closest_eid, param)
 
 
-    if db_visitor:
-        for eid in topo.iterate_all_internal_edges():
-            vid = topo.target(eid)
-            db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
+    # if db_visitor:
+    #     for eid in topo.iterate_all_internal_edges():
+    #         vid = topo.target(eid)
+    #         db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
 
     spikes = find_spikes(topo, extern_angles, threshold)
+
+    #########################################################################
+    def sort_by(eid):
+        v0, v1 = topo.edge_verts(eid)
+        v0, v1 = verts[v0], verts[v1]
+        return min(v0[0], v1[0])
+
+    edges = sorted(list(topo.iterate_all_internal_edges()), key=sort_by)
+
+    def mk_sector(spike_vid):
+        inbound_edges = topo.edges_around_vertex(spike_vid)
+        next(inbound_edges) # skip the external edge
+        spike_eid = next(inbound_edges)
+        # assert len(tuple(inbound_edges)) == 0
+
+        vid0, vid1 = topo.edge_verts(spike_eid)
+        # assert vid1 == spike_vid
+        vid2 = topo.target(topo.next_edge(spike_eid))
+        return get_sector(verts[vid2], verts[vid1], verts[vid0], threshold)
+
+
+    active_spikes = list((vid, mk_sector(vid), None, None) for vid in spikes)
+
+    done_spikes = []
+    print("INITIAL NUM SPIKES = {}".format(len(active_spikes)))
+
+    num_pairs = 0
+
+    for eid in edges:
+        seg_vid0, seg_vid1 = topo.edge_verts(eid)
+        seg0, seg1 = verts[seg_vid0], verts[seg_vid1]
+        minx = min(seg0[0], seg1[0])
+
+        next_active_spikes = []
+
+        for spike_num, spike_info in enumerate(active_spikes):
+            num_pairs += 1
+
+            spike_vid, sector, dist, endpt = spike_info
+            tip_vertex = verts[spike_vid]
+
+            if dist is not None and minx > tip_vertex[0] + dist:
+                done_spikes.append((spike_vid, endpt))
+                continue # forget this spike
+
+            if spike_vid in (seg_vid0, seg_vid1):
+                updated_spike_info = spike_info
+
+            else:
+                right_dir, left_dir = sector
+                para, _, distSq = _segment_closest_point_inside_sector(
+                    (seg0, seg1), (right_dir, tip_vertex, left_dir))
+
+                if distSq is None:
+                    updated_spike_info = spike_info
+
+                else:
+                    newDist = math.sqrt(distSq)
+                    if dist is None or newDist < dist:
+                        updated_spike_info = (spike_vid, sector, newDist, (eid, para)) # update closest distance and point
+                    else:
+                        updated_spike_info = spike_info
+
+            next_active_spikes.append(updated_spike_info)
+
+        active_spikes = next_active_spikes
+
+    done_spikes.extend(((spike_vid, endpt) for spike_vid, _, _, endpt in active_spikes))
+
+    print("  FINAL NUM SPIKES = {}".format(len(done_spikes)))
+    print("NUMBER OF PAIRS = {} (MAXIMUM = {})".format(num_pairs, len(spikes) * len(edges)))
+
+    for spike_vid, endpt in done_spikes:
+        if db_visitor:
+            eid, para = endpt
+            vid0, vid1 = topo.edge_verts(eid)
+            v0, v1 = verts[vid0], verts[vid1]
+            db_visitor.add_polygon((verts[spike_vid], v0 + para*(v1-v0)), color="blue")
+
+    #########################################################################
+
 
     for spike_idx in spikes:
         closest_edge_info = find_closest_edge_for_spike(verts, topo, extern_angles, spike_idx, threshold)
