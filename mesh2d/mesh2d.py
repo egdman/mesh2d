@@ -315,11 +315,8 @@ def create_portals(verts, topo, threshold, db_visitor=None):
         extern_angles[eprev] = calc_external_angle(verts, topo, eprev)
         extern_angles[eprev_] = calc_external_angle(verts, topo, eprev_)
 
-    def connect_to_startpoint(start_eid, edge):
-        update_angles(topo.connect(start_eid, topo.prev_edge(edge), verts))
 
-
-    def connect_to_endpoint(start_eid, edge):
+    def connect_to_target(start_eid, edge):
         update_angles(topo.connect(start_eid, edge, verts))
 
 
@@ -327,9 +324,9 @@ def create_portals(verts, topo, threshold, db_visitor=None):
         seg0, seg1 = topo.edge_verts(edge)
 
         if param == 0:
-            connect_to_startpoint(start_eid, edge)
+            connect_to_target(start_eid, topo.prev_edge(edge))
         elif param == 1:
-            connect_to_endpoint(start_eid, edge)
+            connect_to_target(start_eid, edge)
         else:
             v0, v1 = verts[seg0], verts[seg1]
             new_vert = v0 + param * (v1 - v0)
@@ -349,35 +346,23 @@ def create_portals(verts, topo, threshold, db_visitor=None):
             update_angles(topo.connect(start_eid, new_eid_internal, verts))
 
 
-    def connect_to_closest_portal_endpoint(from_eid, target_eid):
+    def connect_to_closest_endpoint_if_los_is_free(from_eid, target_eid):
         vid0, vid1 = topo.edge_verts(target_eid)
         start_vert = verts[topo.target(from_eid)]
         if (verts[vid0] - start_vert).normSq() < (verts[vid1] - start_vert).normSq():
-            return portal_to_portal_startpoint_if_los_is_free(from_eid, target_eid)
+            return connect_to_target_if_los_is_free(from_eid,  topo.prev_edge(target_eid))
         else:
-            return portal_to_portal_endpoint_if_los_is_free(from_eid, target_eid)
+            return connect_to_target_if_los_is_free(from_eid, target_eid)
 
 
-    def portal_to_portal_startpoint_if_los_is_free(start_eid, portal_eid):
-        with timed_exec("LOS"):
-            closest_eid, param = check_line_of_sight(start_eid, topo.prev_edge(portal_eid))
-        if closest_eid is None or closest_eid == portal_eid:
-            return connect_to_startpoint(start_eid, portal_eid)
-
-        if topo.is_portal(closest_eid):
-            return connect_to_closest_portal_endpoint(start_eid, closest_eid)
-        else:
-            return connect_to_exterior_wall(start_eid, closest_eid, param)
-
-
-    def portal_to_portal_endpoint_if_los_is_free(start_eid, portal_eid):
+    def connect_to_target_if_los_is_free(start_eid, portal_eid):
         with timed_exec("LOS"):
             closest_eid, param = check_line_of_sight(start_eid, portal_eid)
         if closest_eid is None or closest_eid == portal_eid:
-            return connect_to_endpoint(start_eid, portal_eid)
+            return connect_to_target(start_eid, portal_eid)
 
         if topo.is_portal(closest_eid):
-            return connect_to_closest_portal_endpoint(start_eid, closest_eid)
+            return connect_to_closest_endpoint_if_los_is_free(start_eid, closest_eid)
         else:
             return connect_to_exterior_wall(start_eid, closest_eid, param)
 
@@ -405,9 +390,9 @@ def create_portals(verts, topo, threshold, db_visitor=None):
             closest_edge, closest_param = choose_closer_side_of_edge(topo, verts, tip, closest_edge, closest_param)
 
             if closest_param == 0:
-                connect_to_startpoint(eid, closest_edge)
+                connect_to_target(eid, topo.prev_edge(closest_edge))
             elif closest_param == 1:
-                connect_to_endpoint(eid, closest_edge)
+                connect_to_target(eid, closest_edge)
 
             # If closest point is not one of the endpoints,
             # we still create the portal(s) to one or two endpoints:
@@ -425,14 +410,14 @@ def create_portals(verts, topo, threshold, db_visitor=None):
 
                 # if none of the portal endpoints is inside sector, create 2 portals to both ends:
                 if not start_inside and not end_inside:
-                        portal_to_portal_startpoint_if_los_is_free(eid, closest_edge),
-                        portal_to_portal_endpoint_if_los_is_free(eid, closest_edge)
+                        connect_to_target_if_los_is_free(eid, topo.prev_edge(closest_edge)),
+                        connect_to_target_if_los_is_free(eid, closest_edge)
 
                 elif start_inside:
-                    portal_to_portal_startpoint_if_los_is_free(eid, closest_edge)
+                    connect_to_target_if_los_is_free(eid, topo.prev_edge(closest_edge))
 
                 else:
-                    portal_to_portal_endpoint_if_los_is_free(eid, closest_edge)
+                    connect_to_target_if_los_is_free(eid, closest_edge)
 
         # if no portals are in the way, attach to an edge/vertex on the exterior wall
         else:
