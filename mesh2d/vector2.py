@@ -187,22 +187,17 @@ class Geom2:
             mtx[2]*vector[0] + mtx[3]*vector[1])
 
 
-
     @staticmethod
     def lines_intersect(line1, line2, angle_tolerance = 1e-8):
         """
         returns a tuple (coef1, coef2, distSq)
         coef1 and coef2 are scalars that define the intersection point on line1 and line2 respectively
-        if lines are parallel, coef1 and coef2 are NaN, but distSq is still correct
+        if lines are parallel, coef1 and coef2 are NaN, and distSq is the squared distance between the lines
         if lines are non-parallel, distSq is 0
         line1 and line2 must be Ray-like objects
-        
 
-        s1 = line1[0]
-        r1 = line1[1]
-
-        s2 = line2[0]
-        r2 = line2[1]
+        s1, r1 = line1
+        s2, r2 = line2
 
         Need to find coef a where intersection = s1 + a*r1
         Need to find coef b where intersection = s2 + b*r2
@@ -212,26 +207,26 @@ class Geom2:
         [r2 x s1] + a * [r2 x r1] = [r2 x s2]
 
         a = ([r2 x s2] - [r2 x s1]) / [r2 x r1]
-        b = ([r1 x s1] - [r1 x s2]) / [r1 x r2]
+        b = ([r1 x s2] - [r1 x s1]) / [r2 x r1]
         """
+        s1, r1 = line1
+        s2, r2 = line2
 
-        r2s2 = vec.cross2(line2[1], line2[0])
-        r2s1 = vec.cross2(line2[1], line1[0])
-        r2r1 = vec.cross2(line2[1], line1[1])
+        r2r1 = vec.cross2(r2, r1)
+        sine_angle = abs(r2r1) / (r1.norm() * r2.norm())
 
-        r1s1 = vec.cross2(line1[1], line1[0])
-        r1s2 = vec.cross2(line1[1], line2[0])
-        r1r2 = - r2r1
-
-        appr_angle = abs(r1r2) / (line1[1].norm() * line2[1].norm())
-
-        # if lines are parallel
-        if appr_angle < angle_tolerance:
-            return (float('nan'), float('nan'), Geom2.point_to_line_distSq(line1[0], line2))
+        # if lines are nearly parallel
+        if sine_angle < angle_tolerance:
+            return float("nan"), float("nan"), Geom2.point_to_line_distSq(s1, line2)
 
         else:
+            r1s1 = vec.cross2(r1, s1)
+            r1s2 = vec.cross2(r1, s2)
+            r2s1 = vec.cross2(r2, s1)
+            r2s2 = vec.cross2(r2, s2)
+
             a = (r2s2 - r2s1) / r2r1
-            b = (r1s1 - r1s2) / r1r2
+            b = (r1s2 - r1s1) / r2r1
             return (a, b, 0)
 
 
