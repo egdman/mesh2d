@@ -446,7 +446,7 @@ class Application(tk.Frame):
 
 
     def save_polygons(self):
-        dump_history(self.history)
+        # dump_history(self.history)
         if len(self._polygons) > 0:
             with open("poly.txt", 'w') as stream:
                 stream.write(polys_to_ascii(self._polygons))

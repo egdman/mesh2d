@@ -232,6 +232,7 @@ class Geom2:
 
     @staticmethod
     def is_origin_inside_polyline(polyline):
+        # count how many times the polyline intersects the (x>0, y=0) line
         num_inters = 0
         # iterate over polyline segments
         for a, b in pairs(polyline):
