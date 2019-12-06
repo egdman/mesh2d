@@ -446,8 +446,11 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             vid = topo.target(eid)
             db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
+    # sorting spikes by external angle makes it faster!
+    all_edges = tuple(sorted(tuple(topo.iterate_all_internal_edges()),
+        key=lambda eid: -accum_angles[eid]))
 
-    for spike_eid in tuple(topo.iterate_all_internal_edges()): # it's important to create the tuple in advance!
+    for spike_eid in all_edges:
         if accum_angles[spike_eid] <= threshold: continue # not a spike
 
         sector = get_sector(verts, topo, spike_eid, extern_angles, accum_angles, threshold)
