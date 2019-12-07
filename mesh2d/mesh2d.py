@@ -396,7 +396,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             v0, v1 = topo.edge_verts(edge)
             v0, v1 = verts[v0], verts[v1]
             new_vert = v0 + param * (v1 - v0)
-            new_eid = topo.insert_vertex(edge)
+            new_eid = topo.insert_vertex(len(verts), edge)
 
             if db_visitor:
                 db_visitor.add_text(new_vert, str(topo.target(new_eid)), color="cyan")
@@ -412,8 +412,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             extern_angles[new_eid] = 0.
             accum_angles[new_eid] = calc_accum_angle(accum_angles[topo.prev_edge(new_eid)], 0., threshold)
 
-            new_vid = topo.target(new_eid)
-            assert len(verts) == new_vid, "something went wrong here"
+            assert len(verts) == topo.target(new_eid), "something went wrong here"
 
             verts.append(new_vert)
             conn_eid = topo.connect(start_eid, new_eid, verts)
@@ -576,13 +575,6 @@ class Topology(object):
     def edge_verts(self, eid):
         return self.edges[self.opposite(eid)].target, self.edges[eid].target
 
-    def inbound(self, vid):
-        '''
-        Get eid of an inbound half-edge for the given vertex.
-        The returned half-edge is always from a border loop.
-        '''
-        return self.inbound_edges[vid]
-
     def room_id(self, eid):
         return self.edges[eid].room_id
 
@@ -612,32 +604,21 @@ class Topology(object):
         edge_ids = [room.outline] + room.holes
         return chain(*(self.iterate_loop_edges(eid) for eid in edge_ids))
 
-    def edges_around_vertex(self, vid):
-        eid0 = self.inbound_edges[vid]
-        yield eid0
-        eid = self.edges[self.opposite(eid0)].prev
-        while eid != eid0:
-            yield eid
-            eid = self.edges[self.opposite(eid)].prev
-
-
-    def insert_vertex(self, eid_given):
+    def insert_vertex(self, new_vid, edge_to_split):
         '''
         Inserts a new vertex into the given edge eid_given.
         Returns the new edge inserted before eid_given,
         such that the target of the new edge is the new vertex.
         '''
-        eid_oppos = self.opposite(eid_given)
-        new_vid = len(self.inbound_edges)
+        eid_given = edge_to_split
+        eid_oppos = self.opposite(edge_to_split)
 
         if self.edges[eid_oppos].room_id is None:
             before_given = len(self.edges) + 1
             after_oppos = len(self.edges)
-            self.inbound_edges.append(eid_oppos)
         else:
             before_given = len(self.edges)
             after_oppos = len(self.edges) + 1
-            self.inbound_edges.append(before_given)
 
         edge_before_given = EdgeStruct(
             prev=self.edges[eid_given].prev,
@@ -771,15 +752,6 @@ class Topology(object):
         eid_ = self.opposite(eid)
         room0, room1 = self.edges[eid].room_id, self.edges[eid_].room_id
 
-        # pick other inbound edges for 2 adjacent verts if necessary
-        vid = self.target(eid)
-        vid_ = self.target(eid_)
-        if self.inbound_edges[vid] == eid:
-            self.inbound_edges[vid] = self.prev_edge(eid_)
-        if self.inbound_edges[vid_] == eid_:
-            self.inbound_edges[vid_] = self.prev_edge(eid)
-
-
         # keep the room which is None. If both aren't, keep room0
         if room1 is None:
             eid, eid_ = eid_, eid
@@ -818,7 +790,6 @@ class Topology(object):
     def of_a_polygon(poly):
         t = Topology()
         t.edges = []
-        t.inbound_edges = [None for _ in poly.graph.all_nodes_iterator()]
         loops = []
 
         for loop_start in poly.graph.loops:
@@ -828,7 +799,6 @@ class Topology(object):
 
             src0 = next(loop_verts)
             tgt0 = poly.graph.next[src0]
-            t.inbound_edges[tgt0] = len(t.edges)
             t.edges.append(EdgeStruct(target=tgt0, room_id=None, prev=None, next=None))
             t.edges.append(EdgeStruct(target=src0, room_id=0, prev=None, next=None))
 
@@ -837,13 +807,9 @@ class Topology(object):
 
                 t.edges[-2].next = len(t.edges)
                 t.edges[-1].prev = len(t.edges) + 1
-                t.inbound_edges[tgt] = len(t.edges)
-                t.inbound_edges[src] = len(t.edges) - 2
                 t.edges.append(EdgeStruct(target=tgt, room_id=None, prev=len(t.edges)-2, next=None))
                 t.edges.append(EdgeStruct(target=src, room_id=0, prev=None, next=len(t.edges)-2))
 
-
-            t.inbound_edges[src0] = len(t.edges) - 2
             t.edges[-2].next = first_eid
             t.edges[-1].prev = first_eid + 1
             t.edges[first_eid].prev = len(t.edges) - 2
