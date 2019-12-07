@@ -252,7 +252,7 @@ class VisualDebug(object):
 
 
 class Application(tk.Frame):
-    def __init__(self, master=None, poly_path=None, db_mode=False):
+    def __init__(self, master=None, input_polys=(), db_mode=False):
         tk.Frame.__init__(self, master)
         self.db_mode = db_mode
         self.debugger = None#VisualDebug(self)
@@ -298,30 +298,17 @@ class Application(tk.Frame):
 
         self.pointer_over_poly = False
 
-        input_polys = ()
-
-        if poly_path is not None:
-            try:
-                with open(poly_path, 'r') as stream:
-                    input_polys = ascii_to_polys(stream.read())
-                   
-            except IOError:
-                print("given file cannot be opened")
-
         for poly in input_polys:
             self._polygons.append(poly)
             num_polys = len(self.find_draw_objects_glob('polys/*'))
 
-            try:
-                navmesh = Mesh2d(poly, RELAX_ANGLE, self.debugger)
+            navmesh = subdivide_polygon(poly, RELAX_ANGLE, self.debugger)
+            if navmesh:
                 self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
                 self.navmeshes.append(navmesh)
                 # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
-
-            except AnyError as err:
+            else:
                 self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
-                print("error occured during navmesh construction: {}".format(err))
-                print(traceback.format_exc())
 
         self.draw_all()
 
@@ -773,6 +760,23 @@ class Application(tk.Frame):
             draw_object.draw_self(camera_trans, self.canvas)
 
 
+def read_polygons(poly_path):
+    try:
+        with open(poly_path, 'r') as stream:
+            return list(ascii_to_polys(stream.read()))
+           
+    except IOError:
+        print("given file cannot be opened")
+        return ()
+
+
+def subdivide_polygon(polygon, convex_threshold, debugger=None):
+    try:
+        return Mesh2d(polygon, convex_threshold, debugger)
+
+    except AnyError as err:
+        print("error occured during navmesh construction: {}".format(err))
+        print(traceback.format_exc())
 
 
 class ProvideException(object):
@@ -794,16 +798,23 @@ class ProvideException(object):
 def main():
     parser = ArgumentParser()
 
-    parser.add_argument('-d', '--debug', action='store_true', help='start in debug mode')
     parser.add_argument('input', metavar="FILE", nargs='?', default=None, type=str, help='open this polygon file')
+    parser.add_argument('-d', '--debug', action='store_true', help='start in debug mode')
+    parser.add_argument('-z', '--no-gui', action='store_true', help='open file and perform subdivision without GUI')
 
     args = parser.parse_args()
 
-    app = Application(db_mode=args.debug, poly_path=args.input)
-    app.master.title('Map editor')
-    app.mainloop() 
+    input_polygons = read_polygons(args.input) if args.input else ()
 
+    if args.no_gui:
+        for poly in input_polygons:
+            subdivide_polygon(poly, RELAX_ANGLE)
+        return
 
+    else:
+        app = Application(db_mode=args.debug, input_polys=input_polygons)
+        app.master.title('Map editor')
+        app.mainloop()
 
 if __name__ == '__main__':
     main()
