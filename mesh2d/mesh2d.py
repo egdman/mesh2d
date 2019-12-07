@@ -241,10 +241,15 @@ def calc_external_angle(verts, topo, eid):
 def calc_accum_angles(external_angles, topo, threshold):
     accum_angles = [None] * len(external_angles)
     for eid0 in topo.iterate_all_loops():
+        loop_iter = iter(topo.iterate_loop_edges(eid0))
+        tail = []
+        for eid in loop_iter:
+            tail.append(eid)
+            if abs(external_angles[eid]) > threshold:
+                break
+
         accum_angle = 0.
-        # TODO: what if we start in the middle of a spike?
-        #  Need to rotate until accum angle becomes 0 instead of just setting it to 0
-        for eid in topo.iterate_loop_edges(eid0):
+        for eid in chain(loop_iter, tail):
             accum_angle = max(accum_angle + external_angles[eid], 0.) # accumulate only positive values
             accum_angles[eid] = accum_angle
             if accum_angle > threshold:
