@@ -42,184 +42,290 @@ def timed_exec(name):
     timing[name].add(clock() - s)
 
 
+def get_180_sector(verts, topo, spike_eid, extern_angles):
+    # increase opening angle of the sector due to threshold
+    extra_opening = .5 * extern_angles[spike_eid]
+    cosine = math.cos(extra_opening)
+    sine = math.sin(extra_opening)
+
+    vid0, vid1 = topo.edge_verts(spike_eid)
+    x, y = (verts[vid1] - verts[vid0]).normalized().comps
+    x, y = (cosine*x - sine*y, sine*x + cosine*y)
+    return vec(-x, -y), verts[vid1], vec(x, y)
+
+
 def get_sector(verts, topo, spike_eid, extern_angles, accum_angles, threshold):
     '''
     Returns 2 vectors that define the sector rays, and the coordinates of the sector tip
     The vectors have unit lengths
     The vector pair is right-handed
     '''
-    vid0, vid1 = topo.edge_verts(spike_eid)
+    angle  = .5 * (extern_angles[spike_eid] - accum_angles[spike_eid] + threshold)
+    angle_ = .5 * (extern_angles[spike_eid] + accum_angles[spike_eid] - threshold)
+
+    sine = math.sin(angle)
+    cosine = math.cos(angle)
+    sine_ = math.sin(angle_)
+    cosine_ = math.cos(angle_)
+
+    vid1 = topo.target(spike_eid)
     vid2 = topo.target(topo.next_edge(spike_eid))
-    tip = verts[vid1]
-    vec1 = (tip - verts[vid2]).normalized()
-    vec2 = (tip - verts[vid0]).normalized()
+    x, y = (verts[vid1] - verts[vid2]).normalized().comps
 
-    # increase opening angle of the sector due to threshold
-    extra_opening = .5 * (extern_angles[spike_eid] - accum_angles[spike_eid] + threshold)
-
-    # rotate sector vectors to increase the opening angle
-    cosine = math.cos(extra_opening)
-    sine = math.sin(extra_opening)
-    return (
-        Geom2.mul_mtx_2x2((cosine, sine, -sine, cosine), vec1),
-        tip,
-        Geom2.mul_mtx_2x2((cosine, -sine, sine, cosine), vec2),
-    )
+    x1 = x*cosine + y*sine
+    y1 = -x*sine + y*cosine
+    x2 = -x*cosine_ - y*sine_
+    y2 = x*sine_ - y*cosine_
+    return vec(x1, y1), verts[vid1], vec(x2, y2)
 
 
-def _segment_closest_point_inside_sector(segment, sector):
+'''
+slower version of get_sector with 2 normalizations
+'''
+# def get_sector(verts, topo, spike_eid, extern_angles, accum_angles, threshold):
+#     '''
+#     Returns 2 vectors that define the sector rays, and the coordinates of the sector tip
+#     The vectors have unit lengths
+#     The vector pair is right-handed
+#     '''
+#     vid0, vid1 = topo.edge_verts(spike_eid)
+#     vid2 = topo.target(topo.next_edge(spike_eid))
+#     tip = verts[vid1]
+#     vec1 = (tip - verts[vid2]).normalized()
+#     vec2 = (tip - verts[vid0]).normalized()
+
+#     # increase opening angle of the sector due to threshold
+#     extra_opening = .5 * (extern_angles[spike_eid] - accum_angles[spike_eid] + threshold)
+
+#     # rotate sector vectors to increase the opening angle
+#     cosine = math.cos(extra_opening)
+#     sine = math.sin(extra_opening)
+
+#     v1x, v1y = vec1.comps[:2]
+#     v1x, v1y = (cosine*v1x + sine*v1y, -sine*v1x + cosine*v1y)
+#     v2x, v2y = vec2.comps[:2]
+#     v2x, v2y = (cosine*v2x - sine*v2y, sine*v2x + cosine*v2y)
+#     return vec(v1x, v1y), tip, vec(v2x, v2y)
+
+
+def segment_sector_clip(segment, sector):
+    '''
+    compute segment-sector overlap
+    original order of endpoints is not guaranteed
+    '''
+    def align(pt, axis, flip_y):
+        c, s = axis.comps[:2]
+        x, y = pt.comps[:2]
+        x, y = c*x + s*y, -s*x + c*y
+        if flip_y: return vec(x, -y)
+        return vec(x, y)
+
+    seg0, seg1 = segment
+
+    def intersect(tip, axis, flip_y):
+        a = align(seg0 - tip, axis, flip_y)
+        b = align(seg1 - tip, axis, flip_y)
+        
+        if a[1] < 0:
+            if b[1] > 0:
+                free_point = 1
+                cross = a[0] * b[1] - a[1] * b[0]
+                if cross > 0:
+                    i_x = cross / (b[1] - a[1])
+                    lower_x, upper_x = sorted((a[0], b[0]))
+                    i_x = min(max(i_x, lower_x), upper_x)
+                    i_point = tip + i_x * axis
+
+                else:
+                    i_point = None
+
+            else: # b[1] <= 0
+                return None, None
+
+        elif a[1] == 0:
+            if b[1] > 0:
+                free_point = 1
+                i_point = None
+            else: # b[1] <= 0
+                return None, None
+
+        else: # a[1] > 0
+            free_point = 0
+            if b[1] < 0:
+                cross = a[0] * b[1] - a[1] * b[0]
+                if cross < 0:
+                    i_x = cross / (b[1] - a[1])
+                    lower_x, upper_x = sorted((a[0], b[0]))
+                    i_x = min(max(i_x, lower_x), upper_x)
+                    i_point = tip + i_x * axis
+
+                else:
+                    i_point = None
+
+            else: #b[1] >= 0
+                i_point = None
+
+        return i_point, free_point
+
     dir1, tip, dir2 = sector
+    inters1, free1 = intersect(tip, dir1, False)
+    if inters1 is None and free1 is None:
+        return None, None
 
-    def pt_inside(pt):
-        rel_pt = pt - tip
-        return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
+    inters2, free2 = intersect(tip, dir2, True)
+    if inters2 is None and free2 is None:
+        return None, None
 
-    # make ray-like line
-    line = (segment[0], segment[1] - segment[0])
-    (linepara1, raypara1, _) = Geom2.lines_intersect(line, (tip, dir1))
-    (linepara2, raypara2, _) = Geom2.lines_intersect(line, (tip, dir2))
-
-    # check whether line containing segment passes through sector:
-    line_through_sector = raypara1 > 0 or raypara2 > 0
-
-    if not line_through_sector:
-        return None, None, None
-
-    # now we know that line goes through sector
-    # find intersections between segment and sector rays
-    intersect_params = []
-    if raypara1 > 0 and 0 < linepara1 and linepara1 < 1:
-        intersect_params.append(linepara1)
-
-    if raypara2 > 0 and 0 < linepara2 and linepara2 < 1:
-        intersect_params.append(linepara2)
-
-    # one intersection => one endpoint inside, other outside
-    if len(intersect_params) == 1:
-        if pt_inside(segment[0]):
-            candid_params = [0, intersect_params[0]]
+    if not inters1 and not inters2:
+        if free1 == free2:
+            return seg0, seg1 # do not clip
         else:
-            candid_params = [intersect_params[0], 1]
-    # two intersections => middle section passes through sector
-    elif len(intersect_params) == 2:
-        candid_params = list(sorted(intersect_params))
+            return None, None
 
-    # no intersections => entirely inside or outside
+    elif inters1 and inters2:
+        a, b = inters1, inters2 # clip both sides
+
+    elif inters1:
+        a, b = inters1, segment[free1] # clip one side
+
     else:
-        if pt_inside(segment[0]):
-            candid_params = [0, 1]
-        else:
-            return None, None, None
+        a, b = inters2, segment[free2] # clip one side
+
+    if a == b: # this can happen
+        return None, None
+    return a, b
+
+
+def segment_closest_point_inside_sector(segment, sector):
+    seg0, seg1 = segment_sector_clip(segment, sector)
+    if seg1 is None:
+        return None, None
 
     # find point on line closest to tip
-    projpara = Geom2.project_to_line(tip, line)
+    _, tip, _ = sector
+    proj_param = Geom2.project_to_line(tip, (seg0, seg1 - seg0))
+    if 0 < proj_param and proj_param < 1:
+        points = (seg0, seg0 + proj_param*(seg1 - seg0), seg1)
+    else:
+        points = (seg0, seg1)
 
-    if candid_params[0] < projpara and projpara < candid_params[1]:
-        candid_params.append(projpara)
-
-    def para_to_pt(para):
-        return line[0] + (para * line[1])
-
-    distances = ((tip - para_to_pt(para)).normSq() for para in candid_params)
-
-    p, d = min(zip(candid_params, distances), key = itemgetter(1))
-    return p, para_to_pt(p), d
+    distances = ((point, (tip - point).normSq()) for point in points)
+    return min(distances, key=itemgetter(1))
 
 
-def find_closest_edge_for_spike(verts, topo, sector, spike_eid):
-    spike_vid = topo.target(spike_eid)
+def find_closest_edge_for_spike(verts, topo, sector, spike_eid, db_visitor):
     _, tip_vertex, _ = sector
-
     far_cutoff_plane = None
-    closest_para, closest_distSq, closest_edge = None, None, None
+    closest_point, closest_distSq, closest_edge = None, None, None
+    skip_edges = (spike_eid, topo.next_edge(spike_eid))
+    eid_before, eid_after = (topo.prev_edge(spike_eid), topo.next_edge(skip_edges[1]))
 
     for eid in topo.iterate_room_edges(spike_eid):
         with timed_exec("inner routine"):
-            seg_i1, seg_i2 = topo.edge_verts(eid)
-
-            if spike_vid in (seg_i1, seg_i2):
+            if eid in skip_edges:
                 continue
 
-            seg0, seg1 = verts[seg_i1], verts[seg_i2]
-            seg0x, seg1x = seg0.append(1), seg1.append(1)
+            seg_vid1, seg_vid2 = topo.edge_verts(eid)
+            seg0, seg1 = verts[seg_vid1], verts[seg_vid2]
 
+            if vec.cross2((seg0 - tip_vertex), (seg1 - tip_vertex)) >= 0:
+                continue
+
+            seg0x, seg1x = seg0.append(1), seg1.append(1)
             if far_cutoff_plane and seg0x.dot(far_cutoff_plane) > 0 and seg1x.dot(far_cutoff_plane) > 0:
                 continue
 
-            para, point, distSq = _segment_closest_point_inside_sector((seg0, seg1), sector)
-            if para is None: continue
+            point, distSq = segment_closest_point_inside_sector((seg0, seg1), sector)
+            if point is None: continue
+            if eid == eid_before and point == verts[topo.target(eid_before)]: continue
+            if eid == eid_after and point == verts[topo.target(skip_edges[1])]: continue
+
             if closest_distSq is None or distSq < closest_distSq:
                 closest_distSq = distSq
-                closest_para = para
+                closest_point = point
                 closest_edge = eid
 
                 # make cutoff line
-                n = point - tip_vertex
-                far_cutoff_plane = n.append(-n.dot(point))
+                n = closest_point - tip_vertex
+                far_cutoff_plane = n.append(-n.dot(closest_point))
 
-    if closest_edge is None:
-        v0, v1 = topo.edge_verts(spike_eid)
-        v2 = topo.target(topo.next_edge(spike_eid))
-        raise RuntimeError("Could not find a single edge inside the sector ({}, {}, {})".format(v0, v1, v2))
-
-    return closest_edge, closest_para
+    return closest_edge, closest_point
 
 
-def check_line_of_sight(verts, topo, from_eid, to_eid):
+def check_line_of_sight(verts, topo, from_eid, to_eid, db_visitor):
+    # TODO refactor the line of sight function
+
     vid0 = topo.target(from_eid)
     vid1 = topo.target(to_eid)
     from_point, to_point = verts[vid0], verts[vid1]
-    n = to_point - from_point
-    near_cutoff = n.append(-n.dot(from_point))
-    far_cutoff = (-n).append(n.dot(to_point))
+
+    los = to_point - from_point
+    near_cutoff = los.append(-los.dot(from_point))
+    far_cutoff = (-los).append(los.dot(to_point))
 
     closest_param = 1.
     closest_edge, closest_edge_param = None, None
-    for eid in topo.iterate_room_edges(from_eid):
-        seg_vid0, seg_vid1 = topo.edge_verts(eid)
+    skip_edges = (from_eid, topo.next_edge(from_eid))
+    eid_before, eid_after = topo.prev_edge(from_eid), topo.next_edge(skip_edges[1])
 
-        if vid0 in (seg_vid0, seg_vid1) or vid1 in (seg_vid0, seg_vid1):
+    for eid in topo.iterate_room_edges(from_eid):
+        if eid in skip_edges: continue
+
+        seg_vid0, seg_vid1 = topo.edge_verts(eid)
+        if vid1 in (seg_vid0, seg_vid1):
             continue
 
         seg0, seg1 = verts[seg_vid0], verts[seg_vid1]
-        seg0x, seg1x = seg0.append(1), seg1.append(1)
 
+        seg0x, seg1x = seg0.append(1), seg1.append(1)
         if \
             (seg0x.dot(near_cutoff) < 0 and seg1x.dot(near_cutoff) < 0) or \
             (seg0x.dot( far_cutoff) < 0 and seg1x.dot( far_cutoff) < 0):
             continue
 
-        coef0, coef1, dist = Geom2.lines_intersect((from_point, n), (seg0, seg1 - seg0))
+        coef0, coef1, dist = Geom2.lines_intersect((from_point, los), (seg0, seg1 - seg0))
 
+        # if segment coincides with the line of sight
         if math.isnan(coef0) and dist < 1e-20:
-            d0 = (seg0 - from_point).normSq()
-            d1 = (seg1 - from_point).normSq()
-            coef0 = math.sqrt(min(d0, d1)) / n.norm()
+            dist0 = (seg0 - from_point).normSq()
+            dist1 = (seg1 - from_point).normSq()
+            coef0 = math.sqrt(min(dist0, dist1)) / los.norm()
 
             if coef0 < closest_param:
                 closest_param = coef0
                 closest_edge = eid
-                if d0 < d1:
+                if dist0 < dist1:
+                    if eid == eid_after:
+                        continue
                     closest_edge_param = 0
                     x_point = seg0
                 else:
+                    if eid == eid_before:
+                        continue
                     closest_edge_param = 1
                     x_point = seg1
-                far_cutoff = (-n).append(n.dot(x_point))
-
+                far_cutoff = (-los).append(los.dot(x_point))
 
         elif 0 < coef1 and coef1 < 1 and 0 < coef0 and coef0 < closest_param:
             closest_param = coef0
             closest_edge = eid
             closest_edge_param = coef1
-            x_point = from_point + coef0 * n
-            far_cutoff = (-n).append(n.dot(x_point))
+            x_point = from_point + coef0 * los
+            far_cutoff = (-los).append(los.dot(x_point))
 
-    # choose correct side of edge
     if closest_edge is not None:
-        closest_edge, closest_edge_param = choose_closer_side_of_edge(verts, topo, from_point, closest_edge, closest_edge_param)
+        v0, v1 = topo.edge_verts(closest_edge)
+        if closest_edge_param == 0:
+            point = verts[v0]
+        elif closest_edge_param == 1:
+            point = verts[v1]
+        else:
+            point = verts[v0] + closest_edge_param * (verts[v1] - verts[v0])
 
-    return closest_edge, closest_edge_param
+        closest_edge = choose_closer_side_of_edge(verts, topo, from_point, closest_edge)
+        return closest_edge, point
+
+    return None, None
 
 
 def calc_external_angle(verts, topo, eid):
@@ -263,15 +369,15 @@ def calc_accum_angle(prev_accum, this_external, threshold):
     return max(prev_accum + this_external, 0.)
 
 
-def choose_closer_side_of_edge(verts, topo, seen_from_point, eid, param):
+def choose_closer_side_of_edge(verts, topo, seen_from_point, eid):
     if topo.room_id(eid) == topo.room_id(topo.opposite(eid)):
         vid0, vid1 = topo.edge_verts(eid)
         v0, v1 = verts[vid0], verts[vid1]
 
         if vec.cross2(v0 - seen_from_point, v1 - seen_from_point) > 0:
-            return topo.opposite(eid), 1 - param
+            return topo.opposite(eid)
 
-    return eid, param
+    return eid
 
 
 def delete_redundant_portals(topo, external_angles, accum_angles, threshold):
@@ -387,19 +493,18 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         update_angles_after_connecting(verts, topo, extern_angles, accum_angles, new_eid, threshold)
 
 
-    def connect_to_exterior_wall(start_eid, edge, param):
-        if param == 0:
+    def connect_to_exterior_wall(start_eid, edge, point):
+        v0, v1 = topo.edge_verts(edge)
+        v0, v1 = verts[v0], verts[v1]
+        if point == v0:
             connect_to_target(start_eid, topo.prev_edge(edge))
-        elif param == 1:
+        elif point == v1:
             connect_to_target(start_eid, edge)
         else:
-            v0, v1 = topo.edge_verts(edge)
-            v0, v1 = verts[v0], verts[v1]
-            new_vert = v0 + param * (v1 - v0)
             new_eid = topo.insert_vertex(len(verts), edge)
 
-            if db_visitor:
-                db_visitor.add_text(new_vert, str(topo.target(new_eid)), color="cyan")
+            # if db_visitor:
+            #     db_visitor.add_text(point, str(topo.target(new_eid)), color="cyan")
 
             assert topo.next_edge(new_eid) == edge
             assert topo.prev_edge(edge) == new_eid
@@ -414,7 +519,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
 
             assert len(verts) == topo.target(new_eid), "something went wrong here"
 
-            verts.append(new_vert)
+            verts.append(point)
             conn_eid = topo.connect(start_eid, new_eid, verts)
             update_angles_after_connecting(verts, topo, extern_angles, accum_angles, conn_eid, threshold)
 
@@ -423,14 +528,18 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         vid0, vid1 = topo.edge_verts(target_eid)
         start_vert = verts[topo.target(from_eid)]
         if (verts[vid0] - start_vert).normSq() < (verts[vid1] - start_vert).normSq():
+            if topo.prev_edge(target_eid) == topo.next_edge(from_eid):
+                return
             return connect_to_target_if_los_is_free(from_eid,  topo.prev_edge(target_eid))
         else:
+            if target_eid == topo.prev_edge(from_eid):
+                return
             return connect_to_target_if_los_is_free(from_eid, target_eid)
 
 
     def connect_to_target_if_los_is_free(start_eid, portal_eid):
         with timed_exec("LOS"):
-            closest_eid, param = check_line_of_sight(verts, topo, start_eid, portal_eid)
+            closest_eid, param = check_line_of_sight(verts, topo, start_eid, portal_eid, db_visitor)
         if closest_eid is None or closest_eid == portal_eid:
             return connect_to_target(start_eid, portal_eid)
 
@@ -440,31 +549,68 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             return connect_to_exterior_wall(start_eid, closest_eid, param)
 
 
-    if db_visitor:
-        for eid in tuple(topo.iterate_all_internal_edges()):
-            vid = topo.target(eid)
-            db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
+    # if db_visitor:
+    #     for eid in tuple(topo.iterate_all_internal_edges()):
+    #         vid = topo.target(eid)
+    #         db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
     # sorting spikes by external angle makes it faster!
-    all_edges = tuple(sorted(tuple(topo.iterate_all_internal_edges()),
+    all_edges = list(sorted(tuple(topo.iterate_all_internal_edges()),
         key=lambda eid: -accum_angles[eid]))
 
     for spike_eid in all_edges:
         if accum_angles[spike_eid] <= threshold: continue # not a spike
 
-        sector = get_sector(verts, topo, spike_eid, extern_angles, accum_angles, threshold)
-        closest_edge, closest_param = find_closest_edge_for_spike(verts, topo, sector, spike_eid)
+        # if db_visitor:
+        #     vid = topo.target(spike_eid)
+        #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
+
+        # special case for almost 180 degree sectors
+        if accum_angles[spike_eid] <= threshold + 1e-6:
+            sector = get_180_sector(verts, topo, spike_eid, extern_angles)
+        else:
+            sector = get_sector(verts, topo, spike_eid, extern_angles, accum_angles, threshold)
+
+        # if db_visitor:
+        #     d1, t, d2 = sector
+        #     db_visitor.add_polygon((t+20*d1, t), color="green")
+        #     db_visitor.add_polygon((t+20*d2, t), color="red")
+
+        closest_edge, closest_point = find_closest_edge_for_spike(verts, topo, sector, spike_eid, db_visitor)
+
+        # d1, tip, d2 = sector
+        # v0, v1 = topo.edge_verts(closest_edge)
+        # cr = vec.cross2(verts[v0] - tip, verts[v1] - tip)
+        # if cr >= 0 and db_visitor:
+        #     db_visitor.add_polygon((verts[v0], verts[v1]), color="magenta")
+        #     db_visitor.add_polygon((tip+200*d1, tip), color="green")
+        #     db_visitor.add_polygon((tip+200*d2, tip), color="red")
+
+        if closest_edge is None:
+            if db_visitor:
+                v0, v1 = topo.edge_verts(spike_eid)
+                v2 = topo.target(topo.next_edge(spike_eid))
+                d1, t, d2 = sector
+                db_visitor.add_polygon((t+200*d1, t, t+200*d2, t), color="gold")
+                db_visitor.add_text(verts[v0], str(v0), color="gold")
+                db_visitor.add_text(verts[v1], str(v1), color="gold")
+                db_visitor.add_text(verts[v2], str(v2), color="gold")
+            nxe = topo.next_edge(spike_eid)
+            raise RuntimeError("Could not find a single edge for spike e{}: {} -> e{}: {}".format(
+                spike_eid, topo.debug_repr(spike_eid), nxe, topo.debug_repr(nxe)))
 
         # if closest edge is a portal
         if topo.is_portal(closest_edge):
             _, tip, _ = sector
 
             # choose the correct side of the portal
-            closest_edge, closest_param = choose_closer_side_of_edge(verts, topo, tip, closest_edge, closest_param)
+            closest_edge = choose_closer_side_of_edge(verts, topo, tip, closest_edge)
 
-            if closest_param == 0:
+            v0, v1 = topo.edge_verts(closest_edge)
+            v0, v1 = verts[v0], verts[v1]
+            if closest_point == v0:
                 connect_to_target(spike_eid, topo.prev_edge(closest_edge))
-            elif closest_param == 1:
+            elif closest_point == v1:
                 connect_to_target(spike_eid, closest_edge)
 
             # If closest point is not one of the endpoints,
@@ -475,11 +621,8 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
                     rel_pt = pt - tip
                     return vec.cross2(dir1, rel_pt) > 0 and vec.cross2(dir2, rel_pt) < 0
 
-                other_start_pt, other_end_pt = topo.edge_verts(closest_edge)
-                other_start_pt, other_end_pt = verts[other_start_pt], verts[other_end_pt]
-
-                start_inside = pt_inside_sector(sector, other_start_pt)
-                end_inside = pt_inside_sector(sector, other_end_pt)
+                start_inside = pt_inside_sector(sector, v0)
+                end_inside = pt_inside_sector(sector, v1)
 
                 # if none of the portal endpoints is inside sector, create 2 portals to both ends:
                 if not start_inside and not end_inside:
@@ -492,9 +635,14 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
                 else:
                     connect_to_target_if_los_is_free(spike_eid, closest_edge)
 
+                # if the closest portal was occluded by other portals,
+                # there is no guarantee that the spike was removed 
+                if accum_angles[spike_eid] > threshold:
+                    all_edges.append(spike_eid)
+
         # if no portals are in the way, attach to an edge/vertex on the exterior wall
         else:
-            connect_to_exterior_wall(spike_eid, closest_edge, closest_param)
+            connect_to_exterior_wall(spike_eid, closest_edge, closest_point)
 
     delete_redundant_portals(topo, extern_angles, accum_angles, threshold)
 

@@ -256,12 +256,16 @@ class VisualDebug(object):
             PolygonView(Polygon2d(points), outline_color=color))
         self.counter += 1
 
+    def add_plus(self, loc, color="#ffffff", size=20):
+        self.app.add_draw_object('debug_text_{}'.format(self.counter),
+            PlusView(loc=loc, size=size, color=color))
+        self.counter += 1
+
 
 class Application(tk.Frame):
     def __init__(self, master=None, input_polys=(), db_mode=False):
         tk.Frame.__init__(self, master)
-        self.db_mode = db_mode
-        self.debugger = None#VisualDebug(self)
+        self.debugger = VisualDebug(self) if db_mode else None
 
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
@@ -323,8 +327,6 @@ class Application(tk.Frame):
     def createWidgets(self):
         cwidth = 1200
         cheight = 900
-        if self.db_mode: cwidth /= 2
-
 
         self.canvas = tk.Canvas(self, background='#000000', width=cwidth, height=cheight,
             scrollregion=(0, 0, cwidth, cheight))
@@ -338,10 +340,6 @@ class Application(tk.Frame):
         self.debug_canvas = tk.Canvas(self, background='#000020', width=cwidth, height=cheight,
             scrollregion=(-1000, -1000, 1000, 1000))
         self.debug_canvas.scan_dragto(cwidth/2, cheight/2, gain=1)
-        
-        if self.db_mode:
-            self.debug_canvas.pack(side = tk.RIGHT, expand = True, fill = tk.BOTH)
-
 
         self.canvas.config(xscrollincrement=1, yscrollincrement=1)
 

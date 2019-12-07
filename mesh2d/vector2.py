@@ -181,13 +181,6 @@ class Geom2:
 
 
     @staticmethod
-    def mul_mtx_2x2(mtx, vector):
-        return vec(
-            mtx[0]*vector[0] + mtx[1]*vector[1],
-            mtx[2]*vector[0] + mtx[3]*vector[1])
-
-
-    @staticmethod
     def lines_intersect(line1, line2, angle_tolerance = 1e-8):
         """
         returns a tuple (coef1, coef2, distSq)
