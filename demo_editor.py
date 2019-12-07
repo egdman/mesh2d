@@ -794,12 +794,12 @@ class ProvideException(object):
 def main():
     parser = ArgumentParser()
 
-    parser.add_argument('-d', '--debug', action='store_true', help='Start in debug mode')
-    parser.add_argument('-p', '--poly', type=str, default=None, help='open this polygon file')
+    parser.add_argument('-d', '--debug', action='store_true', help='start in debug mode')
+    parser.add_argument('input', metavar="FILE", nargs='?', default=None, type=str, help='open this polygon file')
 
     args = parser.parse_args()
 
-    app = Application(db_mode=args.debug, poly_path=args.poly)
+    app = Application(db_mode=args.debug, poly_path=args.input)
     app.master.title('Map editor')
     app.mainloop() 
 
