@@ -36,7 +36,7 @@ def polys_to_ascii(polys):
         s = ""
         loops = ((poly.vertices[idx] for idx in poly.graph.loop_iterator(loop)) for loop in poly.graph.loops)
         for loop in loops:
-            s += " ".join("{} {}".format(v[0], v[1]) for v in loop)
+            s += " ".join("{} {}".format(ieee754_ser(v[0]), ieee754_ser(v[1])) for v in loop)
             s += "\n"
         return s
 
@@ -44,12 +44,18 @@ def polys_to_ascii(polys):
 
 
 def ascii_to_polys(text):
+    def read_float(s):
+        try:
+            return float(s)
+        except ValueError:
+            return ieee754_unser(s)
+
     def _ascii_to_poly(text):
         loops = []
         for line in text.splitlines():
             loop = []
             loops.append(loop)
-            crds = (float(el.strip()) for el in line.strip().split())
+            crds = (read_float(el.strip()) for el in line.strip().split())
             try:
                 while True:
                     v0 = next(crds)
