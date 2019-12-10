@@ -72,7 +72,8 @@ def ascii_to_polys(text):
 
 
 def ieee754_ser(floatNumber):
-    return hex(struct.unpack('<Q', struct.pack('<d', floatNumber))[0])[:-1]
+    i, = struct.unpack('<Q', struct.pack('<d', floatNumber))
+    return format(i, '#x')
 
 def ieee754_unser(hexString):
     return struct.unpack('<d', struct.pack('<Q', int(hexString, base=16)))[0]
