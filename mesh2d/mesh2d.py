@@ -42,70 +42,24 @@ def timed_exec(name):
     timing[name].add(clock() - s)
 
 
-def get_180_sector(verts, topo, spike_eid, extern_angles):
-    # increase opening angle of the sector due to threshold
-    extra_opening = .5 * extern_angles[spike_eid]
-    cosine = math.cos(extra_opening)
-    sine = math.sin(extra_opening)
-
-    vid0, vid1 = topo.edge_verts(spike_eid)
-    x, y = (verts[vid1] - verts[vid0]).normalized().comps
-    x, y = (cosine*x - sine*y, sine*x + cosine*y)
-    return vec(-x, -y), verts[vid1], vec(x, y)
-
-
-def get_sector(verts, topo, spike_eid, extern_angles, accum_angles, threshold):
+def get_sector(topo, spike_eid, unit_edges, accum_angles, threshold):
     '''
     Returns 2 vectors that define the sector rays, and the coordinates of the sector tip
     The vectors have unit lengths
     The vector pair is right-handed
     '''
-    angle  = .5 * (extern_angles[spike_eid] - accum_angles[spike_eid] + threshold)
-    angle_ = .5 * (extern_angles[spike_eid] + accum_angles[spike_eid] - threshold)
+    # increase opening angle of the sector due to threshold
+    extern_angle = calc_external_angle(unit_edges, spike_eid, topo.next_edge(spike_eid))
+    extra_opening = .5 * (extern_angle - accum_angles[spike_eid] + threshold)
 
-    sine = math.sin(angle)
-    cosine = math.cos(angle)
-    sine_ = math.sin(angle_)
-    cosine_ = math.cos(angle_)
+    cosine = math.cos(extra_opening)
+    sine = math.sin(extra_opening)
 
-    vid1 = topo.target(spike_eid)
-    vid2 = topo.target(topo.next_edge(spike_eid))
-    x, y = (verts[vid1] - verts[vid2]).normalized().comps
-
-    x1 = x*cosine + y*sine
-    y1 = -x*sine + y*cosine
-    x2 = -x*cosine_ - y*sine_
-    y2 = x*sine_ - y*cosine_
-    return vec(x1, y1), verts[vid1], vec(x2, y2)
-
-
-'''
-slower version of get_sector with 2 normalizations
-'''
-# def get_sector(verts, topo, spike_eid, extern_angles, accum_angles, threshold):
-#     '''
-#     Returns 2 vectors that define the sector rays, and the coordinates of the sector tip
-#     The vectors have unit lengths
-#     The vector pair is right-handed
-#     '''
-#     vid0, vid1 = topo.edge_verts(spike_eid)
-#     vid2 = topo.target(topo.next_edge(spike_eid))
-#     tip = verts[vid1]
-#     vec1 = (tip - verts[vid2]).normalized()
-#     vec2 = (tip - verts[vid0]).normalized()
-
-#     # increase opening angle of the sector due to threshold
-#     extra_opening = .5 * (extern_angles[spike_eid] - accum_angles[spike_eid] + threshold)
-
-#     # rotate sector vectors to increase the opening angle
-#     cosine = math.cos(extra_opening)
-#     sine = math.sin(extra_opening)
-
-#     v1x, v1y = vec1.comps
-#     v1x, v1y = (cosine*v1x + sine*v1y, -sine*v1x + cosine*v1y)
-#     v2x, v2y = vec2.comps
-#     v2x, v2y = (cosine*v2x - sine*v2y, sine*v2x + cosine*v2y)
-#     return vec(v1x, v1y), tip, vec(v2x, v2y)
+    v1x, v1y = unit_edges[topo.next_edge(spike_eid)].comps
+    v2x, v2y = unit_edges[spike_eid].comps
+    v1x, v1y = (-cosine*v1x - sine*v1y, sine*v1x - cosine*v1y)
+    v2x, v2y = (cosine*v2x - sine*v2y, sine*v2x + cosine*v2y)
+    return vec(v1x, v1y), vec(v2x, v2y)
 
 
 def segment_sector_clip(segment, sector, sector_normalized=True):
@@ -315,48 +269,47 @@ def check_occlusion(verts, topo, from_eid, to_eid, db_visitor):
     return closest_edge, x_point
 
 
-def calc_external_angle(verts, topo, eid):
+def calc_unit_edge(verts, topo, eid):
     vid0, vid1 = topo.edge_verts(eid)
-    vid2 = topo.target(topo.next_edge(eid))
+    return (verts[vid1] - verts[vid0]).normalized()
 
-    prev_v = verts[vid0]
-    this_v = verts[vid1]
-    next_v = verts[vid2]
-    dir0 = this_v - prev_v
-    dir1 = next_v - this_v
 
+def calc_external_angle(unit_edges, eid, next_eid):
+    dir0 = unit_edges[eid]
+    dir1 = unit_edges[next_eid]
     if vec.cross2(dir0, dir1) > 0:
         return math.acos(Geom2.cos_angle(dir0, dir1))
     else:
         return -math.acos(Geom2.cos_angle(dir0, dir1))
 
 
-def calc_accum_angles(external_angles, topo, threshold):
-    accum_angles = [None] * len(external_angles)
+def calc_accum_angles(unit_edges, topo, threshold):
+    accum_angles = [None] * len(unit_edges)
     for eid0 in topo.iterate_all_loops():
         loop_iter = iter(topo.iterate_loop_edges(eid0))
         tail = []
         for eid in loop_iter:
             tail.append(eid)
-            if abs(external_angles[eid]) > threshold:
+            if abs(calc_external_angle(unit_edges, eid, topo.next_edge(eid))) > threshold:
                 break
 
         accum_angle = 0.
         for eid in chain(loop_iter, tail):
-            accum_angle = max(accum_angle + external_angles[eid], 0.) # accumulate only positive values
+            accum_angle = max(accum_angle + calc_external_angle(unit_edges, eid, topo.next_edge(eid)), 0.) # accumulate only positive values
             accum_angles[eid] = accum_angle
             if accum_angle > threshold:
                 accum_angle = 0.
     return accum_angles
 
 
-def calc_accum_angle(prev_accum, this_external, threshold):
+def calc_accum_angle(unit_edges, prev_accum, eid, next_eid, threshold):
+    this_external = calc_external_angle(unit_edges, eid, next_eid)
     if prev_accum > threshold:
         return max(this_external, 0.)
     return max(prev_accum + this_external, 0.)
 
 
-def delete_redundant_portals(topo, external_angles, accum_angles, threshold):
+def delete_redundant_portals(topo, unit_edges, accum_angles, threshold):
     deleted = [False] * topo.num_edges()
 
     def recalc_angles(eid):
@@ -365,15 +318,18 @@ def delete_redundant_portals(topo, external_angles, accum_angles, threshold):
         while deleted[eid_ccw]:
             eid_ccw = topo.prev_edge(topo.opposite(eid_ccw))
 
-        new_external_angle = math.pi + external_angles[eid] + external_angles[eid_ccw]
+        next_eid = topo.next_edge(eid)
+        while deleted[next_eid]:
+            next_eid = topo.next_edge(topo.opposite(next_eid))
+
         eid_ccw_prev = topo.prev_edge(eid_ccw)
         while deleted[eid_ccw_prev]:
             eid_ccw_prev = topo.prev_edge(topo.opposite(eid_ccw_prev))
 
-        accum_angle = calc_accum_angle(accum_angles[eid_ccw_prev], new_external_angle, threshold)
+        accum_angle = calc_accum_angle(unit_edges, accum_angles[eid_ccw_prev], eid_ccw, next_eid, threshold)
         if accum_angle > threshold:
             # cannot delete eid
-            return False, eid_ccw, new_external_angle, []
+            return False, []
 
         new_accum_angles = [(eid_ccw, accum_angle)]
         while True:
@@ -381,14 +337,18 @@ def delete_redundant_portals(topo, external_angles, accum_angles, threshold):
             while deleted[eid]:
                 eid = topo.next_edge(topo.opposite(eid))
 
-            accum_angle = calc_accum_angle(accum_angle, external_angles[eid], threshold)
+            next_eid = topo.next_edge(eid)
+            while deleted[next_eid]:
+                next_eid = topo.next_edge(topo.opposite(next_eid))
+
+            accum_angle = calc_accum_angle(unit_edges, accum_angle, eid, next_eid, threshold)
             if accum_angle > threshold:
                 # cannot delete eid
-                return False, eid_ccw, new_external_angle, []
+                return False, []
 
             if accum_angle == accum_angles[eid]:
                 # we can delete eid
-                return True, eid_ccw, new_external_angle, new_accum_angles
+                return True, new_accum_angles
 
             new_accum_angles.append((eid, accum_angle))
 
@@ -397,19 +357,17 @@ def delete_redundant_portals(topo, external_angles, accum_angles, threshold):
         if not topo.is_portal(eid): continue
         if deleted[eid]: continue
 
-        can_delete, eid_ccw, new_extern, new_accum = recalc_angles(eid)
-        if not can_delete: continue
+        redundant, new_accum = recalc_angles(eid)
+        if not redundant: continue
 
         eid_ = topo.opposite(eid)
-        can_delete, eid_ccw_, new_extern_, new_accum_ = recalc_angles(eid_)
-        if not can_delete: continue
+        redundant, new_accum_ = recalc_angles(eid_)
+        if not redundant: continue
 
         deleted[eid] = deleted[eid_] = True
-        external_angles[eid] = accum_angles[eid] = None
-        external_angles[eid_] = accum_angles[eid_] = None
+        unit_edges[eid] = accum_angles[eid] = None
+        unit_edges[eid_] = accum_angles[eid_] = None
 
-        external_angles[eid_ccw] = new_extern
-        external_angles[eid_ccw_] = new_extern_
         for mod_eid, mod_accum_angle in chain(new_accum, new_accum_):
             accum_angles[mod_eid] = mod_accum_angle
 
@@ -418,25 +376,23 @@ def delete_redundant_portals(topo, external_angles, accum_angles, threshold):
             topo.remove_edge(eid)
 
 
-def update_angles_after_connecting(verts, topo, extern_angles, accum_angles, new_eid, threshold):
-    extern_angles.extend((None, None))
+def update_angles_after_connecting(topo, unit_edges, accum_angles, new_eid, threshold):
     accum_angles.extend((None, None))
 
     def _impl(new_eid):
         prev_eid = topo.prev_edge(new_eid)
 
-        extern_angles[prev_eid] = calc_external_angle(verts, topo, prev_eid)
         accum_angles[prev_eid] = calc_accum_angle(
-            accum_angles[topo.prev_edge(prev_eid)], extern_angles[prev_eid], threshold)
+            unit_edges, accum_angles[topo.prev_edge(prev_eid)], prev_eid, new_eid, threshold)
 
-        extern_angles[new_eid] = calc_external_angle(verts, topo, new_eid)
-        accum_angles[new_eid] = calc_accum_angle(accum_angles[prev_eid], extern_angles[new_eid], threshold)
+        accum_angles[new_eid] = calc_accum_angle(
+            unit_edges, accum_angles[prev_eid], new_eid, topo.next_edge(new_eid), threshold)
 
         accum_angle = accum_angles[new_eid]
         for eid in topo.iterate_loop_edges(topo.next_edge(new_eid)):
-            if eid == topo.opposite(new_eid): break
+            if topo.next_edge(eid) == topo.opposite(new_eid): break
 
-            accum_angle = calc_accum_angle(accum_angle, extern_angles[eid], threshold)
+            accum_angle = calc_accum_angle(unit_edges, accum_angle, eid, topo.next_edge(eid), threshold)
             old_accum_angle = accum_angles[eid]
             accum_angles[eid] = accum_angle
 
@@ -458,15 +414,18 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
     This function uses algorithm from R. Oliva and N. Pelechano - 
     Automatic Generation of Suboptimal NavMeshes
     """
-    extern_angles = [None] * topo.num_edges()
+    unit_edges = [None] * topo.num_edges()
     for eid in topo.iterate_all_internal_edges():
-        extern_angles[eid] = calc_external_angle(verts, topo, eid)
+        unit_edges[eid] = calc_unit_edge(verts, topo, eid)
 
-    accum_angles = calc_accum_angles(extern_angles, topo, threshold)
+    accum_angles = calc_accum_angles(unit_edges, topo, threshold)
 
-    def connect_to_target(start_eid, edge):
-        new_eid = topo.connect(start_eid, edge, verts)
-        update_angles_after_connecting(verts, topo, extern_angles, accum_angles, new_eid, threshold)
+    def connect_to_target(start_eid, end_eid):
+        new_eid = topo.connect(start_eid, end_eid, verts)
+        unit_edges.extend((None, None))
+        unit_edges[new_eid] = calc_unit_edge(verts, topo, new_eid)
+        unit_edges[topo.opposite(new_eid)] = -unit_edges[new_eid]
+        update_angles_after_connecting(topo, unit_edges, accum_angles, new_eid, threshold)
 
 
     def connect_to_exterior_wall(start_eid, edge, point):
@@ -479,8 +438,8 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         else:
             new_eid = topo.insert_vertex(len(verts), edge)
 
-            # if db_visitor:
-            #     db_visitor.add_text(point, str(topo.target(new_eid)), color="cyan")
+            if db_visitor:
+                db_visitor.add_text(point, str(topo.target(new_eid)), color="cyan")
 
             assert topo.next_edge(new_eid) == edge
             assert topo.prev_edge(edge) == new_eid
@@ -488,16 +447,20 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             assert topo.room_id(edge) is not None
 
             # add angles for new_eid
-            extern_angles.extend((None, None))
+            unit_edges.extend((None, None))
             accum_angles.extend((None, None))
-            extern_angles[new_eid] = 0.
-            accum_angles[new_eid] = calc_accum_angle(accum_angles[topo.prev_edge(new_eid)], 0., threshold)
+            unit_edges[new_eid] = unit_edges[edge]
+
+            prev_accum = accum_angles[topo.prev_edge(new_eid)]
+            if prev_accum > threshold:
+                accum_angles[new_eid] = 0.
+            else:
+                accum_angles[new_eid] = max(prev_accum, 0.)
 
             assert len(verts) == topo.target(new_eid), "something went wrong here"
 
             verts.append(point)
-            conn_eid = topo.connect(start_eid, new_eid, verts)
-            update_angles_after_connecting(verts, topo, extern_angles, accum_angles, conn_eid, threshold)
+            connect_to_target(start_eid, new_eid)
 
 
     def connect_to_closest_endpoint_if_los_is_free(from_eid, target_eid):
@@ -525,10 +488,10 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             return connect_to_exterior_wall(start_eid, occluding_eid, point)
 
 
-    # if db_visitor:
-    #     for eid in tuple(topo.iterate_all_internal_edges()):
-    #         vid = topo.target(eid)
-    #         db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
+    if db_visitor:
+        for eid in tuple(topo.iterate_all_internal_edges()):
+            vid = topo.target(eid)
+            db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
     # sorting spikes by external angle makes it faster!
     all_edges = list(sorted(tuple(topo.iterate_all_internal_edges()),
@@ -541,16 +504,14 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         #     vid = topo.target(spike_eid)
         #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
-        # special case for almost 180 degree sectors
-        if accum_angles[spike_eid] <= threshold + 1e-6:
-            sector = get_180_sector(verts, topo, spike_eid, extern_angles)
-        else:
-            sector = get_sector(verts, topo, spike_eid, extern_angles, accum_angles, threshold)
+        sector = get_sector(topo, spike_eid, unit_edges, accum_angles, threshold)
+        d0, d1 = sector
+        sector = d0, verts[topo.target(spike_eid)], d1
 
-        # if db_visitor:
-        #     d1, t, d2 = sector
-        #     db_visitor.add_polygon((t+20*d1, t), color="green")
-        #     db_visitor.add_polygon((t+20*d2, t), color="red")
+        if db_visitor:
+            d1, t, d2 = sector
+            db_visitor.add_polygon((t+20*d1, t), color="green")
+            db_visitor.add_polygon((t+20*d2, t), color="red")
 
         closest_edge, closest_point = find_closest_edge_for_spike(verts, topo, sector, spike_eid, db_visitor)
         if closest_edge is None:
@@ -607,7 +568,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         else:
             connect_to_exterior_wall(spike_eid, closest_edge, closest_point)
 
-    delete_redundant_portals(topo, extern_angles, accum_angles, threshold)
+    delete_redundant_portals(topo, unit_edges, accum_angles, threshold)
 
 
 r'''
