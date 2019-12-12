@@ -7,6 +7,7 @@ import struct
 import Tkinter as tk
 from argparse import ArgumentParser
 import traceback
+from math import floor
 from mesh2d import *
 from views import *
 
@@ -43,7 +44,7 @@ def polys_to_ascii(polys):
     return "&\n".join(_poly_to_ascii(poly) for poly in polys)
 
 
-def ascii_to_polys(text):
+def ascii_to_polys(text, scale):
     def read_float(s):
         try:
             return float(s)
@@ -55,7 +56,7 @@ def ascii_to_polys(text):
         for line in text.splitlines():
             loop = []
             loops.append(loop)
-            crds = (read_float(el.strip()) for el in line.strip().split())
+            crds = (scale * read_float(el.strip()) for el in line.strip().split())
             try:
                 while True:
                     v0 = next(crds)
@@ -172,7 +173,16 @@ class CreateWallTool(Tool):
 class FreePolyTool(Tool):
     def __init__(self, parent):
         self.vertices = []
+        self.half_spacing = 2.5
         super(FreePolyTool, self).__init__(parent)
+
+    def grid_snap(self, p):
+        s = self.half_spacing
+        x, y = p
+        x = floor((x+s) / (2*s))
+        y = floor((y+s) / (2*s))
+        return vec(x*s*2, y*s*2)
+
 
     def right_click(self, event):
         app = self.parent
@@ -198,7 +208,8 @@ class FreePolyTool(Tool):
 
     def left_click(self, event):
         app = self.parent
-        new_vrt = app.get_world_crds(event.x, event.y)
+        new_vrt = app.get_world_crds(event.x-10, event.y-10)
+        new_vrt = self.grid_snap(new_vrt)
 
         app.history.append((RecordType.AddVertex, new_vrt))
 
@@ -207,6 +218,11 @@ class FreePolyTool(Tool):
             PointHelperView(loc=new_vrt))
 
         self.vertices.append(new_vrt)
+
+        if len(self.vertices) == 1:
+            app.add_draw_object(
+                'tool_helpers/free_poly/future_segment',
+                SegmentHelperView(new_vrt, new_vrt, color="#99dd99"))
 
         if len(self.vertices) > 1:
             prev_vrt = self.vertices[-2]
@@ -218,6 +234,25 @@ class FreePolyTool(Tool):
         app.draw_all()
 
 
+    def mouse_moved(self, event, dx, dy):
+        app = self.parent
+        loc = app.get_world_crds(event.x-10, event.y-10)
+        loc = self.grid_snap(loc)
+
+        if 'tool_helpers/free_poly/cursor' not in app.draw_objects:
+            app.add_draw_object('tool_helpers/free_poly/cursor',
+                PlusView(loc=loc, size=12, color="#99dd99"))
+        else:
+            app.draw_objects['tool_helpers/free_poly/cursor'].modify(loc)
+
+        if len(self.vertices) > 0:
+            prev_vrt = self.vertices[-1]
+            app.draw_objects['tool_helpers/free_poly/future_segment'].modify(prev_vrt, loc)
+
+        app.draw_all()
+
+
+
 class SelectTool(Tool):
 
     def right_click(self, event):
@@ -225,7 +260,7 @@ class SelectTool(Tool):
 
 
     def left_click(self, event):
-        print("SELECT: left click")
+        print("SELECT: left click, {}".format(self.parent.get_world_crds(event.x, event.y)))
 
 
 def get_event_modifiers(event):
@@ -264,7 +299,7 @@ class VisualDebug(object):
 
 
 class Application(tk.Frame):
-    def __init__(self, master=None, input_polys=(), db_mode=False):
+    def __init__(self, master=None, input_polys=(), db_mode=False, camera_pos=vec(0, 0)):
         tk.Frame.__init__(self, master)
         self.debugger = VisualDebug(self) if db_mode else None
 
@@ -294,18 +329,18 @@ class Application(tk.Frame):
         self.draw_objects = {}
 
         # info about camera position
-        self.camera_pos = vec(0,0)
+        self.camera_pos = camera_pos
         self.camera_rot = 0.
         self.camera_size = 1.
         self.rot_marker_world = vec(0, 0)
 
-        self.zoom_rate = 1.04
+        self.zoom_rate = 1.1 #1.2
 
         # draw big cross marker at the world coordinate origin
-        self.add_draw_object(
-            'origin_marker',
-            PlusView(250)
-        )
+        self.add_draw_object("origin_marker_x",
+            SegmentHelperView(vec(-250, 0), vec(250, 0), color='#2f2f2f'))
+        self.add_draw_object("origin_marker_y",
+            SegmentHelperView(vec(0, -250), vec(0, 250), color='#2f2f2f'))
 
         self.pointer_over_poly = False
 
@@ -529,7 +564,7 @@ class Application(tk.Frame):
 
         self.add_draw_object(
             'pan_marker',
-            PlusView(15, loc=pointer_world_crds, color='yellow')
+            PlusView(pointer_world_crds, size=15, color='yellow')
         )
 
 
@@ -541,7 +576,7 @@ class Application(tk.Frame):
 
         self.add_draw_object(
             'rotate_marker',
-            PlusView(15, loc=self.rot_marker_world, color='red')
+            PlusView(self.rot_marker_world, size=15, color='red')
         )
 
 
@@ -588,7 +623,7 @@ class Application(tk.Frame):
 
 
             elif self.rotate_mode:
-                angle = 0.008*delta_x
+                angle = 0.003*delta_x
                 self.camera_rot += angle
 
                 # make camera rotate around the marker rather than screen center
@@ -765,10 +800,10 @@ class Application(tk.Frame):
             draw_object.draw_self(camera_trans, self.canvas)
 
 
-def read_polygons(poly_path):
+def read_polygons(poly_path, scale):
     try:
         with open(poly_path, 'r') as stream:
-            return list(ascii_to_polys(stream.read()))
+            return list(ascii_to_polys(stream.read(), scale))
            
     except IOError:
         print("given file cannot be opened")
@@ -806,10 +841,19 @@ def main():
     parser.add_argument('input', metavar="FILE", nargs='?', default=None, type=str, help='open this polygon file')
     parser.add_argument('-d', '--debug', action='store_true', help='start in debug mode')
     parser.add_argument('-z', '--no-gui', action='store_true', help='open file and perform subdivision without GUI')
+    parser.add_argument('--scale', type=float, default=1.)
 
     args = parser.parse_args()
 
-    input_polygons = read_polygons(args.input) if args.input else ()
+    input_polygons = read_polygons(args.input, args.scale) if args.input else ()
+
+    # from itertools import chain
+    # verts = chain(*(p.vertices for p in input_polygons))
+    # bbox = vec.aabb(verts)
+    # offset = vec(bbox[1][0], 0)
+
+    camera_pos = vec(473.95899454023555, -18.10075326094288)*2097152 # FOR DEBUG of problem15.txt
+    camera_pos = vec(0,0)
 
     if args.no_gui:
         for poly in input_polygons:
@@ -817,7 +861,7 @@ def main():
         return
 
     else:
-        app = Application(db_mode=args.debug, input_polys=input_polygons)
+        app = Application(db_mode=args.debug, input_polys=input_polygons, camera_pos=camera_pos)
         app.master.title('Map editor')
         app.mainloop()
 

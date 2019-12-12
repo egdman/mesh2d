@@ -71,13 +71,13 @@ class ObjectView(object):
 
 
 
-    def offset_by(self, vec):
-        '''
-        move all coordinates in world_vertices by vec
-        '''
-        for vnum in range(self.world_vertices_np.shape[0]):
-            old_vec = vec(self.world_vertices_np[vnum][0], self.world_vertices_np[vnum][1])
-            self.set_vec(vnum, old_vec + vec)
+    # def offset_by(self, offset):
+    #     '''
+    #     move all coordinates in world_vertices by vec
+    #     '''
+    #     for vnum in range(self.world_vertices_np.shape[0]):
+    #         old_vec = vec(self.world_vertices_np[vnum][0], self.world_vertices_np[vnum][1])
+    #         self.set_vector(vnum, old_vec + offset)
 
 
     def cleanup(self, canvas):
@@ -272,7 +272,6 @@ class SegmentHelperView(ObjectView):
         super(SegmentHelperView, self).__init__()
 
 
-
     def first_time_draw(self, canvas):
         Id = canvas.create_line(
                 (
@@ -285,50 +284,53 @@ class SegmentHelperView(ObjectView):
         self.element_ids.append(Id)
 
 
-
     def modify(self, vec1, vec2):
-        delta1 = vec1 - self.v1
-        delta2 = vec2 - self.v2
-        self.v1 = vec1
-        self.v2 = vec2
-        self.set_vector(0, delta1.append(1))
-        self.set_vector(1, delta2.append(1))
-
-
+        self.set_vector(0, vec1)
+        self.set_vector(1, vec2)
 
 
 class PlusView(ObjectView):
-    def __init__(self, size, loc=None, color='#2f2f2f'):
+    def __init__(self, loc, size, color='#2f2f2f'):
+        super(PlusView, self).__init__()
         self.size = size
         self.color = color
-        self.loc = loc if loc is not None else vec(0, 0)
-
-        self.down = vec(0, self.size)
-        self.right = vec(self.size, 0)
-
-        super(PlusView, self).__init__()
+        x, y = loc
+        self.world_vertices_np = np.ndarray(shape = (1, 3), buffer=np.array((x, y, 1.0)))
 
 
-
-    def modify(self, vec):
-        delta = vec - self.loc
-        self.loc = vec
-        self.offset_by(delta)
+    def modify(self, new_loc):
+        x, y = new_loc
+        self.world_vertices_np[0] = (x, y, 1.)
 
 
+    def draw_self(self, camera_transform, canvas):
+        if len(self.element_ids) == 0:
+            crds = (0.,)*4
+            id1 = canvas.create_line(crds, fill=self.color, width=1)
+            id2 = canvas.create_line(crds, fill=self.color, width=1)
 
-    def first_time_draw(self, canvas):
+            canvas.addtag_withtag(self.tag, id1)
+            canvas.addtag_withtag(self.tag, id2)
+            self.element_ids.append(id1)
+            self.element_ids.append(id2)
+
+        self.redraw(camera_transform, canvas)
+
+
+    def redraw(self, camera_transform, canvas):
+        screen_coords = self.world_vertices_np[:1].dot(camera_transform[:-1].T)
+        x, y = screen_coords[0]
         sz = self.size
 
-        vrt = [self.loc - self.down, self.loc + self.down, self.loc - self.right, self.loc + self.right]
-        crds = self.get_open_crds(vrt, (0, 1))
-        id1 = canvas.create_line(crds, fill=self.color, width=1)
-        crds = self.get_open_crds(vrt, (2, 3))
-        id2 = canvas.create_line(crds, fill=self.color, width=1)
-        self.element_ids.append(id1)
-        self.element_ids.append(id2)
-
-
+        el1, el2 = self.element_ids
+        canvas.coords(el1,
+            x, y-sz,
+            x, y+sz,
+        )
+        canvas.coords(el2,
+            x-sz, y,
+            x+sz, y,
+        )
 
 
 class PolygonView(ObjectView):
