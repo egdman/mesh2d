@@ -117,8 +117,8 @@ def segment_sector_clip(segment, sector):
         c, s = axis.comps
         x, y = pt.comps
         x, y = c*x + s*y, -s*x + c*y
-        if flip_y: return vec(x, -y)
-        return vec(x, y)
+        if flip_y: return x, -y
+        return x, y
 
     seg0, seg1 = segment
 
