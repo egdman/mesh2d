@@ -108,7 +108,7 @@ slower version of get_sector with 2 normalizations
 #     return vec(v1x, v1y), tip, vec(v2x, v2y)
 
 
-def segment_sector_clip(segment, sector):
+def segment_sector_clip(segment, sector, sector_normalized=True):
     '''
     compute segment-sector overlap
     original order of endpoints is not guaranteed
@@ -134,6 +134,7 @@ def segment_sector_clip(segment, sector):
                     i_x = cross / (b[1] - a[1])
                     lower_x, upper_x = sorted((a[0], b[0]))
                     i_x = min(max(i_x, lower_x), upper_x)
+                    if not sector_normalized: i_x /= axis.normSq()
                     i_point = tip + i_x * axis
 
                 else:
@@ -145,7 +146,11 @@ def segment_sector_clip(segment, sector):
         elif a[1] == 0:
             if b[1] > 0:
                 free_point = 1
-                i_point = None
+                if a[0] > 0:
+                    i_point = seg0
+                else:
+                    i_point = None
+
             else: # b[1] <= 0
                 return None, None
 
@@ -157,6 +162,7 @@ def segment_sector_clip(segment, sector):
                     i_x = cross / (b[1] - a[1])
                     lower_x, upper_x = sorted((a[0], b[0]))
                     i_x = min(max(i_x, lower_x), upper_x)
+                    if not sector_normalized: i_x /= axis.normSq()
                     i_point = tip + i_x * axis
 
                 else:
@@ -189,7 +195,7 @@ def segment_sector_clip(segment, sector):
         a, b = inters1, segment[free1] # clip one side
 
     else:
-        a, b = inters2, segment[free2] # clip one side
+        a, b = segment[free2], inters2 # clip one side
 
     if a == b: # this can happen
         return None, None
