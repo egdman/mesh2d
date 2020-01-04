@@ -76,17 +76,10 @@ class Ray:
     def main_stride(self):
         return self.stride[self.main_component] > 0
 
-    def area(self, point):
-        AxT = vec.cross2(point, self.tip)
-        AxG = vec.cross2(point, self.target)
-        return AxT - AxG - self.GxT
 
-
-    def intersect_main_comp(self, A, B, area_A, area_B):
-        AxB = vec.cross2(A, B)
-        h = area_B - area_A
+    def intersect_main_comp(self, A, B, AxB, area_diff):
         c0 = self.main_component
-        return (AxB / h) * self.stride[c0] + (self.GxT / h) * (B[c0] - A[c0])
+        return (AxB / area_diff) * self.stride[c0] + (self.GxT / area_diff) * (B[c0] - A[c0])
 
 
     def intersect_full(self, main_comp):
@@ -131,7 +124,7 @@ def trace_ray(verts, topo, ray, edges, db):
         db("    EDGE {}", topo.debug_repr(eid))
 
         v0, v1 = topo.edge_verts(eid)
-        A, B = verts[v0], verts[v1]
+        B, A = verts[v0], verts[v1]
         if ray.target in (A, B):
             continue
 
@@ -139,40 +132,51 @@ def trace_ray(verts, topo, ray, edges, db):
         AxG = vec.cross2(A, ray.target)
         BxG = vec.cross2(B, ray.target)
 
-        orientation = AxG - BxG - AxB
-        db("    orientation = {:.18f}", orientation)
+        orientation = BxG - AxG + AxB
+        db("    orientation w.r.t G = {:.18f}", orientation)
         if orientation >= 0:
             continue
 
-        area_A = vec.cross2(A, ray.tip) - AxG - ray.GxT
-        area_B = vec.cross2(B, ray.tip) - BxG - ray.GxT
+        area_A = vec.cross2(A, ray.tip) - AxG
+        area_B = vec.cross2(B, ray.tip) - BxG
+        # at this point we know that area_A < area_B
 
-        db("        a.y = {}, b.y = {}", area_A, area_B)
-        if area_A > 0:
-            if area_B < 0:
-                intersections.append((eid, ray.intersect_main_comp(A, B, area_A, area_B)))
-            elif area_B == 0:
-                intersections.append((eid, B[ray.main_component]))
+        db("        a.y = {}, b.y = {}", area_A - ray.GxT, area_B - ray.GxT)
+
+        if area_A > ray.GxT:
+            continue
+
+        elif area_A == ray.GxT:
+            if area_B > ray.GxT:
+                intersection = A[ray.main_component]
             else:
                 continue
 
-        elif area_A == 0:
-            if area_B == 0:
-                intersections.append((eid, A[ray.main_component]))
-                intersections.append((eid, B[ray.main_component]))
-            else:
-                intersections.append((eid, A[ray.main_component]))
-
-        else: # area_A < 0
-            if area_B > 0:
-                intersections.append((eid, ray.intersect_main_comp(A, B, area_A, area_B)))
-            elif area_B == 0:
-                intersections.append((eid, B[ray.main_component]))
+        else: # area_A < ray.GxT:
+            if area_B > ray.GxT:
+                intersection = ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A)
+     
+            elif area_B == ray.GxT:
+                intersection = B[ray.main_component]
             else:
                 continue
+
+        intersections.append((eid, intersection))
+
+    if len(intersections) == 0:
+        return None
 
     db("    INTERSECTIONS: {}", list((eid, ray.target[ray.main_component] - p) for eid, p in intersections))
-    return intersections
+    if ray.main_stride() > 0:
+        occluder, param = min(intersections, key=itemgetter(1))
+        if param < ray.tip[ray.main_component] or param > ray.target[ray.main_component]:
+            return None
+    else:
+        occluder, param = max(intersections, key=itemgetter(1))
+        if param > ray.tip[ray.main_component] or param < ray.target[ray.main_component]:
+            return None
+
+    return occluder
 
 
 def calc_external_angle(verts, topo, eid, next_eid):
@@ -358,7 +362,7 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             target_visible[eid] = B_is_visible(A, B, C, orient_AB, orient_BC)
 
     # db = debug(False)
-    db = debug(spike_eid==23 and db_visitor)
+    db = debug(spike_eid==5 and db_visitor)
     # db = debug(spike_eid==21 and db_visitor)
 
     ray0, ray1 = make_sector(verts, topo, spike_eid)
@@ -367,10 +371,11 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
 
     for eid in visible_edges:
         v0, v1 = topo.edge_verts(eid)
-        areas0[v0] = ray0.area(verts[v0])
-        areas0[v1] = ray0.area(verts[v1])
-        areas1[v0] = ray1.area(verts[v0])
-        areas1[v1] = ray1.area(verts[v1])
+        areas0[v0] = vec.cross2(verts[v0], ray0.tip) - vec.cross2(verts[v0], ray0.target)
+        areas0[v1] = vec.cross2(verts[v1], ray0.tip) - vec.cross2(verts[v1], ray0.target)
+
+        areas1[v0] = vec.cross2(verts[v0], ray1.tip) - vec.cross2(verts[v0], ray1.target)
+        areas1[v1] = vec.cross2(verts[v1], ray1.tip) - vec.cross2(verts[v1], ray1.target)
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
@@ -385,31 +390,34 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             # we must reverse the segment to match the orientation of the sector rays
             B, A = topo.edge_verts(eid)
 
-            if areas0[A] >= 0:
-                if areas1[A] < 0:
+            if areas0[A] >= ray0.GxT:
+                if areas1[A] < ray1.GxT:
                     clip_A = verts[A]
 
-                    if areas1[B] <= 0:
+                    if areas1[B] <= ray1.GxT:
                         clip_B = verts[B]
                     else:
-                        clip_B = ray1.intersect_full(ray1.intersect_main_comp(verts[A], verts[B], areas1[A], areas1[B]))
-                elif areas1[A] == 0:
-                    if areas1[B] > 0:
+                        AxB = vec.cross2(verts[A], verts[B])
+                        clip_B = ray1.intersect_full(ray1.intersect_main_comp(verts[A], verts[B], AxB, areas1[B] - areas1[A]))
+                elif areas1[A] == ray1.GxT:
+                    if areas1[B] > ray1.GxT:
                         clip_A = verts[A]
                         clip_B = verts[A]
                     else:
                         clip_A, clip_B = None, None
                 else:
                     clip_A, clip_B = None, None
-            else: # areas0[A] < 0
-                if areas0[B] > 0:
-                    clip_A = ray0.intersect_full(ray0.intersect_main_comp(verts[A], verts[B], areas0[A], areas0[B]))
-                    if areas1[B] <= 0:
+            else: # areas0[A] < ray0.GxT
+                if areas0[B] > ray0.GxT:
+                    AxB = vec.cross2(verts[A], verts[B])
+                    clip_A = ray0.intersect_full(ray0.intersect_main_comp(verts[A], verts[B], AxB, areas0[B] - areas0[A]))
+                    if areas1[B] <= ray1.GxT:
                         clip_B = verts[B]
                     else:
-                        clip_B = ray1.intersect_full(ray1.intersect_main_comp(verts[A], verts[B], areas1[A], areas1[B]))
+                        AxB = vec.cross2(verts[A], verts[B])
+                        clip_B = ray1.intersect_full(ray1.intersect_main_comp(verts[A], verts[B], AxB, areas1[B] - areas1[A]))
 
-                elif areas0[B] == 0:
+                elif areas0[B] == ray0.GxT:
                     clip_A = verts[B]
                     clip_B = verts[B]
                 else:
@@ -519,18 +527,12 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
         db("    SELECTED TARGET {}", topo.debug_repr(target_eid))
         db("CHECK OCCLUSION {} TO {}", topo.debug_repr(spike_eid), target_coords)
 
-        occlusion_ray = Ray(tip, target_coords)
-        intersections = trace_ray(verts, topo, occlusion_ray, visible_edges, db)
-        if len(intersections) > 0:
-            if occlusion_ray.main_stride() > 0:
-                occluder, _ = min(intersections, key=itemgetter(1))
-            else:
-                occluder, _ = max(intersections, key=itemgetter(1))
-            occluded = occluder not in (target_eid, topo.next_edge(target_eid))
-        else:
-            occluded = False
+        occluder = trace_ray(verts, topo, Ray(tip, target_coords), visible_edges, db)
+        if occluder is None or occluder in (target_eid, topo.next_edge(target_eid)):
+            db("    NOT OCCLUDED")
+            return target_eid, target_coords
 
-        if occluded:
+        else:
             db("    OCCLUDED BY {}", topo.debug_repr(occluder))
             clip0, clip1 = clipped_verts[occluder]
             oc0, oc1 = topo.edge_verts(occluder)
@@ -565,17 +567,14 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             if ray0 != ray0_:
                 for eid in visible_edges:
                     v0, v1 = topo.edge_verts(eid)
-                    areas0[v0] = ray0.area(verts[v0])
-                    areas0[v1] = ray0.area(verts[v1])
+                    areas0[v0] = vec.cross2(verts[v0], ray0.tip) - vec.cross2(verts[v0], ray0.target)
+                    areas0[v1] = vec.cross2(verts[v1], ray0.tip) - vec.cross2(verts[v1], ray0.target)
+
             if ray1 != ray1_:
                 for eid in visible_edges:
                     v0, v1 = topo.edge_verts(eid)
-                    areas1[v0] = ray1.area(verts[v0])
-                    areas1[v1] = ray1.area(verts[v1])
-
-        else:
-            db("    NOT OCCLUDED")
-            return target_eid, target_coords
+                    areas1[v0] = vec.cross2(verts[v0], ray1.tip) - vec.cross2(verts[v0], ray1.target)
+                    areas1[v1] = vec.cross2(verts[v1], ray1.tip) - vec.cross2(verts[v1], ray1.target)
 
 
 def convex_subdiv(verts, topo, threshold, db_visitor=None):
