@@ -1,7 +1,7 @@
 import math
 
 from collections import defaultdict
-from operator import itemgetter
+from operator import itemgetter, lt as op_less, gt as op_more
 from itertools import chain
 from copy import deepcopy
 from time import clock
@@ -67,15 +67,16 @@ class Ray:
         else:
             self.main_component = 1
 
+        if self.stride[self.main_component] > 0:
+            self.pick_least, self.less = min, op_less
+        else:
+            self.pick_least, self.less = max, op_more
+
     def __eq__(self, right):
         return (self.tip, self.target) == (right.tip, right.target)
 
     def __ne__(self, right):
         return (self.tip, self.target) != (right.tip, right.target)
-
-    def main_stride(self):
-        return self.stride[self.main_component] > 0
-
 
     def intersect_main_comp(self, A, B, AxB, area_diff):
         c0 = self.main_component
@@ -119,6 +120,9 @@ def calc_orientation(pivot, segment):
 
 
 def trace_ray(verts, topo, ray, edges, db):
+    lower = ray.tip[ray.main_component]
+    upper = ray.target[ray.main_component]
+
     intersections = []
     for eid in edges:
         db("    EDGE {}", topo.debug_repr(eid))
@@ -154,28 +158,21 @@ def trace_ray(verts, topo, ray, edges, db):
 
         else: # area_A < ray.GxT:
             if area_B > ray.GxT:
-                intersection = ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A)
+                intersection = ray.intersect_main_comp(A, B, AxB, area_B - area_A)
      
             elif area_B == ray.GxT:
                 intersection = B[ray.main_component]
             else:
                 continue
 
-        intersections.append((eid, intersection))
+        if ray.less(lower, intersection) and ray.less(intersection, upper):
+            intersections.append((eid, intersection))
 
     if len(intersections) == 0:
         return None
 
     db("    INTERSECTIONS: {}", list((eid, ray.target[ray.main_component] - p) for eid, p in intersections))
-    if ray.main_stride() > 0:
-        occluder, param = min(intersections, key=itemgetter(1))
-        if param < ray.tip[ray.main_component] or param > ray.target[ray.main_component]:
-            return None
-    else:
-        occluder, param = max(intersections, key=itemgetter(1))
-        if param > ray.tip[ray.main_component] or param < ray.target[ray.main_component]:
-            return None
-
+    occluder, _ = ray.pick_least(intersections, key=itemgetter(1))
     return occluder
 
 
@@ -371,11 +368,10 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
 
     for eid in visible_edges:
         v0, v1 = topo.edge_verts(eid)
-        areas0[v0] = vec.cross2(verts[v0], ray0.tip) - vec.cross2(verts[v0], ray0.target)
-        areas0[v1] = vec.cross2(verts[v1], ray0.tip) - vec.cross2(verts[v1], ray0.target)
-
-        areas1[v0] = vec.cross2(verts[v0], ray1.tip) - vec.cross2(verts[v0], ray1.target)
-        areas1[v1] = vec.cross2(verts[v1], ray1.tip) - vec.cross2(verts[v1], ray1.target)
+        areas0[v0] = vec.cross2(ray0.target, verts[v0]) - vec.cross2(ray0.tip, verts[v0])
+        areas0[v1] = vec.cross2(ray0.target, verts[v1]) - vec.cross2(ray0.tip, verts[v1])
+        areas1[v0] = vec.cross2(ray1.target, verts[v0]) - vec.cross2(ray1.tip, verts[v0])
+        areas1[v1] = vec.cross2(ray1.target, verts[v1]) - vec.cross2(ray1.tip, verts[v1])
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
@@ -567,14 +563,14 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             if ray0 != ray0_:
                 for eid in visible_edges:
                     v0, v1 = topo.edge_verts(eid)
-                    areas0[v0] = vec.cross2(verts[v0], ray0.tip) - vec.cross2(verts[v0], ray0.target)
-                    areas0[v1] = vec.cross2(verts[v1], ray0.tip) - vec.cross2(verts[v1], ray0.target)
+                    areas0[v0] = vec.cross2(ray0.target, verts[v0]) - vec.cross2(ray0.tip, verts[v0])
+                    areas0[v1] = vec.cross2(ray0.target, verts[v1]) - vec.cross2(ray0.tip, verts[v1])
 
             if ray1 != ray1_:
                 for eid in visible_edges:
                     v0, v1 = topo.edge_verts(eid)
-                    areas1[v0] = vec.cross2(verts[v0], ray1.tip) - vec.cross2(verts[v0], ray1.target)
-                    areas1[v1] = vec.cross2(verts[v1], ray1.tip) - vec.cross2(verts[v1], ray1.target)
+                    areas1[v0] = vec.cross2(ray1.target, verts[v0]) - vec.cross2(ray1.tip, verts[v0])
+                    areas1[v1] = vec.cross2(ray1.target, verts[v1]) - vec.cross2(ray1.tip, verts[v1])
 
 
 def convex_subdiv(verts, topo, threshold, db_visitor=None):
