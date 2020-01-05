@@ -82,7 +82,6 @@ class Ray:
         c0 = self.main_component
         return (AxB / area_diff) * self.stride[c0] + (self.GxT / area_diff) * (B[c0] - A[c0])
 
-
     def intersect_full(self, main_comp):
         c0 = self.main_component
         param = (main_comp - self.tip[c0]) / self.stride[c0]
@@ -177,19 +176,19 @@ def trace_ray(verts, topo, ray, edges, db):
 
 
 def calc_external_angle(verts, topo, eid, next_eid):
-    ref0, ref1 = topo.edge_verts(eid)
-    ref0, ref1 = verts[ref0], verts[ref1]
-    dir0 = ref1 - ref0
-    pivot = ref0
-    ref0, ref1 = topo.edge_verts(next_eid)
-    ref0, ref1 = verts[ref0], verts[ref1]
-    dir1 = ref1 - ref0
+    v0, v1 = topo.edge_verts(eid)
+    A, B = verts[v0], verts[v1]
+    C = verts[topo.target(next_eid)]
 
-    orientation = calc_orientation(pivot, (ref0, ref1))
+    orientation = calc_orientation(A, (B, C))
+    if orientation == 0:
+        return 0.
+
+    angle = math.acos(Geom2.cos_angle(B - A, C - B))
     if orientation > 0:
-        return math.acos(Geom2.cos_angle(dir0, dir1))
+        return angle
     else:
-        return -math.acos(Geom2.cos_angle(dir0, dir1))
+        return -angle
 
 
 def calc_accum_angles(verts, topo, threshold):
@@ -329,6 +328,10 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
         else:
             return orient_AB < 0 and calc_orientation(A, (C, B)) < 0
 
+    db = debug(spike_eid==17 and db_visitor)
+    # db = debug(False)
+    # db = debug(spike_eid==21 and db_visitor)
+
     tip = verts[topo.target(spike_eid)]
     clipped_verts = [(None, None)] * topo.num_edges()
     target_visible = [False] * topo.num_edges()
@@ -342,6 +345,7 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
         A, B = verts[v0], verts[v1]
         C = verts[topo.target(topo.next_edge(eid))]
         orient_AB = calc_orientation(tip, (B, A))
+        db("    {} orient_AB = {}", topo.debug_repr(eid), orient_AB)
         if orient_AB > 0:
             visible_edges.append(eid)
 
@@ -352,17 +356,24 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             A, B = B, C
             C = verts[topo.target(topo.next_edge(eid))]
             orient_AB = orient_BC
+
+            db("    {} orient_AB = {}", topo.debug_repr(eid), orient_AB)
             if orient_AB > 0:
                 visible_edges.append(eid)
 
             orient_BC = calc_orientation(tip, (C, B))
             target_visible[eid] = B_is_visible(A, B, C, orient_AB, orient_BC)
 
-    # db = debug(False)
-    db = debug(spike_eid==5 and db_visitor)
-    # db = debug(spike_eid==21 and db_visitor)
+    db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
     ray0, ray1 = make_sector(verts, topo, spike_eid)
+
+    # G0, T0 = ray0.tip, ray0.target
+    # G1, T1 = ray1.tip, ray1.target
+    # sector_orient = vec.cross2(G0, G1) - vec.cross2(G0, T1) + vec.cross2(G1, T0) + vec.cross2(T0, T1)
+    # _printf("    ^^^^^^^^^^^^^^^^^ SECTOR ORIENTATION = {}", sector_orient)
+    # assert sector_orient > 0, str(sector_orient) + ", {}".format(sector_orient==0)
+
     areas0 = [None]*len(verts)
     areas1 = [None]*len(verts)
 
@@ -372,8 +383,6 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
         areas0[v1] = vec.cross2(ray0.target, verts[v1]) - vec.cross2(ray0.tip, verts[v1])
         areas1[v0] = vec.cross2(ray1.target, verts[v0]) - vec.cross2(ray1.tip, verts[v0])
         areas1[v1] = vec.cross2(ray1.target, verts[v1]) - vec.cross2(ray1.tip, verts[v1])
-
-    db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
     while True:
         db("-"*80)
@@ -618,7 +627,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             _printf("tried to connect {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
             return ()
 
-        _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
+        # _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
 
         if db_visitor:
             db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
@@ -641,8 +650,8 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         #     vid = topo.target(spike_eid)
         #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
-        _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)),
-            r2d*accum_angles[spike_eid])
+        # _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)),
+        #     r2d*accum_angles[spike_eid])
 
         target_eid, target_coords = find_connection_point_for_spike(verts, topo, spike_eid, db_visitor)
         if target_coords == verts[topo.target(target_eid)]:
