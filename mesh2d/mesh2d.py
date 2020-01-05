@@ -475,6 +475,25 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
                 closest_edge_point = edge_point
                 closest_eid = eid
 
+                ###########################################################################################
+                # TODO: Sometimes edge_point is calculated very close to one of the segment endpoints.
+                #  In such cases the tip->edge_point line can fall outside the sector,
+                #  therefore the new spike angle will still be greater than the threshold, which will require
+                #  creating a second portal very close to this one. This problem must be solved.
+                if db_visitor:
+                    p = edge_point
+                    orient_A = vec.cross2(verts[A], p) - vec.cross2(verts[A], tip) + vec.cross2(p, tip)
+                    orient_B = vec.cross2(verts[B], p) - vec.cross2(verts[B], tip) + vec.cross2(p, tip)
+
+                    if orient_B > 0 or orient_A < 0:
+                        _printf("    orient_A={}, orient_B={}", orient_A, orient_B)
+                        db_visitor.add_polygon((tip, p), color="pink")
+                        db_visitor.add_plus(p, color="pink")
+                        db_visitor.add_polygon((verts[A], verts[B]), color="magenta")
+                        db_visitor.add_plus(verts[A], color="magenta")
+                        db_visitor.add_plus(verts[B], color="magenta")
+                ###########################################################################################
+
 
         if closest_eid is None:
             if db_visitor:
@@ -629,8 +648,8 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
 
         # _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
 
-        if db_visitor:
-            db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
+        # if db_visitor:
+        #     db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
 
         new_eid = topo.connect(start_eid, target_eid, verts)
         update_angles_after_connecting(verts, topo, accum_angles, new_eid, threshold)
