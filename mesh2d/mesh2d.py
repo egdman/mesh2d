@@ -156,6 +156,10 @@ def trace_ray(verts, topo, ray, edges, db):
         elif area_A == 0:
             if area_B > 0:
                 intersection = A[ray.main_component]
+                if ray.less(lower, intersection) and ray.less(intersection, upper):
+                    pass
+                else:
+                    continue
             else:
                 continue
 
@@ -165,11 +169,14 @@ def trace_ray(verts, topo, ray, edges, db):
      
             elif area_B == 0:
                 intersection = B[ray.main_component]
+                if ray.less(lower, intersection) and ray.less(intersection, upper):
+                    pass
+                else:
+                    continue
             else:
                 continue
 
-        if ray.less(lower, intersection) and ray.less(intersection, upper):
-            intersections.append((eid, intersection))
+        intersections.append((eid, intersection))
 
     if len(intersections) == 0:
         return None
@@ -637,7 +644,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             _printf("tried to connect {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
             return ()
 
-        # _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
+        _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
 
         if db_visitor:
             db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
@@ -660,8 +667,8 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         #     vid = topo.target(spike_eid)
         #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
-        # _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)),
-        #     r2d*accum_angles[spike_eid])
+        _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)),
+            r2d*accum_angles[spike_eid])
 
         target_eid, target_coords = find_connection_point_for_spike(verts, topo, spike_eid, db_visitor)
         if target_coords == verts[topo.target(target_eid)]:
