@@ -56,6 +56,13 @@ def timed_exec(name):
     yield
     timing[name].add(clock() - s)
 
+
+def signed_area(a, b, c):
+    while not (a.comps <= b.comps and b.comps <= c.comps) and not (c.comps <= b.comps and b.comps <= a.comps):
+        b, c, a = a, b, c
+    return vec.cross2(a - c, b - c)
+
+
 class Ray:
     def __init__(self, tip, target):
         self.tip = tip
@@ -94,9 +101,9 @@ class Ray:
 
 def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
     # TODO: support increased opening angles
-    v0, v1 = topo.edge_verts(topo.next_edge(spike_eid))
-    v2, v3 = topo.edge_verts(spike_eid)
-    return Ray(verts[v1], verts[v0]), Ray(verts[v2], verts[v3]) 
+    v1 = topo.target(topo.next_edge(spike_eid))
+    v2, v0 = topo.edge_verts(spike_eid)
+    return Ray(verts[v1], verts[v0]), Ray(verts[v2], verts[v0]) 
 
     # # increase opening angle of the sector due to threshold
     # extern_angle = calc_external_angle(unit_edges, spike_eid, topo.next_edge(spike_eid))
@@ -113,11 +120,6 @@ def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
     # return vec(v1x, v1y), vec(v2x, v2y)
 
 
-def calc_orientation(pivot, segment):
-    seg0, seg1 = segment
-    return vec.cross2(seg0, seg1) + vec.cross2(seg1, pivot) - vec.cross2(seg0, pivot)
-
-
 def trace_ray(verts, topo, ray, edges, db):
     lower = ray.tip[ray.main_component]
     upper = ray.target[ray.main_component]
@@ -131,35 +133,31 @@ def trace_ray(verts, topo, ray, edges, db):
         if ray.target in (A, B):
             continue
 
-        AxB = vec.cross2(A, B)
-        AxG = vec.cross2(A, ray.target)
-        BxG = vec.cross2(B, ray.target)
-
-        orientation = BxG - AxG + AxB
+        orientation = signed_area(A, B, ray.target)
         db("    orientation w.r.t G = {:.18f}", orientation)
         if orientation >= 0:
             continue
 
-        area_A = vec.cross2(A, ray.tip) - AxG
-        area_B = vec.cross2(B, ray.tip) - BxG
+        area_A = signed_area(A, ray.tip, ray.target)
+        area_B = signed_area(B, ray.tip, ray.target)
         # at this point we know that area_A < area_B
 
-        db("        a.y = {}, b.y = {}", area_A - ray.GxT, area_B - ray.GxT)
+        db("        a.y = {}, b.y = {}", area_A, area_B)
 
-        if area_A > ray.GxT:
+        if area_A > 0:
             continue
 
-        elif area_A == ray.GxT:
-            if area_B > ray.GxT:
+        elif area_A == 0:
+            if area_B > 0:
                 intersection = A[ray.main_component]
             else:
                 continue
 
-        else: # area_A < ray.GxT:
-            if area_B > ray.GxT:
-                intersection = ray.intersect_main_comp(A, B, AxB, area_B - area_A)
+        else: # area_A < 0:
+            if area_B > 0:
+                intersection = ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A)
      
-            elif area_B == ray.GxT:
+            elif area_B == 0:
                 intersection = B[ray.main_component]
             else:
                 continue
@@ -180,7 +178,7 @@ def calc_external_angle(verts, topo, eid, next_eid):
     A, B = verts[v0], verts[v1]
     C = verts[topo.target(next_eid)]
 
-    orientation = calc_orientation(A, (B, C))
+    orientation = signed_area(A, B, C)
     if orientation == 0:
         return 0.
 
@@ -324,9 +322,9 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
     # see if vertex B is visible from tip
     def B_is_visible(A, B, C, orient_AB, orient_BC):
         if orient_BC > 0:
-            return orient_AB >= 0 or calc_orientation(A, (C, B)) < 0
+            return orient_AB >= 0 or signed_area(A, B, C) > 0
         else:
-            return orient_AB < 0 and calc_orientation(A, (C, B)) < 0
+            return orient_AB < 0 and signed_area(A, B, C) > 0
 
     db = debug(spike_eid==17 and db_visitor)
     # db = debug(False)
@@ -344,12 +342,12 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
         v0, v1 = topo.edge_verts(eid)
         A, B = verts[v0], verts[v1]
         C = verts[topo.target(topo.next_edge(eid))]
-        orient_AB = calc_orientation(tip, (B, A))
+        orient_AB = signed_area(B, A, tip)
         db("    {} orient_AB = {}", topo.debug_repr(eid), orient_AB)
         if orient_AB > 0:
             visible_edges.append(eid)
 
-        orient_BC = calc_orientation(tip, (C, B))
+        orient_BC = signed_area(C, B, tip)
         target_visible[eid] = B_is_visible(A, B, C, orient_AB, orient_BC)
 
         for eid in loop:
@@ -361,7 +359,7 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             if orient_AB > 0:
                 visible_edges.append(eid)
 
-            orient_BC = calc_orientation(tip, (C, B))
+            orient_BC = signed_area(C, B, tip)
             target_visible[eid] = B_is_visible(A, B, C, orient_AB, orient_BC)
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
@@ -379,10 +377,10 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
 
     for eid in visible_edges:
         v0, v1 = topo.edge_verts(eid)
-        areas0[v0] = vec.cross2(ray0.target, verts[v0]) - vec.cross2(ray0.tip, verts[v0])
-        areas0[v1] = vec.cross2(ray0.target, verts[v1]) - vec.cross2(ray0.tip, verts[v1])
-        areas1[v0] = vec.cross2(ray1.target, verts[v0]) - vec.cross2(ray1.tip, verts[v0])
-        areas1[v1] = vec.cross2(ray1.target, verts[v1]) - vec.cross2(ray1.tip, verts[v1])
+        areas0[v0] = signed_area(tip, verts[v0], ray0.tip)
+        areas0[v1] = signed_area(tip, verts[v1], ray0.tip)
+        areas1[v0] = signed_area(tip, verts[v0], ray1.tip)
+        areas1[v1] = signed_area(tip, verts[v1], ray1.tip)
 
     while True:
         db("-"*80)
@@ -395,34 +393,34 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             # we must reverse the segment to match the orientation of the sector rays
             B, A = topo.edge_verts(eid)
 
-            if areas0[A] >= ray0.GxT:
-                if areas1[A] < ray1.GxT:
+            if areas0[A] >= 0:
+                if areas1[A] < 0:
                     clip_A = verts[A]
 
-                    if areas1[B] <= ray1.GxT:
+                    if areas1[B] <= 0:
                         clip_B = verts[B]
                     else:
                         AxB = vec.cross2(verts[A], verts[B])
                         clip_B = ray1.intersect_full(ray1.intersect_main_comp(verts[A], verts[B], AxB, areas1[B] - areas1[A]))
-                elif areas1[A] == ray1.GxT:
-                    if areas1[B] > ray1.GxT:
+                elif areas1[A] == 0:
+                    if areas1[B] > 0:
                         clip_A = verts[A]
                         clip_B = verts[A]
                     else:
                         clip_A, clip_B = None, None
                 else:
                     clip_A, clip_B = None, None
-            else: # areas0[A] < ray0.GxT
-                if areas0[B] > ray0.GxT:
+            else: # areas0[A] < 0
+                if areas0[B] > 0:
                     AxB = vec.cross2(verts[A], verts[B])
                     clip_A = ray0.intersect_full(ray0.intersect_main_comp(verts[A], verts[B], AxB, areas0[B] - areas0[A]))
-                    if areas1[B] <= ray1.GxT:
+                    if areas1[B] <= 0:
                         clip_B = verts[B]
                     else:
                         AxB = vec.cross2(verts[A], verts[B])
                         clip_B = ray1.intersect_full(ray1.intersect_main_comp(verts[A], verts[B], AxB, areas1[B] - areas1[A]))
 
-                elif areas0[B] == ray0.GxT:
+                elif areas0[B] == 0:
                     clip_A = verts[B]
                     clip_B = verts[B]
                 else:
@@ -482,8 +480,8 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
                 #  creating a second portal very close to this one. This problem must be solved.
                 if db_visitor:
                     p = edge_point
-                    orient_A = vec.cross2(verts[A], p) - vec.cross2(verts[A], tip) + vec.cross2(p, tip)
-                    orient_B = vec.cross2(verts[B], p) - vec.cross2(verts[B], tip) + vec.cross2(p, tip)
+                    orient_A = signed_area(tip, verts[A], p)
+                    orient_B = signed_area(tip, verts[B], p)
 
                     if orient_B > 0 or orient_A < 0:
                         _printf("    orient_A={}, orient_B={}", orient_A, orient_B)
@@ -576,7 +574,6 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             if ray0 == ray0_ and ray1 == ray1_:
                 raise RuntimeError("infinite inner loop")
 
-            rhs = vec.cross2(ray0.target, ray1.target)
             visible_edges_ = visible_edges[:]
             visible_edges = []
             for eid in visible_edges_:
@@ -584,21 +581,21 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
                     visible_edges.append(eid)
                 else:
                     v0, v1 = topo.edge_verts(eid)
-                    if vec.cross2(ray1.target, verts[v0]) - vec.cross2(ray0.target, verts[v0]) + rhs >= 0 and \
-                       vec.cross2(ray1.target, verts[v1]) - vec.cross2(ray0.target, verts[v1]) + rhs >= 0:
+                    if signed_area(verts[v0], ray0.target, ray1.target) >= 0 and \
+                       signed_area(verts[v1], ray0.target, ray1.target) >= 0:
                         visible_edges.append(eid)
 
             if ray0 != ray0_:
                 for eid in visible_edges:
                     v0, v1 = topo.edge_verts(eid)
-                    areas0[v0] = vec.cross2(ray0.target, verts[v0]) - vec.cross2(ray0.tip, verts[v0])
-                    areas0[v1] = vec.cross2(ray0.target, verts[v1]) - vec.cross2(ray0.tip, verts[v1])
+                    areas0[v0] = signed_area(verts[v0], tip, ray0.target)
+                    areas0[v1] = signed_area(verts[v1], tip, ray0.target)
 
             if ray1 != ray1_:
                 for eid in visible_edges:
                     v0, v1 = topo.edge_verts(eid)
-                    areas1[v0] = vec.cross2(ray1.target, verts[v0]) - vec.cross2(ray1.tip, verts[v0])
-                    areas1[v1] = vec.cross2(ray1.target, verts[v1]) - vec.cross2(ray1.tip, verts[v1])
+                    areas1[v0] = signed_area(verts[v0], tip, ray1.target)
+                    areas1[v1] = signed_area(verts[v1], tip, ray1.target)
 
 
 def convex_subdiv(verts, topo, threshold, db_visitor=None):
