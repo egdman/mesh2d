@@ -56,8 +56,14 @@ def timed_exec(name):
     yield
     timing[name].add(clock() - s)
 
+@contextmanager
+def counted_exec(name):
+    timing[name].add(0.)
+    yield
+
 
 def signed_area(a, b, c):
+    with counted_exec("signed area calculation"): pass
     while not (a.comps <= b.comps and b.comps <= c.comps) and not (c.comps <= b.comps and b.comps <= a.comps):
         b, c, a = a, b, c
     return vec.cross2(a - c, b - c)
@@ -643,7 +649,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             _printf("tried to connect {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
             return ()
 
-        _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
+        # _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
 
         if db_visitor:
             db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
@@ -666,8 +672,8 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         #     vid = topo.target(spike_eid)
         #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
-        _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)),
-            r2d*accum_angles[spike_eid])
+        # _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)),
+        #     r2d*accum_angles[spike_eid])
 
         target_eid, target_coords = find_connection_point_for_spike(verts, topo, spike_eid, db_visitor)
         if target_coords == verts[topo.target(target_eid)]:
