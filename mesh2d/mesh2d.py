@@ -326,7 +326,7 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
         else:
             return orient_AB < 0 and signed_area(A, B, C) > 0
 
-    db = debug(spike_eid==17 and db_visitor)
+    db = debug(spike_eid==-999 and db_visitor)
     # db = debug(False)
     # db = debug(spike_eid==21 and db_visitor)
 
@@ -643,10 +643,10 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             _printf("tried to connect {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
             return ()
 
-        # _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
+        _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
 
-        # if db_visitor:
-        #     db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
+        if db_visitor:
+            db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
 
         new_eid = topo.connect(start_eid, target_eid, verts)
         update_angles_after_connecting(verts, topo, accum_angles, new_eid, threshold)
@@ -666,8 +666,8 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         #     vid = topo.target(spike_eid)
         #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
-        # _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)),
-        #     r2d*accum_angles[spike_eid])
+        _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)),
+            r2d*accum_angles[spike_eid])
 
         target_eid, target_coords = find_connection_point_for_spike(verts, topo, spike_eid, db_visitor)
         if target_coords == verts[topo.target(target_eid)]:
