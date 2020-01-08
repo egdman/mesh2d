@@ -337,7 +337,7 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
         if orient_BC > 0:
             return orient_AB >= 0 or signed_area(A, B, C) > 0
         else:
-            return orient_AB < 0 and signed_area(A, B, C) > 0
+            return orient_AB > 0 and signed_area(A, B, C) > 0
 
     db = debug(spike_eid==-999 and db_visitor)
     # db = debug(False)
