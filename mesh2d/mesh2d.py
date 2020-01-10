@@ -201,43 +201,40 @@ def trace_ray(verts, topo, ray, edges, db):
     return occluder
 
 
-def calc_external_angle(verts, topo, eid, next_eid):
-    v0, v1 = topo.edge_verts(eid)
-    A, B = verts[v0], verts[v1]
-    C = verts[topo.target(next_eid)]
-
-    orientation = signed_area(A, B, C)
-    if orientation == 0:
+def calc_external_angle(verts, topo, eid, next_eid, triangle_area):
+    if triangle_area == 0:
         return 0.
 
-    angle = math.acos(Geom2.cos_angle(B - A, C - B))
-    if orientation > 0:
+    A, B = topo.edge_verts(eid)
+    C = topo.target(next_eid)
+    angle = math.acos(Geom2.cos_angle(verts[B] - verts[A], verts[C] - verts[B]))
+    if triangle_area > 0:
         return angle
     else:
         return -angle
 
 
-def calc_accum_angles(verts, topo, threshold):
+def calc_accum_angles(verts, topo, areas, threshold):
     accum_angles = [None] * topo.num_edges()
     for eid0 in topo.iterate_all_loops():
         loop_iter = iter(topo.iterate_loop_edges(eid0))
         tail = []
         for eid in loop_iter:
             tail.append(eid)
-            if abs(calc_external_angle(verts, topo, eid, topo.next_edge(eid))) > threshold:
+            if abs(calc_external_angle(verts, topo, eid, topo.next_edge(eid), areas[eid])) > threshold:
                 break
 
         accum_angle = 0.
         for eid in chain(loop_iter, tail):
-            accum_angle = max(accum_angle + calc_external_angle(verts, topo, eid, topo.next_edge(eid)), 0.) # accumulate only positive values
+            accum_angle = max(accum_angle + calc_external_angle(verts, topo, eid, topo.next_edge(eid), areas[eid]), 0.) # accumulate only positive values
             accum_angles[eid] = accum_angle
             if accum_angle > threshold:
                 accum_angle = 0.
     return accum_angles
 
 
-def calc_accum_angle(verts, topo, prev_accum, eid, next_eid, threshold):
-    this_external = calc_external_angle(verts, topo, eid, next_eid)
+def calc_accum_angle(verts, topo, prev_accum, eid, next_eid, triangle_area, threshold):
+    this_external = calc_external_angle(verts, topo, eid, next_eid, triangle_area)
     if prev_accum > threshold:
         return max(this_external, 0.)
     return max(prev_accum + this_external, 0.)
@@ -260,12 +257,12 @@ def delete_redundant_portals(verts, topo, areas, accum_angles, threshold):
         while deleted[eid_ccw_prev]:
             eid_ccw_prev = topo.prev_edge(topo.opposite(eid_ccw_prev))
 
-        accum_angle = calc_accum_angle(verts, topo, accum_angles[eid_ccw_prev], eid_ccw, next_eid, threshold)
+        eid_area = calc_triangle_area(verts, topo, eid_ccw, next_eid)
+        accum_angle = calc_accum_angle(verts, topo, accum_angles[eid_ccw_prev], eid_ccw, next_eid, eid_area, threshold)
         if accum_angle > threshold:
             # cannot delete eid
             return False, []
 
-        eid_area = calc_triangle_area(verts, topo, eid_ccw, next_eid)
         new_accum_angles = [(eid_ccw, eid_area, accum_angle)]
         while True:
             eid = topo.next_edge(eid)
@@ -276,7 +273,8 @@ def delete_redundant_portals(verts, topo, areas, accum_angles, threshold):
             while deleted[next_eid]:
                 next_eid = topo.next_edge(topo.opposite(next_eid))
 
-            accum_angle = calc_accum_angle(verts, topo, accum_angle, eid, next_eid, threshold)
+            eid_area = calc_triangle_area(verts, topo, eid, next_eid)
+            accum_angle = calc_accum_angle(verts, topo, accum_angle, eid, next_eid, eid_area, threshold)
             if accum_angle > threshold:
                 # cannot delete eid
                 return False, []
@@ -285,7 +283,6 @@ def delete_redundant_portals(verts, topo, areas, accum_angles, threshold):
                 # we can delete eid
                 return True, new_accum_angles
 
-            eid_area = calc_triangle_area(verts, topo, eid, next_eid)
             new_accum_angles.append((eid, eid_area, accum_angle))
 
 
@@ -323,21 +320,21 @@ def update_angles_after_connecting(verts, topo, areas, accum_angles, new_eid, th
 
         areas[prev_eid] = calc_triangle_area(verts, topo, prev_eid, new_eid)
         accum_angles[prev_eid] = calc_accum_angle(verts, topo,
-            accum_angles[topo.prev_edge(prev_eid)], prev_eid, new_eid, threshold)
+            accum_angles[topo.prev_edge(prev_eid)], prev_eid, new_eid, areas[prev_eid], threshold)
         db("=== {} AA={}", topo.debug_repr(prev_eid), r2d*accum_angles[prev_eid])
 
         areas[new_eid] = calc_triangle_area(verts, topo, new_eid, topo.next_edge(new_eid))
         accum_angles[new_eid] = calc_accum_angle(verts, topo,
-            accum_angles[prev_eid], new_eid, topo.next_edge(new_eid), threshold)
+            accum_angles[prev_eid], new_eid, topo.next_edge(new_eid), areas[new_eid], threshold)
         db("=== {} AA={}", topo.debug_repr(new_eid), r2d*accum_angles[new_eid])
 
         accum_angle = accum_angles[new_eid]
         for eid in topo.iterate_loop_edges(topo.next_edge(new_eid)):
             if topo.next_edge(eid) == topo.opposite(new_eid): break
 
-            accum_angle = calc_accum_angle(verts, topo, accum_angle, eid, topo.next_edge(eid), threshold)
+            accum_angle = calc_accum_angle(verts, topo, accum_angle, eid, topo.next_edge(eid), areas[eid], threshold)
             old_accum_angle = accum_angles[eid]
-            areas[eid] = calc_triangle_area(verts, topo, eid, topo.next_edge(eid))
+
             accum_angles[eid] = accum_angle
             db("=== {} AA={}", topo.debug_repr(eid), r2d*accum_angles[eid])
 
@@ -646,20 +643,20 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
     areas = calc_areas(verts, topo)
-    accum_angles = calc_accum_angles(verts, topo, threshold)
+    accum_angles = calc_accum_angles(verts, topo, areas, threshold)
     # for eid in topo.iterate_all_internal_edges():
     #     print("{}, AA = {}".format(topo.debug_repr(eid), accum_angles[eid]*r2d))
 
-    def connect_to_new_vertex(start_eid, edge, point):
-        new_eid = topo.insert_vertex(len(verts), edge)
+    def connect_to_new_vertex(start_eid, eid, point):
+        new_eid = topo.insert_vertex(len(verts), eid)
 
         if db_visitor:
             db_visitor.add_text(point, str(topo.target(new_eid)), color="cyan")
 
-        assert topo.next_edge(new_eid) == edge
-        assert topo.prev_edge(edge) == new_eid
+        assert topo.next_edge(new_eid) == eid
+        assert topo.prev_edge(eid) == new_eid
         assert topo.room_id(new_eid) is not None
-        assert topo.room_id(edge) is not None
+        assert topo.room_id(eid) is not None
 
         # add angles for new_eid
         areas.extend((None, None))
@@ -674,7 +671,18 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         assert len(verts) == topo.target(new_eid), "something went wrong here"
 
         verts.append(point)
-        areas[new_eid] = calc_triangle_area(verts, topo, new_eid, edge)
+        prev_eid = topo.prev_edge(new_eid)
+        next_eid = topo.next_edge(eid)
+        areas[prev_eid] = calc_triangle_area(verts, topo, prev_eid, new_eid)
+        areas[eid] = calc_triangle_area(verts, topo, eid, next_eid)
+        areas[new_eid] = None # will be calculated in the function connect_to_target
+
+        # If the new point lies on the straight line of the edge,
+        #  the new accumulated angle will be very close to the previous value,
+        #  but it must be recalculated anyway.
+        accum_angles[prev_eid] = calc_accum_angle(verts, topo,
+            accum_angles[topo.prev_edge(prev_eid)], prev_eid, new_eid, areas[prev_eid], threshold)
+
         return connect_to_target(start_eid, new_eid)
 
     def connect_to_target(start_eid, target_eid):
