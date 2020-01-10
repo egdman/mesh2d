@@ -383,8 +383,9 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
     tip = verts[topo.target(spike_eid)]
     clipped_verts = [(None, None)] * topo.num_edges()
-    target_visible = [False] * topo.num_edges()
+    vertex_is_connectable = [False] * topo.num_edges()
     visible_edges = []
+    skip = (topo.prev_edge(spike_eid), topo.next_edge(spike_eid))
 
     room = topo.rooms[topo.room_id(spike_eid)]
     for loop_eid in [room.outline] + room.holes:
@@ -398,7 +399,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
             visible_edges.append(eid)
 
         area_CBT = signed_area(C, B, tip)
-        target_visible[eid] = B_is_visible(areas[eid], area_BAT, area_CBT)
+        vertex_is_connectable[eid] = eid not in skip and B_is_visible(areas[eid], area_BAT, area_CBT)
 
         for eid in loop:
             A, B = B, C
@@ -410,7 +411,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                 visible_edges.append(eid)
 
             area_CBT = signed_area(C, B, tip)
-            target_visible[eid] = B_is_visible(areas[eid], area_BAT, area_CBT)
+            vertex_is_connectable[eid] = eid not in skip and B_is_visible(areas[eid], area_BAT, area_CBT)
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
@@ -480,7 +481,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
             distSq_B = (clip_B - tip).normSq()
             if clip_B == B:
-                if target_visible[topo.prev_edge(eid)]:
+                if vertex_is_connectable[topo.prev_edge(eid)]:
                     points.append((B, distSq_B))
                     if closest_vertex_distSq is None or distSq_B <= closest_vertex_distSq:
                         closest_vertex_distSq = distSq_B
@@ -491,7 +492,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
             distSq_A = (clip_A - tip).normSq()
             if clip_A == A:
-                if target_visible[eid]:
+                if vertex_is_connectable[eid]:
                     points.append((A, distSq_A))
                     if closest_vertex_distSq is None or distSq_A <= closest_vertex_distSq:
                         closest_vertex_distSq = distSq_A
