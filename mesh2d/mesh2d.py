@@ -552,28 +552,37 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
             # we're not allowed to create T-shaped portals
             if topo.is_portal(closest_eid):
                 # db("    CLOSEST EDGE IS A PORTAL {}".format(topo.debug_repr(closest_eid)))
-                clip0, clip1 = clipped_verts[closest_eid]
-                v0, v1 = topo.edge_verts(closest_eid)
-                r_inside = verts[v0] == clip0
-                l_inside = verts[v1] == clip1
 
-                # only one endpoint is inside sector
-                if r_inside != l_inside:
-                    if r_inside:
-                        target_eid = topo.prev_edge(closest_eid)
-                    else:
-                        target_eid = closest_eid
-
-                # portal is fully inside sector, select closest endpoint
-                elif r_inside:
-                    if (clip0 - tip).normSq() < (clip1 - tip).normSq():
-                        target_eid = topo.prev_edge(closest_eid)
-                    else:
-                        target_eid = closest_eid
-
-                # only the middle section passes through sector
-                else:
+                if closest_eid == topo.prev_edge(spike_eid):
                     target_eid = topo.prev_edge(closest_eid)
+
+                elif topo.prev_edge(closest_eid) == topo.next_edge(spike_eid):
+                    target_eid = closest_eid
+
+                else:
+                    clip0, clip1 = clipped_verts[closest_eid]
+                    v0, v1 = topo.edge_verts(closest_eid)
+                    r_inside = verts[v0] == clip0
+                    l_inside = verts[v1] == clip1
+
+                    # only one endpoint is inside sector
+                    if r_inside != l_inside:
+                        if r_inside:
+                            target_eid = topo.prev_edge(closest_eid)
+                        else:
+                            target_eid = closest_eid
+
+                    # portal is fully inside sector, select closest endpoint
+                    elif r_inside:
+                        if (clip0 - tip).normSq() < (clip1 - tip).normSq():
+                            target_eid = topo.prev_edge(closest_eid)
+
+                        else:
+                            target_eid = closest_eid
+
+                    # only the middle section passes through sector
+                    else:
+                        target_eid = topo.prev_edge(closest_eid)
 
                 target_coords = verts[topo.target(target_eid)]
 
