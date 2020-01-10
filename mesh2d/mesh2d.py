@@ -243,7 +243,7 @@ def calc_accum_angle(verts, topo, prev_accum, eid, next_eid, threshold):
     return max(prev_accum + this_external, 0.)
 
 
-def delete_redundant_portals(verts, topo, accum_angles, threshold):
+def delete_redundant_portals(verts, topo, areas, accum_angles, threshold):
     deleted = [False] * topo.num_edges()
 
     def recalc_angles(eid):
@@ -265,7 +265,8 @@ def delete_redundant_portals(verts, topo, accum_angles, threshold):
             # cannot delete eid
             return False, []
 
-        new_accum_angles = [(eid_ccw, accum_angle)]
+        eid_area = calc_triangle_area(verts, topo, eid_ccw, next_eid)
+        new_accum_angles = [(eid_ccw, eid_area, accum_angle)]
         while True:
             eid = topo.next_edge(eid)
             while deleted[eid]:
@@ -284,7 +285,8 @@ def delete_redundant_portals(verts, topo, accum_angles, threshold):
                 # we can delete eid
                 return True, new_accum_angles
 
-            new_accum_angles.append((eid, accum_angle))
+            eid_area = calc_triangle_area(verts, topo, eid, next_eid)
+            new_accum_angles.append((eid, eid_area, accum_angle))
 
 
     for eid in topo.iterate_all_internal_edges():
@@ -300,8 +302,10 @@ def delete_redundant_portals(verts, topo, accum_angles, threshold):
 
         deleted[eid] = deleted[eid_] = True
         accum_angles[eid] = accum_angles[eid_] = None
+        areas[eid] = areas[eid_] = None
 
-        for mod_eid, mod_accum_angle in chain(new_accum, new_accum_):
+        for mod_eid, mod_triangle_area, mod_accum_angle in chain(new_accum, new_accum_):
+            areas[mod_eid] = mod_triangle_area
             accum_angles[mod_eid] = mod_accum_angle
 
     for eid, d in enumerate(deleted):
@@ -309,17 +313,20 @@ def delete_redundant_portals(verts, topo, accum_angles, threshold):
             topo.remove_edge(eid)
 
 
-def update_angles_after_connecting(verts, topo, accum_angles, new_eid, threshold):
+def update_angles_after_connecting(verts, topo, areas, accum_angles, new_eid, threshold):
+    areas.extend((None, None))
     accum_angles.extend((None, None))
     db=debug(False)#new_eid==25
 
     def _impl(new_eid):
         prev_eid = topo.prev_edge(new_eid)
 
+        areas[prev_eid] = calc_triangle_area(verts, topo, prev_eid, new_eid)
         accum_angles[prev_eid] = calc_accum_angle(verts, topo,
             accum_angles[topo.prev_edge(prev_eid)], prev_eid, new_eid, threshold)
         db("=== {} AA={}", topo.debug_repr(prev_eid), r2d*accum_angles[prev_eid])
 
+        areas[new_eid] = calc_triangle_area(verts, topo, new_eid, topo.next_edge(new_eid))
         accum_angles[new_eid] = calc_accum_angle(verts, topo,
             accum_angles[prev_eid], new_eid, topo.next_edge(new_eid), threshold)
         db("=== {} AA={}", topo.debug_repr(new_eid), r2d*accum_angles[new_eid])
@@ -330,6 +337,7 @@ def update_angles_after_connecting(verts, topo, accum_angles, new_eid, threshold
 
             accum_angle = calc_accum_angle(verts, topo, accum_angle, eid, topo.next_edge(eid), threshold)
             old_accum_angle = accum_angles[eid]
+            areas[eid] = calc_triangle_area(verts, topo, eid, topo.next_edge(eid))
             accum_angles[eid] = accum_angle
             db("=== {} AA={}", topo.debug_repr(eid), r2d*accum_angles[eid])
 
@@ -346,13 +354,13 @@ def update_angles_after_connecting(verts, topo, accum_angles, new_eid, threshold
     _impl(topo.opposite(new_eid))
 
 
-def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
+def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     # see if vertex B is visible from tip
-    def B_is_visible(A, B, C, orient_AB, orient_BC):
+    def B_is_visible(area_ABC, orient_AB, orient_BC):
         if orient_BC > 0:
-            return orient_AB >= 0 or signed_area(A, B, C) > 0
+            return orient_AB >= 0 or area_ABC > 0
         else:
-            return orient_AB > 0 and signed_area(A, B, C) > 0
+            return orient_AB > 0 and area_ABC > 0
 
     db = debug(spike_eid==-999 and db_visitor)
     # db = debug(False)
@@ -376,7 +384,7 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
             visible_edges.append(eid)
 
         orient_BC = signed_area(C, B, tip)
-        target_visible[eid] = B_is_visible(A, B, C, orient_AB, orient_BC)
+        target_visible[eid] = B_is_visible(areas[eid], orient_AB, orient_BC)
 
         for eid in loop:
             A, B = B, C
@@ -388,7 +396,7 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
                 visible_edges.append(eid)
 
             orient_BC = signed_area(C, B, tip)
-            target_visible[eid] = B_is_visible(A, B, C, orient_AB, orient_BC)
+            target_visible[eid] = B_is_visible(areas[eid], orient_AB, orient_BC)
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
@@ -613,6 +621,18 @@ def find_connection_point_for_spike(verts, topo, spike_eid, db_visitor):
                         visible_edges.append(eid)
 
 
+def calc_triangle_area(verts, topo, eid, next_eid):
+    A, B = topo.edge_verts(eid)
+    C = topo.target(next_eid)
+    return signed_area(verts[A], verts[B], verts[C])
+
+
+def calc_areas(verts, topo):
+    areas = [None] * topo.num_edges()
+    for eid in topo.iterate_all_internal_edges():
+        areas[eid] = calc_triangle_area(verts, topo, eid, topo.next_edge(eid))
+    return areas
+
 
 def convex_subdiv(verts, topo, threshold, db_visitor=None):
     """
@@ -625,6 +645,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             vid = topo.target(eid)
             db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
+    areas = calc_areas(verts, topo)
     accum_angles = calc_accum_angles(verts, topo, threshold)
     # for eid in topo.iterate_all_internal_edges():
     #     print("{}, AA = {}".format(topo.debug_repr(eid), accum_angles[eid]*r2d))
@@ -641,6 +662,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         assert topo.room_id(edge) is not None
 
         # add angles for new_eid
+        areas.extend((None, None))
         accum_angles.extend((None, None))
 
         prev_accum = accum_angles[topo.prev_edge(new_eid)]
@@ -652,6 +674,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         assert len(verts) == topo.target(new_eid), "something went wrong here"
 
         verts.append(point)
+        areas[new_eid] = calc_triangle_area(verts, topo, new_eid, edge)
         return connect_to_target(start_eid, new_eid)
 
     def connect_to_target(start_eid, target_eid):
@@ -664,7 +687,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
             db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
 
         new_eid = topo.connect(start_eid, target_eid, verts)
-        update_angles_after_connecting(verts, topo, accum_angles, new_eid, threshold)
+        update_angles_after_connecting(verts, topo, areas, accum_angles, new_eid, threshold)
         return new_eid, topo.opposite(new_eid)
 
 
@@ -683,7 +706,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
 
         # _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)), r2d*accum_angles[spike_eid])
 
-        target_eid, target_coords = find_connection_point_for_spike(verts, topo, spike_eid, db_visitor)
+        target_eid, target_coords = find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor)
         if target_coords == verts[topo.target(target_eid)]:
             all_edges.extend(connect_to_target(spike_eid, target_eid))
         else:
@@ -692,7 +715,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         if accum_angles[spike_eid] > threshold:
             all_edges.append(spike_eid)
 
-    delete_redundant_portals(verts, topo, accum_angles, threshold)
+    delete_redundant_portals(verts, topo, areas, accum_angles, threshold)
 
 
 r'''
