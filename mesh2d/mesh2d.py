@@ -122,9 +122,8 @@ class Ray:
 
 def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
     # TODO: support increased opening angles
-    v1 = topo.target(topo.next_edge(spike_eid))
-    v2, v0 = topo.edge_verts(spike_eid)
-    return Ray(verts[v1], verts[v0]), Ray(verts[v2], verts[v0]) 
+    A, B, C = topo.get_triangle(spike_eid, topo.next_edge(spike_eid))
+    return Ray(verts[C], verts[B]), Ray(verts[A], verts[B]) 
 
     # # increase opening angle of the sector due to threshold
     # extern_angle = calc_external_angle(unit_edges, spike_eid, topo.next_edge(spike_eid))
@@ -205,8 +204,7 @@ def calc_external_angle(verts, topo, eid, next_eid, triangle_area):
     if triangle_area == 0:
         return 0.
 
-    A, B = topo.edge_verts(eid)
-    C = topo.target(next_eid)
+    A, B, C = topo.get_triangle(eid, next_eid)
     angle = math.acos(Geom2.cos_angle(verts[B] - verts[A], verts[C] - verts[B]))
     if triangle_area > 0:
         return angle
@@ -372,9 +370,8 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     for loop_eid in [room.outline] + room.holes:
         loop = iter(topo.iterate_loop_edges(loop_eid))
         eid = next(loop)
-        v0, v1 = topo.edge_verts(eid)
-        A, B = verts[v0], verts[v1]
-        C = verts[topo.target(topo.next_edge(eid))]
+        v0, v1, v2 = topo.get_triangle(eid, topo.next_edge(eid))
+        A, B, C = verts[v0], verts[v1], verts[v2]
         orient_AB = signed_area(B, A, tip)
         db("    {} orient_AB = {}", topo.debug_repr(eid), orient_AB)
         if orient_AB > 0:
@@ -619,8 +616,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
 
 def calc_triangle_area(verts, topo, eid, next_eid):
-    A, B = topo.edge_verts(eid)
-    C = topo.target(next_eid)
+    A, B, C = topo.get_triangle(eid, next_eid)
     return signed_area(verts[A], verts[B], verts[C])
 
 
@@ -890,6 +886,10 @@ class Topology(object):
 
     def get_outline(self, eid):
         return self.rooms[self.edges[eid].room_id].outline
+
+    def get_triangle(self, eid, next_eid):
+        op_eid = self.opposite(eid)
+        return self.edges[op_eid].target, self.edges[eid].target, self.edges[next_eid].target
 
     def connect(self, source_eid, target_eid, verts):
         def _change_topology():
