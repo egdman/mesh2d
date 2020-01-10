@@ -108,7 +108,17 @@ class Ray:
 
     def intersect_main_comp(self, A, B, AxB, area_diff):
         c0 = self.main_component
-        return (AxB / area_diff) * self.stride[c0] + (self.GxT / area_diff) * (B[c0] - A[c0])
+        i = (AxB / area_diff) * self.stride[c0] + (self.GxT / area_diff) * (B[c0] - A[c0])
+
+        lower, upper = A[c0], B[c0]
+        if self.less(upper, lower):
+            lower, upper = upper, lower
+
+        if self.less(i, lower):
+            return lower
+        if self.less(upper, i):
+            return upper
+        return i
 
     def intersect_full(self, main_comp):
         c0 = self.main_component
@@ -116,7 +126,7 @@ class Ray:
         i = [0., 0.]
         c1 = 1 - c0
         i[c0] = main_comp
-        i[c1] = self.tip[c1] + param * self.stride[c1]
+        i[c1] = param * self.target[c1] + (1. - param) * self.tip[c1]
         return vec(*i)
 
 
@@ -349,6 +359,16 @@ def update_angles_after_connecting(verts, topo, areas, accum_angles, new_eid, th
     _impl(topo.opposite(new_eid))
 
 
+def clamp_by_orientation(tip, L, R, point):
+    orient_L = signed_area(tip, L, point)
+    if orient_L <= 0:
+        return L
+    orient_R = signed_area(tip, R, point)
+    if orient_R >= 0:
+        return R
+    return point
+
+
 def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     # see if vertex B is visible from tip
     def B_is_visible(area_ABC, area_BAT, area_CBT):
@@ -420,6 +440,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                     else:
                         AxB = vec.cross2(A, B)
                         clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, areas1_B - areas1_A))
+                        clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
                 elif areas1_A == 0:
                     areas1_B = signed_area(ray1.target, B, ray1.tip)
                     if areas1_B > 0:
@@ -434,6 +455,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                 if areas0_B > 0:
                     AxB = vec.cross2(A, B)
                     clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, areas0_B - areas0_A))
+                    clip_A = clamp_by_orientation(tip, A, B, clip_A)
                     areas1_B = signed_area(ray1.target, B, ray1.tip)
                     if areas1_B <= 0:
                         clip_B = B
@@ -441,6 +463,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                         AxB = vec.cross2(A, B)
                         areas1_A = signed_area(ray1.target, A, ray1.tip)
                         clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, areas1_B - areas1_A))
+                        clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
 
                 elif areas0_B == 0:
                     clip_A = B
@@ -482,7 +505,9 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                 ortho_param = Geom2.project_to_line(tip, (clip_B, diff))
                 if 0 < ortho_param and ortho_param < 1:
                     ortho_point = clip_B + ortho_param*diff
-                    points.append((ortho_point, (ortho_point - tip).normSq()))
+                    ortho_point = clamp_by_orientation(tip, clip_A, clip_B, ortho_point)
+                    if ortho_point not in (clip_A, clip_B):
+                        points.append((ortho_point, (ortho_point - tip).normSq()))
 
             db("        -- {} POINTS", len(points))
             if len(points) == 0:
@@ -500,18 +525,6 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                 #  In such cases the tip->edge_point line can fall outside the sector,
                 #  therefore the new spike angle will still be greater than the threshold, which will require
                 #  creating a second portal very close to this one. This problem must be solved.
-                if db_visitor:
-                    p = edge_point
-                    orient_A = signed_area(tip, A, p)
-                    orient_B = signed_area(tip, B, p)
-
-                    if orient_B > 0 or orient_A < 0:
-                        _printf("    orient_A={}, orient_B={}", orient_A, orient_B)
-                        db_visitor.add_polygon((tip, p), color="pink")
-                        db_visitor.add_plus(p, color="pink")
-                        db_visitor.add_polygon((A, B), color="magenta")
-                        db_visitor.add_plus(A, color="magenta")
-                        db_visitor.add_plus(B, color="magenta")
                 ###########################################################################################
 
 
