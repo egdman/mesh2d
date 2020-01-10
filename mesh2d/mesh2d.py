@@ -351,11 +351,11 @@ def update_angles_after_connecting(verts, topo, areas, accum_angles, new_eid, th
 
 def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     # see if vertex B is visible from tip
-    def B_is_visible(area_ABC, orient_AB, orient_BC):
-        if orient_BC > 0:
-            return orient_AB >= 0 or area_ABC > 0
+    def B_is_visible(area_ABC, area_BAT, area_CBT):
+        if area_CBT > 0:
+            return area_BAT >= 0 or area_ABC > 0
         else:
-            return orient_AB > 0 and area_ABC > 0
+            return area_BAT > 0 and area_ABC > 0
 
     db = debug(spike_eid==-999 and db_visitor)
     # db = debug(False)
@@ -372,36 +372,29 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         eid = next(loop)
         v0, v1, v2 = topo.get_triangle(eid, topo.next_edge(eid))
         A, B, C = verts[v0], verts[v1], verts[v2]
-        orient_AB = signed_area(B, A, tip)
-        db("    {} orient_AB = {}", topo.debug_repr(eid), orient_AB)
-        if orient_AB > 0:
+        area_BAT = signed_area(B, A, tip)
+        db("    {} area_BAT = {}", topo.debug_repr(eid), area_BAT)
+        if area_BAT > 0:
             visible_edges.append(eid)
 
-        orient_BC = signed_area(C, B, tip)
-        target_visible[eid] = B_is_visible(areas[eid], orient_AB, orient_BC)
+        area_CBT = signed_area(C, B, tip)
+        target_visible[eid] = B_is_visible(areas[eid], area_BAT, area_CBT)
 
         for eid in loop:
             A, B = B, C
             C = verts[topo.target(topo.next_edge(eid))]
-            orient_AB = orient_BC
+            area_BAT = area_CBT
 
-            db("    {} orient_AB = {}", topo.debug_repr(eid), orient_AB)
-            if orient_AB > 0:
+            db("    {} area_BAT = {}", topo.debug_repr(eid), area_BAT)
+            if area_BAT > 0:
                 visible_edges.append(eid)
 
-            orient_BC = signed_area(C, B, tip)
-            target_visible[eid] = B_is_visible(areas[eid], orient_AB, orient_BC)
+            area_CBT = signed_area(C, B, tip)
+            target_visible[eid] = B_is_visible(areas[eid], area_BAT, area_CBT)
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
     ray0, ray1 = make_sector(verts, topo, spike_eid)
-
-    # G0, T0 = ray0.tip, ray0.target
-    # G1, T1 = ray1.tip, ray1.target
-    # sector_orient = vec.cross2(G0, G1) - vec.cross2(G0, T1) + vec.cross2(G1, T0) + vec.cross2(T0, T1)
-    # _printf("    ^^^^^^^^^^^^^^^^^ SECTOR ORIENTATION = {}", sector_orient)
-    # assert sector_orient > 0, str(sector_orient) + ", {}".format(sector_orient==0)
-
 
     while True:
         db("-"*80)
