@@ -377,7 +377,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         else:
             return area_BAT > 0 and area_ABC > 0
 
-    db = debug(spike_eid==-999 and db_visitor)
+    db = debug(spike_eid==29 and db_visitor)
     # db = debug(False)
     # db = debug(spike_eid==21 and db_visitor)
 
@@ -551,6 +551,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         else:
             # we're not allowed to create T-shaped portals
             if topo.is_portal(closest_eid):
+                db("    PICKED PORTAL {}", topo.debug_repr(closest_eid))
                 # db("    CLOSEST EDGE IS A PORTAL {}".format(topo.debug_repr(closest_eid)))
 
                 if closest_eid == topo.prev_edge(spike_eid):
@@ -567,6 +568,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
                     # only one endpoint is inside sector
                     if r_inside != l_inside:
+                        db("ONE ENDPOINT INSIDE")
                         if r_inside:
                             target_eid = topo.prev_edge(closest_eid)
                         else:
@@ -574,6 +576,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
                     # portal is fully inside sector, select closest endpoint
                     elif r_inside:
+                        db("FULLY INSIDE")
                         if (clip0 - tip).normSq() < (clip1 - tip).normSq():
                             target_eid = topo.prev_edge(closest_eid)
 
@@ -582,6 +585,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
                     # only the middle section passes through sector
                     else:
+                        db("ONLY MIDDLE SECTION INSIDE")
                         target_eid = topo.prev_edge(closest_eid)
 
                 target_coords = verts[topo.target(target_eid)]
@@ -701,7 +705,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         if target_eid in (topo.prev_edge(start_eid), topo.next_edge(start_eid)):
             raise RuntimeError("tried to connect {} to {}".format(topo.debug_repr(start_eid), topo.debug_repr(target_eid)))
 
-        # _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
+        _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
 
         if db_visitor:
             db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
@@ -724,7 +728,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         #     vid = topo.target(spike_eid)
         #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
-        # _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)), r2d*accum_angles[spike_eid])
+        _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)), r2d*accum_angles[spike_eid])
 
         target_eid, target_coords = find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor)
         if target_coords == verts[topo.target(target_eid)]:
@@ -734,6 +738,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
 
         if accum_angles[spike_eid] > threshold:
             all_edges.append(spike_eid)
+        if spike_eid==29:raise RuntimeError("STOP")
 
     delete_redundant_portals(verts, topo, areas, accum_angles, threshold)
 
