@@ -69,19 +69,50 @@ def signed_area(a, b, c):
     '''
     if a.comps <= b.comps:
         if b.comps <= c.comps:
-            pass
-        elif c.comps <= a.comps:
-            a, b, c = c, a, b
+            # a, b, c
+            return vec.cross2(a - c, b - c)
         else:
-            b, a, c = a, c, b
+            # c, a, b
+            return vec.cross2(c - b, a - b)
+    else:
+        if a.comps <= c.comps:
+            # b, a, c
+            return vec.cross2(c - b, a - c)
+        else:
+            # c, b, a
+            return vec.cross2(c - a, a - b)
+
+
+def _second_area(v0, v1, v2, diff):
+    if v0.comps <= v1.comps:
+        return vec.cross2(v0 - v1, v2 - v1)
+    else:
+        return vec.cross2(v0 - v1, diff)
+
+def two_signed_areas(a, b, c, d):
+    if a.comps <= b.comps:
+        if b.comps <= c.comps:
+            # a, b, c
+            u = a - c
+            return vec.cross2(u, b - c), lambda: _second_area(c, d, a, u)
+
+        elif a.comps <= c.comps:
+            # a, c, b
+            return vec.cross2(c - b, a - b), lambda: _second_area(c, d, a, a - c)
+
+        else:
+            # c, a, b
+            return vec.cross2(c - b, a - b), lambda: -_second_area(a, d, c, c - a)
 
     else:
-        if c.comps <= b.comps:
-            b, a, c = c, b, a
-        elif c.comps <= a.comps:
-            a, b, c = b, c, a
-
-    return vec.cross2(a - c, b - c)
+        if a.comps <= c.comps:
+            # b, a, c
+            u = a - c
+            return vec.cross2(c - b, u), lambda: _second_area(c, d, a, u)
+        else:
+            # c, b, a
+            u = c - a
+            return vec.cross2(b - a, u), lambda: -_second_area(a, d, c, u)
 
 
 class Ray:
@@ -168,8 +199,8 @@ def trace_ray(verts, topo, ray, edges, db):
         if orientation >= 0:
             continue
 
-        area_A = signed_area(A, ray.tip, ray.target)
-        area_B = signed_area(B, ray.tip, ray.target)
+        area_A, area_B = two_signed_areas(ray.target, A, ray.tip, B)
+        area_B = area_B()
         # at this point we know that area_A < area_B
 
         db("        a.y = {}, b.y = {}", area_A, area_B)
@@ -443,12 +474,12 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
             v0, v1 = topo.edge_verts(eid)
             B, A = verts[v0], verts[v1]
 
-            areas0_A = signed_area(ray0.target, A, ray0.tip)
+            areas0_A, calc_area0_B = two_signed_areas(ray0.target, A, ray0.tip, B)
             if areas0_A >= 0:
-                areas1_A = signed_area(ray1.target, A, ray1.tip)
+                areas1_A, calc_area1_B = two_signed_areas(ray1.target, A, ray1.tip, B)
                 if areas1_A < 0:
                     clip_A = A
-                    areas1_B = signed_area(ray1.target, B, ray1.tip)
+                    areas1_B = calc_area1_B()
 
                     if areas1_B <= 0:
                         clip_B = B
@@ -457,7 +488,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                         clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, areas1_B - areas1_A))
                         clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
                 elif areas1_A == 0:
-                    areas1_B = signed_area(ray1.target, B, ray1.tip)
+                    areas1_B = calc_area1_B()
                     if areas1_B > 0:
                         clip_A = A
                         clip_B = A
@@ -466,7 +497,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                 else:
                     clip_A, clip_B = None, None
             else: # areas0_A < 0
-                areas0_B = signed_area(ray0.target, B, ray0.tip)
+                areas0_B = calc_area0_B()
                 if areas0_B > 0:
                     AxB = vec.cross2(A, B)
                     clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, areas0_B - areas0_A))
