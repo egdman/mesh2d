@@ -394,8 +394,6 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
             return area_BAT > 0 and area_ABC > 0
 
     db = debug(spike_eid==-999 and db_visitor)
-    # db = debug(False)
-    # db = debug(spike_eid==21 and db_visitor)
 
     tip = verts[topo.target(spike_eid)]
     clipped_verts = [(None, None)] * topo.num_edges()
@@ -560,8 +558,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         else:
             # we're not allowed to create T-shaped portals
             if topo.is_portal(closest_eid):
-                db("    PICKED PORTAL {}", topo.debug_repr(closest_eid))
-                # db("    CLOSEST EDGE IS A PORTAL {}".format(topo.debug_repr(closest_eid)))
+                db("    PICKED A PORTAL {}", topo.debug_repr(closest_eid))
 
                 if closest_eid == topo.prev_edge(spike_eid):
                     target_eid = topo.prev_edge(closest_eid)
@@ -967,7 +964,7 @@ class Topology(object):
                 old_loops = [self.rooms[old_room_id].outline, modified_hole]
                 new_loops = [new_outline]
 
-            # sort holes
+            # sort holes; TODO: this can be done faster
             for hole_eid in unsorted_holes:
                 if self.inside_loop(hole_eid, new_loops[0], verts):
                     new_loops.append(hole_eid)
