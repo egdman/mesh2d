@@ -160,16 +160,13 @@ def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
     # return vec(v1x, v1y), vec(v2x, v2y)
 
 
-def trace_ray(verts, topo, ray, edges, db):
+def trace_ray(topo, ray, edges, db):
     lower = ray.tip[ray.main_component]
     upper = ray.target[ray.main_component]
 
     intersections = []
-    for eid in edges:
+    for eid, B, A in edges:
         db("    EDGE {}", topo.debug_repr(eid))
-
-        v0, v1 = topo.edge_verts(eid)
-        B, A = verts[v0], verts[v1]
 
         orientation = signed_area(A, B, ray.target)
         db("    orientation w.r.t G = {:.18f}", orientation)
@@ -415,20 +412,19 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
         db("    {} area_BAT = {}", topo.debug_repr(eid), area_BAT)
         if area_BAT > 0:
-            visible_edges.append(eid)
+            visible_edges.append((eid, A, B))
             vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 or areas[eid] > 0)
         else:
             vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 and areas[eid] > 0)
 
         for eid in loop:
-            A, B = B, C
-            C = verts[topo.target(topo.next_edge(eid))]
+            A, B, C = B, C, verts[topo.target(topo.next_edge(eid))]
             area_BAT = area_CBT
             area_CBT = signed_area(C, B, tip)
 
             db("    {} area_BAT = {}", topo.debug_repr(eid), area_BAT)
             if area_BAT > 0:
-                visible_edges.append(eid)
+                visible_edges.append((eid, A, B))
                 vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 or areas[eid] > 0)
             else:
                 vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 and areas[eid] > 0)
@@ -443,11 +439,9 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         closest_edge_point, closest_edge_distSq, closest_eid = None, None, None
         closest_vertex_eid, closest_vertex_distSq = None, None
 
-        for eid in visible_edges:
+        # we must reverse the segment to match the orientation of the sector rays
+        for eid, B, A in visible_edges:
             db("    EDGE {}", topo.debug_repr(eid))
-            # we must reverse the segment to match the orientation of the sector rays
-            v0, v1 = topo.edge_verts(eid)
-            B, A = verts[v0], verts[v1]
 
             area0_A = ray0.calc_area(A)
             if area0_A >= 0:
@@ -616,7 +610,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         db("    SELECTED TARGET {}", topo.debug_repr(target_eid))
         db("CHECK OCCLUSION {} TO {}", topo.debug_repr(spike_eid), target_coords)
 
-        occluder = trace_ray(verts, topo, Ray(tip, target_coords), visible_edges, db)
+        occluder = trace_ray(topo, Ray(tip, target_coords), visible_edges, db)
         if occluder is None or occluder in (target_eid, topo.next_edge(target_eid)):
             db("    NOT OCCLUDED")
             return target_eid, target_coords
@@ -624,12 +618,12 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         else:
             db("    OCCLUDED BY {}", topo.debug_repr(occluder))
             clip0, clip1 = clipped_verts[occluder]
-            oc0, oc1 = topo.edge_verts(occluder)
 
             ray0_ = ray0
             ray1_ = ray1
             # if occluder is fully outside the sector
             if clip0 is None:
+                oc0, oc1 = topo.edge_verts(occluder)
                 ray0 = Ray(tip, verts[oc1])
                 ray1 = Ray(tip, verts[oc0])
                 db("    OCCLUDER IS OUTSIDE SECTOR")
@@ -643,14 +637,13 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
             visible_edges_ = visible_edges[:]
             visible_edges = []
-            for eid in visible_edges_:
+            for eid, A, B in visible_edges_:
                 if eid == occluder:
-                    visible_edges.append(eid)
+                    visible_edges.append((eid, A, B))
                 else:
-                    v0, v1 = topo.edge_verts(eid)
-                    if signed_area(verts[v0], ray0.target, ray1.target) >= 0 and \
-                       signed_area(verts[v1], ray0.target, ray1.target) >= 0:
-                        visible_edges.append(eid)
+                    if signed_area(A, ray0.target, ray1.target) >= 0 and \
+                       signed_area(B, ray0.target, ray1.target) >= 0:
+                        visible_edges.append((eid, A, B))
 
 
 def calc_triangle_area(verts, topo, eid, next_eid):
