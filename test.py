@@ -1,5 +1,5 @@
 from mesh2d import vec
-from mesh2d.mesh2d import signed_area
+from mesh2d.mesh2d import signed_area, Ray
 import struct
 import random
 
@@ -153,6 +153,13 @@ def test_signed_area(a, b, c):
     assert c1 == a1, fail_fmt(a, b, c)
     assert a1 == b1, fail_fmt(a, b, c)
 
+    x1 = Ray(c, a).calc_area(b)
+    y1 = Ray(a, b).calc_area(c)
+    z1 = Ray(b, c).calc_area(a)
+    assert x1 == a1, fail_fmt(a, b, c)
+    assert y1 == b1, fail_fmt(a, b, c)
+    assert z1 == c1, fail_fmt(a, b, c)
+
     a2 = signed_area(c, b, a)
     b2 = signed_area(a, c, b)
     c2 = signed_area(b, a, c)
@@ -160,9 +167,15 @@ def test_signed_area(a, b, c):
     assert b2 == -a1, fail_fmt(a, b, c)
     assert c2 == -a1, fail_fmt(a, b, c)
 
+    x2 = Ray(c, b).calc_area(a)
+    y2 = Ray(a, c).calc_area(b)
+    z2 = Ray(b, a).calc_area(c)
+    assert x2 == -a1, fail_fmt(a, b, c)
+    assert y2 == -a1, fail_fmt(a, b, c)
+    assert z2 == -a1, fail_fmt(a, b, c)
 
 # random.seed(7378547834)
-N = 100000
+N = 50000
 for A, B, C in (get_triangle() for _ in xrange(N)):
     test_signed_area(A, B, C)
 
