@@ -395,13 +395,6 @@ def select_connectable_endpoint(topo, vertex_is_connectable, eid):
 
 
 def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
-    # see if vertex B is visible from tip
-    def B_is_visible(area_ABC, area_BAT, area_CBT):
-        if area_CBT > 0:
-            return area_BAT >= 0 or area_ABC > 0
-        else:
-            return area_BAT > 0 and area_ABC > 0
-
     db = debug(spike_eid==-999 and db_visitor)
 
     tip = verts[topo.target(spike_eid)]
@@ -410,6 +403,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     visible_edges = []
     skip = (topo.prev_edge(spike_eid), topo.next_edge(spike_eid))
 
+    # see if vertex B is visible from tip
     room = topo.rooms[topo.room_id(spike_eid)]
     for loop_eid in [room.outline] + room.holes:
         loop = iter(topo.iterate_loop_edges(loop_eid))
@@ -417,24 +411,27 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         v0, v1, v2 = topo.get_triangle(eid, topo.next_edge(eid))
         A, B, C = verts[v0], verts[v1], verts[v2]
         area_BAT = signed_area(B, A, tip)
+        area_CBT = signed_area(C, B, tip)
+
         db("    {} area_BAT = {}", topo.debug_repr(eid), area_BAT)
         if area_BAT > 0:
             visible_edges.append(eid)
-
-        area_CBT = signed_area(C, B, tip)
-        vertex_is_connectable[eid] = eid not in skip and B_is_visible(areas[eid], area_BAT, area_CBT)
+            vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 or areas[eid] > 0)
+        else:
+            vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 and areas[eid] > 0)
 
         for eid in loop:
             A, B = B, C
             C = verts[topo.target(topo.next_edge(eid))]
             area_BAT = area_CBT
+            area_CBT = signed_area(C, B, tip)
 
             db("    {} area_BAT = {}", topo.debug_repr(eid), area_BAT)
             if area_BAT > 0:
                 visible_edges.append(eid)
-
-            area_CBT = signed_area(C, B, tip)
-            vertex_is_connectable[eid] = eid not in skip and B_is_visible(areas[eid], area_BAT, area_CBT)
+                vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 or areas[eid] > 0)
+            else:
+                vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 and areas[eid] > 0)
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
