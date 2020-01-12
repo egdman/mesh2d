@@ -458,27 +458,25 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
 
         points = []
 
-        distSq_B = (clip_B - tip).normSq()
         if clip_B == B:
             if vertex_is_connectable[topo.prev_edge(eid)]:
-                points.append((B, distSq_B))
+                distSq_B = (clip_B - tip).normSq()
                 if distSq_B <= closest_vertex_distSq:
+                    points.append((B, distSq_B))
                     closest_vertex_distSq = distSq_B
                     closest_vertex_eid = topo.prev_edge(eid)
-
         else:
-            points.append((clip_B, distSq_B))
+            points.append((clip_B, (clip_B - tip).normSq()))
 
-        distSq_A = (clip_A - tip).normSq()
         if clip_A == A:
             if vertex_is_connectable[eid]:
-                points.append((A, distSq_A))
+                distSq_A = (clip_A - tip).normSq()
                 if distSq_A <= closest_vertex_distSq:
+                    points.append((A, distSq_A))
                     closest_vertex_distSq = distSq_A
                     closest_vertex_eid = eid
-
         else:
-            points.append((clip_A, distSq_A))
+            points.append((clip_A, (clip_A - tip).normSq()))
 
         if clip_B != clip_A:
             diff = clip_A - clip_B
