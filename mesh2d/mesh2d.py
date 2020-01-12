@@ -410,8 +410,10 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                 area1_B = ray1.calc_area(B)
 
                 if area1_B > 0:
-                    clip_A = A
-                    clip_B = A
+                    if ray1.less(tip[ray1.main_component], A[ray1.main_component]):
+                        clip_A, clip_B = A, A
+                    else:
+                        clip_A, clip_B = None, None
                 else:
                     clip_A, clip_B = None, None
 
@@ -428,13 +430,9 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
 
         else: # area0_A < 0
             area0_B = ray0.calc_area(B)
-            if area0_B < 0:
+            if area0_B <= 0:
                 # the most common case
                 clip_A, clip_B = None, None
-
-            elif area0_B == 0:
-                clip_A = B
-                clip_B = B
 
             else: # area0_B > 0
                 AxB = vec.cross2(A, B)
