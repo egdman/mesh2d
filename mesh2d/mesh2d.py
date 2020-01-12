@@ -170,8 +170,6 @@ def trace_ray(verts, topo, ray, edges, db):
 
         v0, v1 = topo.edge_verts(eid)
         B, A = verts[v0], verts[v1]
-        if ray.target in (A, B):
-            continue
 
         orientation = signed_area(A, B, ray.target)
         db("    orientation w.r.t G = {:.18f}", orientation)
