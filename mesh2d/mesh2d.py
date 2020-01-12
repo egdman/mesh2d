@@ -68,19 +68,13 @@ def signed_area(a, b, c):
     If you flip order of arguments (a, b, c -> b, a, c), it must return the same value but with flipped sign
     '''
     if a.comps <= b.comps:
-        if b.comps <= c.comps:
-            # a, b, c
-            return vec.cross2(a - c, b - c)
-        else:
-            # c, a, b
+        if c.comps <= b.comps:
             return vec.cross2(c - b, a - b)
     else:
-        if a.comps <= c.comps:
-            # b, a, c
-            return vec.cross2(c - b, a - c)
-        else:
-            # c, b, a
+        if c.comps <= a.comps:
             return vec.cross2(c - a, a - b)
+
+    return vec.cross2(c - b, a - c)
 
 
 def _second_area(v0, v1, v2, diff):
@@ -91,28 +85,23 @@ def _second_area(v0, v1, v2, diff):
 
 def two_signed_areas(a, b, c, d):
     if a.comps <= b.comps:
-        if b.comps <= c.comps:
-            # a, b, c
-            u = a - c
-            return vec.cross2(u, b - c), lambda: _second_area(c, d, a, u)
-
-        elif a.comps <= c.comps:
-            # a, c, b
-            return vec.cross2(c - b, a - b), lambda: _second_area(c, d, a, a - c)
-
-        else:
+        if c.comps <= a.comps:
             # c, a, b
             return vec.cross2(c - b, a - b), lambda: -_second_area(a, d, c, c - a)
 
+        elif c.comps <= b.comps:
+            # a, c, b
+            return vec.cross2(c - b, a - b), lambda: _second_area(c, d, a, a - c)
+
     else:
-        if a.comps <= c.comps:
-            # b, a, c
-            u = a - c
-            return vec.cross2(c - b, u), lambda: _second_area(c, d, a, u)
-        else:
+        if c.comps <= a.comps:
             # c, b, a
             u = c - a
             return vec.cross2(b - a, u), lambda: -_second_area(a, d, c, u)
+
+    # a, b, c or b, a, c
+    u = a - c
+    return vec.cross2(c - b, u), lambda: _second_area(c, d, a, u)
 
 
 class Ray:
