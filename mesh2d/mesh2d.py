@@ -188,16 +188,17 @@ def trace_ray(verts, topo, ray, edges, db):
         if orientation >= 0:
             continue
 
-        area_A, area_B = two_signed_areas(ray.target, A, ray.tip, B)
-        area_B = area_B()
+        area_A, calc_area_B = two_signed_areas(ray.target, A, ray.tip, B)
+        db("        a.y = {}", area_A)
+
         # at this point we know that area_A < area_B
-
-        db("        a.y = {}, b.y = {}", area_A, area_B)
-
         if area_A > 0:
             continue
 
-        elif area_A == 0:
+        area_B = calc_area_B()
+        db("        b.y = {}", area_B)
+
+        if area_A == 0:
             if area_B > 0:
                 intersection = A[ray.main_component]
                 if ray.less(lower, intersection) and ray.less(intersection, upper):
