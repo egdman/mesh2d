@@ -99,12 +99,14 @@ class Ray:
             self.calc_area = self._area_A_neg
 
     def _area_A_pos(self, A):
+        # with timed_exec("Ray.calc_area"):pass
         if self.target.comps <= A.comps:
             return vec.cross2(self.tip - A, self.target - A)
         else:
             return vec.cross2(self.target - A, self.stride)
 
     def _area_A_neg(self, A):
+        # with timed_exec("Ray.calc_area"):pass
         if self.tip.comps <= A.comps:
             return vec.cross2(self.tip - A, self.target - A)
         else:
@@ -395,6 +397,8 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
     closest_edge_point, closest_eid, closest_edge_distSq = None, None, float('inf')
     closest_vertex_eid, closest_vertex_distSq = None, float('inf')
     clipped_verts = {}
+    # detect when current segment continues from the previous to reuse a previously calculated area
+    A_prev, area0_B = vec(float('nan')), None
 
     # we must reverse the segment to match the orientation of the sector rays
     for eid, B, A in edges:
@@ -409,18 +413,14 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
             elif area1_A == 0:
                 area1_B = ray1.calc_area(B)
 
-                if area1_B > 0:
-                    if ray1.less(tip[ray1.main_component], A[ray1.main_component]):
-                        clip_A, clip_B = A, A
-                    else:
-                        clip_A, clip_B = None, None
+                if area1_B > 0 and ray1.less(tip[ray1.main_component], A[ray1.main_component]):
+                    clip_A, clip_B = A, A
                 else:
                     clip_A, clip_B = None, None
 
             else: # area1_A < 0
                 clip_A = A
                 area1_B = ray1.calc_area(B)
-
                 if area1_B <= 0:
                     clip_B = B
                 else:
@@ -429,7 +429,10 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                     clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
 
         else: # area0_A < 0
-            area0_B = ray0.calc_area(B)
+            # calculate only if segments are not continuous, otherwise reuse previous value
+            if A_prev != B:
+                area0_B = ray0.calc_area(B)
+
             if area0_B <= 0:
                 # the most common case
                 clip_A, clip_B = None, None
@@ -446,8 +449,9 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                     clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
                     clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
 
-
         db("      CLIPPED {}, {}", clip_B, clip_A)
+        A_prev = A
+        area0_B = area0_A
         clipped_verts[eid] = clip_B, clip_A
         if clip_A is None:
             continue
