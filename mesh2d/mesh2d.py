@@ -391,11 +391,119 @@ def select_connectable_endpoint(topo, vertex_is_connectable, eid):
     return eid
 
 
+def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
+    closest_edge_point, closest_eid, closest_edge_distSq = None, None, float('inf')
+    closest_vertex_eid, closest_vertex_distSq = None, float('inf')
+    clipped_verts = {}
+
+    # we must reverse the segment to match the orientation of the sector rays
+    for eid, B, A in edges:
+        db("    EDGE {}", topo.debug_repr(eid))
+
+        area0_A = ray0.calc_area(A)
+        if area0_A >= 0:
+            area1_A = ray1.calc_area(A)
+            if area1_A > 0:
+                clip_A, clip_B = None, None
+
+            elif area1_A == 0:
+                area1_B = ray1.calc_area(B)
+
+                if area1_B > 0:
+                    clip_A = A
+                    clip_B = A
+                else:
+                    clip_A, clip_B = None, None
+
+            else: # area1_A < 0
+                clip_A = A
+                area1_B = ray1.calc_area(B)
+
+                if area1_B <= 0:
+                    clip_B = B
+                else:
+                    AxB = vec.cross2(A, B)
+                    clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
+                    clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
+
+        else: # area0_A < 0
+            area0_B = ray0.calc_area(B)
+            if area0_B < 0:
+                # the most common case
+                clip_A, clip_B = None, None
+
+            elif area0_B == 0:
+                clip_A = B
+                clip_B = B
+
+            else: # area0_B > 0
+                AxB = vec.cross2(A, B)
+                clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, area0_B - area0_A))
+                clip_A = clamp_by_orientation(tip, A, B, clip_A)
+                area1_B = ray1.calc_area(B)
+                if area1_B <= 0:
+                    clip_B = B
+                else:
+                    area1_A = ray1.calc_area(A)
+                    clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
+                    clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
+
+
+        db("      CLIPPED {}, {}", clip_B, clip_A)
+        clipped_verts[eid] = clip_B, clip_A
+        if clip_A is None:
+            continue
+
+        points = []
+
+        distSq_B = (clip_B - tip).normSq()
+        if clip_B == B:
+            if vertex_is_connectable[topo.prev_edge(eid)]:
+                points.append((B, distSq_B))
+                if distSq_B <= closest_vertex_distSq:
+                    closest_vertex_distSq = distSq_B
+                    closest_vertex_eid = topo.prev_edge(eid)
+
+        else:
+            points.append((clip_B, distSq_B))
+
+        distSq_A = (clip_A - tip).normSq()
+        if clip_A == A:
+            if vertex_is_connectable[eid]:
+                points.append((A, distSq_A))
+                if distSq_A <= closest_vertex_distSq:
+                    closest_vertex_distSq = distSq_A
+                    closest_vertex_eid = eid
+
+        else:
+            points.append((clip_A, distSq_A))
+
+        if clip_B != clip_A:
+            diff = clip_A - clip_B
+            ortho_param = Geom2.project_to_line(tip, (clip_B, diff))
+            if 0 < ortho_param and ortho_param < 1:
+                ortho_point = clip_B + ortho_param*diff
+                ortho_point = clamp_by_orientation(tip, clip_A, clip_B, ortho_point)
+                if ortho_point not in (clip_A, clip_B):
+                    points.append((ortho_point, (ortho_point - tip).normSq()))
+
+        db("        -- {} POINTS", len(points))
+        if len(points) == 0:
+            continue
+
+        edge_point, edge_distSq = min(points, key=itemgetter(1))
+        db("        edge_distSq = {}", edge_distSq)
+        if edge_distSq <= closest_edge_distSq:
+            closest_edge_distSq = edge_distSq
+            closest_edge_point = edge_point
+            closest_eid = eid
+    return closest_vertex_eid, closest_eid, closest_edge_point, clipped_verts
+
+
 def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     db = debug(spike_eid==-999 and db_visitor)
 
     tip = verts[topo.target(spike_eid)]
-    clipped_verts = [(None, None)] * topo.num_edges()
     vertex_is_connectable = [False] * topo.num_edges()
     visible_edges = []
     skip = (topo.prev_edge(spike_eid), topo.next_edge(spike_eid))
@@ -436,111 +544,8 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     while True:
         db("-"*80)
 
-        closest_edge_point, closest_edge_distSq, closest_eid = None, None, None
-        closest_vertex_eid, closest_vertex_distSq = None, None
-
-        # we must reverse the segment to match the orientation of the sector rays
-        for eid, B, A in visible_edges:
-            db("    EDGE {}", topo.debug_repr(eid))
-
-            area0_A = ray0.calc_area(A)
-            if area0_A >= 0:
-                area1_A = ray1.calc_area(A)
-                if area1_A > 0:
-                    clip_A, clip_B = None, None
-
-                elif area1_A == 0:
-                    area1_B = ray1.calc_area(B)
-
-                    if area1_B > 0:
-                        clip_A = A
-                        clip_B = A
-                    else:
-                        clip_A, clip_B = None, None
-
-                else: # area1_A < 0
-                    clip_A = A
-                    area1_B = ray1.calc_area(B)
-
-                    if area1_B <= 0:
-                        clip_B = B
-                    else:
-                        AxB = vec.cross2(A, B)
-                        clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
-                        clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
-
-            else: # area0_A < 0
-                area0_B = ray0.calc_area(B)
-                if area0_B < 0:
-                    # the most common case
-                    clip_A, clip_B = None, None
-
-                elif area0_B == 0:
-                    clip_A = B
-                    clip_B = B
-
-                else: # area0_B > 0
-                    AxB = vec.cross2(A, B)
-                    clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, area0_B - area0_A))
-                    clip_A = clamp_by_orientation(tip, A, B, clip_A)
-                    area1_B = ray1.calc_area(B)
-                    if area1_B <= 0:
-                        clip_B = B
-                    else:
-                        area1_A = ray1.calc_area(A)
-                        clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
-                        clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
-
-
-            db("      CLIPPED {}, {}", clip_B, clip_A)
-            clipped_verts[eid] = clip_B, clip_A
-            if clip_A is None:
-                continue
-
-            points = []
-
-            distSq_B = (clip_B - tip).normSq()
-            if clip_B == B:
-                if vertex_is_connectable[topo.prev_edge(eid)]:
-                    points.append((B, distSq_B))
-                    if closest_vertex_distSq is None or distSq_B <= closest_vertex_distSq:
-                        closest_vertex_distSq = distSq_B
-                        closest_vertex_eid = topo.prev_edge(eid)
-
-            else:
-                points.append((clip_B, distSq_B))
-
-            distSq_A = (clip_A - tip).normSq()
-            if clip_A == A:
-                if vertex_is_connectable[eid]:
-                    points.append((A, distSq_A))
-                    if closest_vertex_distSq is None or distSq_A <= closest_vertex_distSq:
-                        closest_vertex_distSq = distSq_A
-                        closest_vertex_eid = eid
-
-            else:
-                points.append((clip_A, distSq_A))
-
-            if clip_B != clip_A:
-                diff = clip_A - clip_B
-                ortho_param = Geom2.project_to_line(tip, (clip_B, diff))
-                if 0 < ortho_param and ortho_param < 1:
-                    ortho_point = clip_B + ortho_param*diff
-                    ortho_point = clamp_by_orientation(tip, clip_A, clip_B, ortho_point)
-                    if ortho_point not in (clip_A, clip_B):
-                        points.append((ortho_point, (ortho_point - tip).normSq()))
-
-            db("        -- {} POINTS", len(points))
-            if len(points) == 0:
-                continue
-
-            edge_point, edge_distSq = min(points, key=itemgetter(1))
-            db("        edge_distSq = {}", edge_distSq)
-            if closest_edge_distSq is None or edge_distSq <= closest_edge_distSq:
-                closest_edge_distSq = edge_distSq
-                closest_edge_point = edge_point
-                closest_eid = eid
-
+        closest_vertex_eid, closest_eid, closest_coords, clipped_verts = sector_clip(
+            topo, vertex_is_connectable, tip, ray0, ray1, visible_edges, db)
 
         if closest_eid is None:
             if db_visitor:
@@ -552,7 +557,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                     topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid))))
 
         # if the closest vertex belongs to the closest edge,
-        # we can connect to the vertex instead of the edge, even though it's more distant
+        # we can connect to the vertex instead of the edge, even though it's more distant than closest_coords
         if closest_vertex_eid is not None and \
             closest_eid in (closest_vertex_eid, topo.next_edge(closest_vertex_eid)):
             target_eid = closest_vertex_eid
@@ -604,7 +609,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
             else:
                 target_eid = closest_eid
-                target_coords = closest_edge_point
+                target_coords = closest_coords
 
 
         db("    SELECTED TARGET {}", topo.debug_repr(target_eid))
