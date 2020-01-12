@@ -455,7 +455,19 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
             area0_A = ray0.calc_area(A)
             if area0_A >= 0:
                 area1_A = ray1.calc_area(A)
-                if area1_A < 0:
+                if area1_A > 0:
+                    clip_A, clip_B = None, None
+
+                elif area1_A == 0:
+                    area1_B = ray1.calc_area(B)
+
+                    if area1_B > 0:
+                        clip_A = A
+                        clip_B = A
+                    else:
+                        clip_A, clip_B = None, None
+
+                else: # area1_A < 0
                     clip_A = A
                     area1_B = ray1.calc_area(B)
 
@@ -465,37 +477,29 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                         AxB = vec.cross2(A, B)
                         clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
                         clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
-                elif area1_A == 0:
-                    area1_B = ray1.calc_area(B)
 
-                    if area1_B > 0:
-                        clip_A = A
-                        clip_B = A
-                    else:
-                        clip_A, clip_B = None, None
-                else:
-                    clip_A, clip_B = None, None
             else: # area0_A < 0
                 area0_B = ray0.calc_area(B)
-
-                if area0_B > 0:
-                    AxB = vec.cross2(A, B)
-                    clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, area0_B - area0_A))
-                    clip_A = clamp_by_orientation(tip, A, B, clip_A)
-                    area1_B = signed_area(ray1.target, B, ray1.tip)
-                    if area1_B <= 0:
-                        clip_B = B
-                    else:
-                        AxB = vec.cross2(A, B)
-                        area1_A = signed_area(ray1.target, A, ray1.tip)
-                        clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
-                        clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
+                if area0_B < 0:
+                    # the most common case
+                    clip_A, clip_B = None, None
 
                 elif area0_B == 0:
                     clip_A = B
                     clip_B = B
-                else:
-                    clip_A, clip_B = None, None
+
+                else: # area0_B > 0
+                    AxB = vec.cross2(A, B)
+                    clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, area0_B - area0_A))
+                    clip_A = clamp_by_orientation(tip, A, B, clip_A)
+                    area1_B = ray1.calc_area(B)
+                    if area1_B <= 0:
+                        clip_B = B
+                    else:
+                        area1_A = ray1.calc_area(A)
+                        clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
+                        clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
+
 
             db("      CLIPPED {}, {}", clip_B, clip_A)
             clipped_verts[eid] = clip_B, clip_A
