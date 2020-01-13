@@ -394,9 +394,24 @@ def select_connectable_endpoint(topo, vertex_is_connectable, eid):
 
 
 def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
+    clipped_verts = {}
+
+    # quickly skip segments that lie entirely behind the sector
+    if ray0.main_component != ray1.main_component or ray0.less == ray1.less:
+        edges_ = []
+        for eid, A, B in edges:
+            if (not ray0.less(tip[ray0.main_component], A[ray0.main_component])) and \
+               (not ray0.less(tip[ray0.main_component], B[ray0.main_component])) and \
+               (not ray1.less(tip[ray1.main_component], A[ray1.main_component])) and \
+               (not ray1.less(tip[ray1.main_component], B[ray1.main_component])):
+                clipped_verts[eid] = None, None
+            else:
+                edges_.append((eid, A, B))
+        edges = edges_
+
+
     closest_edge_point, closest_eid, closest_edge_distSq = None, None, float('inf')
     closest_vertex_eid, closest_vertex_distSq = None, float('inf')
-    clipped_verts = {}
     # detect when current segment continues from the previous to reuse a previously calculated area
     A_prev, area0_B = vec(float('nan')), None
 
