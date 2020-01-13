@@ -632,6 +632,8 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
             ray1_ = ray1
             # if occluder is fully outside the sector
             if clip0 is None:
+                # TODO: this is not correct because new ray0 or ray1 might pass
+                #  through the out of bounds area behind the spike (see bugs/problem32.txt)
                 oc0, oc1 = topo.edge_verts(occluder)
                 ray0 = Ray(tip, verts[oc1])
                 ray1 = Ray(tip, verts[oc0])
