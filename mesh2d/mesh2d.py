@@ -178,7 +178,6 @@ def trace_ray(topo, ray, edges, db):
         area_A = ray.calc_area(A)
         db("        a.y = {}", area_A)
 
-        # at this point we know that area_A < area_B
         if area_A > 0:
             continue
 
