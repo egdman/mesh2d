@@ -162,6 +162,51 @@ def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
     # return vec(v1x, v1y), vec(v2x, v2y)
 
 
+# def trace_ray(topo, ray, edges, db):
+#     intersections = []
+#     for eid, B, A in edges:
+#         db("    EDGE {}", topo.debug_repr(eid))
+
+#         orientation = signed_area(A, B, ray.target)
+#         db("    orientation w.r.t G = {:.18f}", orientation)
+#         if orientation >= 0:
+#             continue
+
+#         area_A = ray.calc_area(A)
+#         db("        a.y = {}", area_A)
+
+#         if area_A > 0:
+#             continue
+
+#         area_B = ray.calc_area(B)
+#         db("        b.y = {}", area_B)
+
+#         if area_A == 0:
+#             if area_B > 0:
+#                 intersection = A[ray.main_component]
+#                 if not ray.less(ray.tip[ray.main_component], intersection):
+#                     continue
+#             else:
+#                 continue
+
+#         else: # area_A < 0
+#             if area_B > 0:
+#                 intersection = ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A)
+#                 if not ray.less(ray.tip[ray.main_component], intersection):
+#                     continue
+#             else: # area_B <= 0
+#                 continue
+
+#         intersections.append((eid, intersection))
+
+#     if len(intersections) == 0:
+#         return None
+
+#     db("    INTERSECTIONS: {}", list((eid, ray.target[ray.main_component] - p) for eid, p in intersections))
+#     occluder, _ = ray.pick_least(intersections, key=itemgetter(1))
+#     return occluder
+
+
 def trace_ray(topo, ray, edges, db):
     lower = ray.tip[ray.main_component]
     upper = ray.target[ray.main_component]
