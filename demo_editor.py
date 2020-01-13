@@ -173,7 +173,7 @@ class CreateWallTool(Tool):
 class FreePolyTool(Tool):
     def __init__(self, parent):
         self.vertices = []
-        self.half_spacing = 2.5
+        self.half_spacing = 0.5 #2.5
         super(FreePolyTool, self).__init__(parent)
 
     def grid_snap(self, p):
@@ -834,6 +834,18 @@ class ProvideException(object):
             # Optionally raise your own exceptions, popups etc
 
 
+def list_dir(dir_path):
+    if os.path.isfile(dir_path):
+        yield dir_path
+    elif os.path.isdir(dir_path):
+        for n in os.listdir(dir_path):
+            n = os.path.join(dir_path, n)
+            if os.path.isfile(n):
+                yield n
+    else:
+        raise RuntimeError("{} - no such file or directory".format(dir_path))
+
+
 @ProvideException
 def main():
     parser = ArgumentParser()
@@ -842,8 +854,18 @@ def main():
     parser.add_argument('-d', '--debug', action='store_true', help='start in debug mode')
     parser.add_argument('-z', '--no-gui', action='store_true', help='open file and perform subdivision without GUI')
     parser.add_argument('--scale', type=float, default=1.)
+    parser.add_argument('--test-dir', type=str, default="", help='open all files in the given directory for testing')
 
     args = parser.parse_args()
+
+    # test mode
+    if args.test_dir != "":
+        for name in sorted(list_dir(args.test_dir)):
+            print("testing {}".format(name))
+            input_polygons = read_polygons(name, 1.)
+            for poly in input_polygons:
+                subdivide_polygon(poly, RELAX_ANGLE)
+        return
 
     input_polygons = read_polygons(args.input, args.scale) if args.input else ()
 
