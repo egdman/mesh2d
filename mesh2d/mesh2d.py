@@ -516,11 +516,11 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
     # determine visibility of edges and vertices from tip
     def add_visibility(eid, A, B, area_A, area_B):
-        if area_A > 0:
+        if area_A:
             visible_edges.append((eid, A, B))
-            vertex_is_connectable[eid] = eid not in skip and (area_B > 0 or areas[eid] > 0)
+            vertex_is_connectable[eid] = eid not in skip and (area_B or areas[eid] > 0)
         else:
-            vertex_is_connectable[eid] = eid not in skip and (area_B > 0 and areas[eid] > 0)
+            vertex_is_connectable[eid] = eid not in skip and (area_B and areas[eid] > 0)
 
     room = topo.rooms[topo.room_id(spike_eid)]
     for loop_eid in [room.outline] + room.holes:
@@ -530,8 +530,8 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
         A, B, C = topo.get_triangle(eid, next_eid)
         A, B, C = verts[A], verts[B], verts[C]
         calc_area = get_area_calculator(tip, B)
-        area_1 = calc_area(A)
-        area_2 = -calc_area(C)
+        area_1 = calc_area(A) > 0
+        area_2 = calc_area(C) < 0
         add_visibility(eid, A, B, area_1, area_2)
 
         A_, area_2_ = A, area_1
@@ -544,7 +544,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                 B = verts[topo.target(next_eid)]
                 calc_area = get_area_calculator(tip, B)
 
-                area_2 = calc_area(A)
+                area_2 = calc_area(A) > 0
                 add_visibility(eid, X, A, area_1, area_2)
 
                 eid, area_1 = next_eid, area_2
@@ -553,7 +553,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                 next_eid = next(loop)
                 C = verts[topo.target(next_eid)]
 
-                area_2 = -calc_area(C)
+                area_2 = calc_area(C) < 0
                 add_visibility(eid, X, A, area_1, area_2)
 
         except StopIteration:
