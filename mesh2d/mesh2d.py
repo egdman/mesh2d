@@ -93,25 +93,6 @@ class Ray:
         else:
             self.pick_least, self.less = max, op_more
 
-        if tip.comps <= target.comps:
-            self.calc_area = self._area_A_pos
-        else:
-            self.calc_area = self._area_A_neg
-
-    def _area_A_pos(self, A):
-        # with timed_exec("Ray.calc_area"):pass
-        if self.target.comps <= A.comps:
-            return vec.cross2(self.tip - A, self.target - A)
-        else:
-            return vec.cross2(self.target - A, self.stride)
-
-    def _area_A_neg(self, A):
-        # with timed_exec("Ray.calc_area"):pass
-        if self.tip.comps <= A.comps:
-            return vec.cross2(self.tip - A, self.target - A)
-        else:
-            return vec.cross2(self.tip - A, self.stride)
-
     def __eq__(self, right):
         return (self.tip, self.target) == (right.tip, right.target)
 
@@ -142,6 +123,24 @@ class Ray:
         return vec(*i)
 
 
+def get_area_calculator(tip, target):
+    stride = target - tip
+
+    if tip.comps <= target.comps:
+        def _calc_area(A):
+            if target.comps <= A.comps:
+                return vec.cross2(tip - A, target - A)
+            else:
+                return vec.cross2(target - A, stride)
+    else:
+        def _calc_area(A):
+            if tip.comps <= A.comps:
+                return vec.cross2(tip - A, target - A)
+            else:
+                return vec.cross2(tip - A, stride)
+    return _calc_area
+
+
 def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
     # TODO: support increased opening angles
     A, B, C = topo.get_triangle(spike_eid, topo.next_edge(spike_eid))
@@ -163,6 +162,7 @@ def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
 
 
 def trace_ray(topo, ray, edges, db):
+    calc_area = get_area_calculator(ray.tip, ray.target)
     lower = ray.tip[ray.main_component]
     upper = ray.target[ray.main_component]
 
@@ -175,13 +175,13 @@ def trace_ray(topo, ray, edges, db):
         if orientation >= 0:
             continue
 
-        area_A = ray.calc_area(A)
+        area_A = calc_area(A)
         db("        a.y = {}", area_A)
 
         if area_A > 0:
             continue
 
-        area_B = ray.calc_area(B)
+        area_B = calc_area(B)
         db("        b.y = {}", area_B)
 
         if area_A == 0:
@@ -399,6 +399,8 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
         edges = edges_
 
 
+    calc_area0 = get_area_calculator(ray0.tip, ray0.target)
+    calc_area1 = get_area_calculator(ray1.tip, ray1.target)
     closest_edge_point, closest_eid, closest_edge_distSq = None, None, float('inf')
     closest_vertex_eid, closest_vertex_distSq = None, float('inf')
     # detect when current segment continues from the previous to reuse a previously calculated area
@@ -408,14 +410,14 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
     for eid, B, A in edges:
         db("    EDGE {}", topo.debug_repr(eid))
 
-        area0_A = ray0.calc_area(A)
+        area0_A = calc_area0(A)
         if area0_A >= 0:
-            area1_A = ray1.calc_area(A)
+            area1_A = calc_area1(A)
             if area1_A > 0:
                 clip_A, clip_B = None, None
 
             elif area1_A == 0:
-                area1_B = ray1.calc_area(B)
+                area1_B = calc_area1(B)
 
                 if area1_B > 0 and ray1.less(tip[ray1.main_component], A[ray1.main_component]):
                     clip_A, clip_B = A, A
@@ -424,7 +426,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
 
             else: # area1_A < 0
                 clip_A = A
-                area1_B = ray1.calc_area(B)
+                area1_B = calc_area1(B)
                 if area1_B <= 0:
                     clip_B = B
                 else:
@@ -435,7 +437,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
         else: # area0_A < 0
             # calculate only if segments are not continuous, otherwise reuse previous value
             if A_prev != B:
-                area0_B = ray0.calc_area(B)
+                area0_B = calc_area0(B)
 
             if area0_B <= 0:
                 # the most common case
@@ -445,11 +447,11 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                 AxB = vec.cross2(A, B)
                 clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, area0_B - area0_A))
                 clip_A = clamp_by_orientation(tip, A, B, clip_A)
-                area1_B = ray1.calc_area(B)
+                area1_B = calc_area1(B)
                 if area1_B <= 0:
                     clip_B = B
                 else:
-                    area1_A = ray1.calc_area(A)
+                    area1_A = calc_area1(A)
                     clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
                     clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
 
@@ -505,41 +507,58 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
 
 
 def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
-    db = debug(spike_eid==-999 and db_visitor)
+    db = debug(spike_eid==41 and db_visitor)
 
     tip = verts[topo.target(spike_eid)]
     vertex_is_connectable = [False] * topo.num_edges()
     visible_edges = []
     skip = (topo.prev_edge(spike_eid), topo.next_edge(spike_eid))
 
-    # see if vertex B is visible from tip
+    # determine visibility of edges and vertices from tip
+    def add_visibility(eid, A, B, area_A, area_B):
+        if area_A > 0:
+            visible_edges.append((eid, A, B))
+            vertex_is_connectable[eid] = eid not in skip and (area_B > 0 or areas[eid] > 0)
+        else:
+            vertex_is_connectable[eid] = eid not in skip and (area_B > 0 and areas[eid] > 0)
+
     room = topo.rooms[topo.room_id(spike_eid)]
     for loop_eid in [room.outline] + room.holes:
         loop = iter(topo.iterate_loop_edges(loop_eid))
         eid = next(loop)
-        v0, v1, v2 = topo.get_triangle(eid, topo.next_edge(eid))
-        A, B, C = verts[v0], verts[v1], verts[v2]
-        area_BAT = signed_area(B, A, tip)
-        area_CBT = signed_area(C, B, tip)
+        next_eid = next(loop)
+        A, B, C = topo.get_triangle(eid, next_eid)
+        A, B, C = verts[A], verts[B], verts[C]
+        calc_area = get_area_calculator(tip, B)
+        area_1 = calc_area(A)
+        area_2 = -calc_area(C)
+        add_visibility(eid, A, B, area_1, area_2)
 
-        db("    {} area_BAT = {}", topo.debug_repr(eid), area_BAT)
-        if area_BAT > 0:
-            visible_edges.append((eid, A, B))
-            vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 or areas[eid] > 0)
-        else:
-            vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 and areas[eid] > 0)
+        A_, area_2_ = A, area_1
+        try:
+            while True:
+                eid, area_1 = next_eid, area_2
+                X, A = B, C
 
-        for eid in loop:
-            A, B, C = B, C, verts[topo.target(topo.next_edge(eid))]
-            area_BAT = area_CBT
-            area_CBT = signed_area(C, B, tip)
+                next_eid = next(loop)
+                B = verts[topo.target(next_eid)]
+                calc_area = get_area_calculator(tip, B)
 
-            db("    {} area_BAT = {}", topo.debug_repr(eid), area_BAT)
-            if area_BAT > 0:
-                visible_edges.append((eid, A, B))
-                vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 or areas[eid] > 0)
-            else:
-                vertex_is_connectable[eid] = eid not in skip and (area_CBT > 0 and areas[eid] > 0)
+                area_2 = calc_area(A)
+                add_visibility(eid, X, A, area_1, area_2)
+
+                eid, area_1 = next_eid, area_2
+                X, A = A, B
+
+                next_eid = next(loop)
+                C = verts[topo.target(next_eid)]
+
+                area_2 = -calc_area(C)
+                add_visibility(eid, X, A, area_1, area_2)
+
+        except StopIteration:
+            add_visibility(eid, X, A_, area_1, area_2_)
+
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
@@ -674,7 +693,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
     This function uses algorithm from R. Oliva and N. Pelechano - 
     Automatic Generation of Suboptimal NavMeshes
     """
-
+    db = debug(db_visitor is not None)
     if db_visitor:
         for eid in topo.iterate_all_internal_edges():
             vid = topo.target(eid)
@@ -727,7 +746,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         if target_eid in (topo.prev_edge(start_eid), topo.next_edge(start_eid)):
             raise RuntimeError("tried to connect {} to {}".format(topo.debug_repr(start_eid), topo.debug_repr(target_eid)))
 
-        # _printf("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
+        db("    connecting {} to {}", topo.debug_repr(start_eid), topo.debug_repr(target_eid))
 
         if db_visitor:
             db_visitor.add_polygon((verts[topo.target(start_eid)], verts[topo.target(target_eid)]), color="cyan")
@@ -750,7 +769,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         #     vid = topo.target(spike_eid)
         #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
 
-        # _printf("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)), r2d*accum_angles[spike_eid])
+        db("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)), r2d*accum_angles[spike_eid])
 
         target_eid, target_coords = find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor)
         if target_coords == verts[topo.target(target_eid)]:
@@ -760,7 +779,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
 
         if accum_angles[spike_eid] > threshold:
             all_edges.append(spike_eid)
-
+        # if spike_eid == 41: raise RuntimeError("STOP")
     delete_redundant_portals(verts, topo, areas, accum_angles, threshold)
 
 
