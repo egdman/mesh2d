@@ -381,16 +381,16 @@ class NavMeshView(ObjectView):
         # draw portals
         for portal in self.navmesh.portals:
             portal_crds = self.get_open_crds(trans_vertices, portal)
-            Id = canvas.create_line(portal_crds, fill='#E99932', width=1)
+            Id = canvas.create_line(portal_crds, fill='#833330', width=1)
             self.element_ids.append(Id)
 
         # draw outline
         outline_crds = self.get_closed_crds(trans_vertices, self.navmesh.outline)
-        Id = canvas.create_line(outline_crds, fill='#c9c9c9', width=1)
+        Id = canvas.create_line(outline_crds, fill='#727272', width=1)
         self.element_ids.append(Id)
 
         # draw holes
         for hole in self.navmesh.holes:
             outline_crds = self.get_closed_crds(trans_vertices, hole)
-            Id = canvas.create_line(outline_crds, fill='#c9c9c9', width=1)
+            Id = canvas.create_line(outline_crds, fill='#727272', width=1)
             self.element_ids.append(Id)
