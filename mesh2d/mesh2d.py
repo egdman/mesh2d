@@ -507,7 +507,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
 
 
 def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
-    db = debug(spike_eid==41 and db_visitor)
+    db = debug(spike_eid==-999 and db_visitor)
 
     tip = verts[topo.target(spike_eid)]
     vertex_is_connectable = [False] * topo.num_edges()
@@ -645,35 +645,48 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
         else:
             db("    OCCLUDED BY {}", topo.debug_repr(occluder))
-            clip0, clip1 = clipped_verts[occluder]
+            clip1, clip0 = clipped_verts[occluder]
 
             ray0_ = ray0
             ray1_ = ray1
             # if occluder is fully outside the sector
             if clip0 is None:
-                # TODO: this is not correct because new ray0 or ray1 might pass
-                #  through the out of bounds area behind the spike (see bugs/problem32.txt)
-                oc0, oc1 = topo.edge_verts(occluder)
-                ray0 = Ray(tip, verts[oc1])
-                ray1 = Ray(tip, verts[oc0])
                 db("    OCCLUDER IS OUTSIDE SECTOR")
+                # make sure that new ray0 or ray1 do not pass through
+                # the out of bounds area behind the spike (see bugs/problem32.txt)
+                S = verts[topo.target(topo.opposite(spike_eid))]
+                U = verts[topo.target(topo.next_edge(spike_eid))]
+                area0 = get_area_calculator(U, tip)
+                area1 = get_area_calculator(S, tip)
+                oc0, oc1 = topo.edge_verts(occluder)
+                B, A = verts[oc0], verts[oc1]
+                if area0(B) <= 0 and area1(A) >= 0:
+                    if area1(B) >= 0:
+                        ray0 = Ray(tip, A)
+                        ray1 = Ray(tip, U)
+                    else:
+                        ray0 = Ray(tip, S)
+                        ray1 = Ray(tip, B)
+                else:
+                    ray0 = Ray(tip, A)
+                    ray1 = Ray(tip, B)
+                    visible_edges = list(filter_behind_occluder(occluder, ray0.target, ray1.target, visible_edges))
             else:
-                ray0 = Ray(tip, clip1)
-                ray1 = Ray(tip, clip0)
                 db("    OCCLUDER IS  INSIDE SECTOR")
+                ray0 = Ray(tip, clip0)
+                ray1 = Ray(tip, clip1)
+                visible_edges = list(filter_behind_occluder(occluder, ray0.target, ray1.target, visible_edges))
 
             if ray0 == ray0_ and ray1 == ray1_:
                 raise RuntimeError("infinite inner loop")
 
-            visible_edges_ = visible_edges[:]
-            visible_edges = []
-            for eid, A, B in visible_edges_:
-                if eid == occluder:
-                    visible_edges.append((eid, A, B))
-                else:
-                    if signed_area(A, ray0.target, ray1.target) >= 0 and \
-                       signed_area(B, ray0.target, ray1.target) >= 0:
-                        visible_edges.append((eid, A, B))
+
+def filter_behind_occluder(occluder_eid, oc0, oc1, edges):
+    for eid, A, B in edges:
+        if eid == occluder_eid:
+            yield occluder_eid, A, B
+        elif signed_area(A, oc0, oc1) >= 0 and signed_area(B, oc0, oc1) >= 0:
+            yield eid, A, B
 
 
 def calc_triangle_area(verts, topo, eid, next_eid):
@@ -779,7 +792,7 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
 
         if accum_angles[spike_eid] > threshold:
             all_edges.append(spike_eid)
-        # if spike_eid == 41: raise RuntimeError("STOP")
+
     delete_redundant_portals(verts, topo, areas, accum_angles, threshold)
 
 
