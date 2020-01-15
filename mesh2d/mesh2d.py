@@ -768,8 +768,12 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         update_angles_after_connecting(verts, topo, areas, accum_angles, new_eid, threshold)
         return new_eid, topo.opposite(new_eid)
 
-
-    # sorting spikes by external angle makes it faster!
+    # Changing the order of spikes by sorting reduces the number of times
+    #  when we must assign holes to rooms after splitting a room.
+    # That is the most expensive operation in function topo.connect.
+    # Random shuffling instead of sorting works too, because the initial order provides a very bad case.
+    # TODO: In theory we could find an order of spikes in which the hole assignment must be done 0 times,
+    #  which would be the best case.
     all_edges = list(sorted(tuple(topo.iterate_all_internal_edges()),
         key=lambda eid: -accum_angles[eid]))
 
