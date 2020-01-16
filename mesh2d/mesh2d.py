@@ -770,34 +770,40 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         update_angles_after_connecting(verts, topo, areas, accum_angles, new_eid, threshold)
         return new_eid, topo.opposite(new_eid)
 
-    # Changing the order of spikes by sorting reduces the number of times
-    #  when we must assign holes to rooms after splitting a room.
-    # That is the most expensive operation in function topo.connect.
-    # Random shuffling instead of sorting works too, because the initial order provides a very bad case.
-    # TODO: In theory we could find an order of spikes in which the hole assignment must be done 0 times,
-    #  which would be the best case.
-    all_edges = list(sorted(tuple(topo.iterate_all_internal_edges()),
-        key=lambda eid: -accum_angles[eid]))
 
-    print("NUM EDGES IS {}".format(len(all_edges)))
+    room_stack = list(range(len(topo.rooms)))
+    while True:
+        room, room_stack = topo.rooms[room_stack[0]], room_stack[1:]
+        if len(room.holes) == 0:
+            spike_eid = max(topo.iterate_loop_edges(room.outline), key=lambda eid: accum_angles[eid])
+            if accum_angles[spike_eid] <= threshold:
+                if len(room_stack) > 0:
+                    continue
+                else:
+                    break
 
-    for spike_eid in all_edges:
-        if accum_angles[spike_eid] <= threshold: continue # not a spike
+        else:
+            spikes = iter(())
+            for hole_eid in room.holes:
+                spikes = chain(spikes,
+                    (eid for eid in topo.iterate_loop_edges(hole_eid) if accum_angles[eid] > threshold))
 
-        # if db_visitor:
-        #     vid = topo.target(spike_eid)
-        #     db_visitor.add_text(verts[vid], str(vid), color="#93f68b")
+            spike_eid = min(spikes, key=lambda eid: verts[topo.target(eid)].comps) # pick the leftmost spike
 
         db("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)), r2d*accum_angles[spike_eid])
 
-        target_eid, target_coords = find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor)
+        with timed_exec("find a connection"):
+            target_eid, target_coords = find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor)
         if target_coords == verts[topo.target(target_eid)]:
-            all_edges.extend(connect_to_target(spike_eid, target_eid))
+            eid0, eid1 = connect_to_target(spike_eid, target_eid)
         else:
-            all_edges.extend(connect_to_new_vertex(spike_eid, target_eid, target_coords))
+            eid0, eid1 = connect_to_new_vertex(spike_eid, target_eid, target_coords)
 
-        if accum_angles[spike_eid] > threshold:
-            all_edges.append(spike_eid)
+        room_id0, room_id1 = topo.room_id(eid0), topo.room_id(eid1)
+        if room_id0 == room_id1:
+            room_stack = [room_id0] + room_stack
+        else:
+            room_stack = [room_id0, room_id1] + room_stack
 
     delete_redundant_portals(verts, topo, areas, accum_angles, threshold)
 
@@ -1018,7 +1024,7 @@ class Topology(object):
                 old_loops = [self.rooms[old_room_id].outline, modified_hole]
                 new_loops = [new_outline]
 
-            # sort holes; TODO: this can be done faster
+            # assign holes to rooms
             for hole_eid in unsorted_holes:
                 if self.inside_loop(hole_eid, new_loops[0], verts):
                     new_loops.append(hole_eid)
