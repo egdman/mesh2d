@@ -405,12 +405,22 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
     calc_area1 = get_area_calculator(ray1.tip, ray1.target)
     closest_edge_point, closest_eid, closest_edge_distSq = None, None, float('inf')
     closest_vertex_eid, closest_vertex_distSq = None, float('inf')
+
+    upper0 = float('inf') if ray0.less == op_less else -float('inf')
+    upper1 = float('inf') if ray1.less == op_less else -float('inf')
     # detect when current segment continues from the previous to reuse a previously calculated area
     A_prev, area0_B = vec(float('nan')), None
 
     # we must reverse the segment to match the orientation of the sector rays
     for eid, B, A in edges:
         db("    EDGE {}", topo.debug_repr(eid))
+
+        if ray0.less(upper0, A[ray0.main_component]) and ray0.less(upper0, B[ray0.main_component]):
+            clipped_verts[eid] = None, None
+            continue
+        if ray1.less(upper1, A[ray1.main_component]) and ray1.less(upper1, B[ray1.main_component]):
+            clipped_verts[eid] = None, None
+            continue
 
         area0_A = calc_area0(A)
         if area0_A >= 0:
@@ -475,6 +485,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                     closest_vertex_eid = topo.prev_edge(eid)
         elif clip_B != A:
             points.append((clip_B, (clip_B - tip).normSq()))
+            upper1 = clip_B[ray1.main_component]
 
         if clip_A == A:
             if vertex_is_connectable[eid]:
@@ -485,6 +496,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                     closest_vertex_eid = eid
         elif clip_A != B:
             points.append((clip_A, (clip_A - tip).normSq()))
+            upper0 = clip_A[ray0.main_component]
 
         if clip_B != clip_A:
             diff = clip_A - clip_B
