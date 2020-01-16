@@ -193,7 +193,9 @@ def trace_ray(topo, ray, edges, db):
         else: # area_A < 0
             if area_B > 0:
                 intersection = ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A)
-            else: # area_B <= 0
+            elif area_B == 0:
+                intersection = B[ray.main_component]
+            else: # area_B < 0
                 continue
 
         if ray.less(lower, intersection) and ray.less(intersection, upper):
@@ -471,7 +473,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                     points.append((B, distSq_B))
                     closest_vertex_distSq = distSq_B
                     closest_vertex_eid = topo.prev_edge(eid)
-        else:
+        elif clip_B != A:
             points.append((clip_B, (clip_B - tip).normSq()))
 
         if clip_A == A:
@@ -481,7 +483,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                     points.append((A, distSq_A))
                     closest_vertex_distSq = distSq_A
                     closest_vertex_eid = eid
-        else:
+        elif clip_A != B:
             points.append((clip_A, (clip_A - tip).normSq()))
 
         if clip_B != clip_A:
