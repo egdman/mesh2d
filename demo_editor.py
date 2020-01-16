@@ -21,7 +21,7 @@ except NameError:
     AnyError = Exception
 
 
-RELAX_ANGLE = 8 # degrees
+RELAX_ANGLE = 0.0001 # degrees
 
 
 class RecordType:
@@ -173,7 +173,7 @@ class CreateWallTool(Tool):
 class FreePolyTool(Tool):
     def __init__(self, parent):
         self.vertices = []
-        self.half_spacing = 0.5 #2.5
+        self.half_spacing = 0.005 #2.5
         super(FreePolyTool, self).__init__(parent)
 
     def grid_snap(self, p):
