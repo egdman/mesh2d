@@ -4,14 +4,14 @@ from collections import defaultdict
 from operator import itemgetter, lt as op_less, gt as op_more
 from itertools import chain
 from copy import deepcopy
-from time import clock
 from contextlib import contextmanager
 from random import randint, seed as randseed
 
 try:
+    from time import clock as perf_counter
     from itertools import izip as zip
 except ImportError:
-    pass
+    from time import perf_counter
 
 from .vector2 import vec, Geom2
 
@@ -45,20 +45,17 @@ class CallTime:
         self.n += 1
         self.accum += time
 
-    def average(self):
-        return self.accum / self.n
-
 timing = defaultdict(CallTime)
 
 @contextmanager
 def timed_exec(name):
-    s = clock()
+    s = perf_counter()
     yield
-    timing[name].add(clock() - s)
+    timing[name].add(perf_counter() - s)
 
 @contextmanager
 def counted_exec(name):
-    timing[name].add(0.)
+    timing[name].n += 1
     yield
 
 
