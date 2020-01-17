@@ -138,24 +138,22 @@ def get_area_calculator(tip, target):
     return _calc_area
 
 
-def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
-    # TODO: support increased opening angles
+def make_sector(verts, topo, areas, accum_angles, spike_eid, threshold):
     A, B, C = topo.get_triangle(spike_eid, topo.next_edge(spike_eid))
-    return Ray(verts[C], verts[B]), Ray(verts[A], verts[B]) 
+    A, B, C = verts[A], verts[B], verts[C]
 
-    # # increase opening angle of the sector due to threshold
-    # extern_angle = calc_external_angle(unit_edges, spike_eid, topo.next_edge(spike_eid))
-    # extra_opening = .5 * (extern_angle - accum_angles[spike_eid] + threshold)
+    # increase opening angle of the sector due to threshold
+    extern_angle = calc_external_angle(verts, topo, spike_eid, topo.next_edge(spike_eid), areas[spike_eid])
+    extra_opening = .5 * (extern_angle - accum_angles[spike_eid] + threshold)
 
-    # cosine = math.cos(extra_opening)
-    # sine = math.sin(extra_opening)
+    cosine = math.cos(extra_opening)
+    sine = math.sin(extra_opening)
 
-    # v1x, v1y = unit_edges[topo.next_edge(spike_eid)].comps
-    # v2x, v2y = unit_edges[spike_eid].comps
-
-    # v1x, v1y = (-cosine*v1x - sine*v1y, sine*v1x - cosine*v1y)
-    # v2x, v2y = (cosine*v2x - sine*v2y, sine*v2x + cosine*v2y)
-    # return vec(v1x, v1y), vec(v2x, v2y)
+    Ux, Uy = (B - A).comps
+    Vx, Vy = (B - C).comps
+    Ux, Uy = (cosine*Ux - sine*Uy, sine*Ux + cosine*Uy)
+    Vx, Vy = (cosine*Vx + sine*Vy, - sine*Vx + cosine*Vy)
+    return Ray(B - vec(Vx, Vy), B), Ray(B - vec(Ux, Uy), B) 
 
 
 def trace_ray(topo, ray, edges, db):
@@ -520,7 +518,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
     return closest_vertex_eid, closest_eid, closest_edge_point, clipped_verts
 
 
-def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
+def find_connection_point_for_spike(verts, topo, areas, accum_angles, spike_eid, threshold, db_visitor):
     db = debug(spike_eid==-999 and db_visitor)
 
     tip = verts[topo.target(spike_eid)]
@@ -576,7 +574,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
-    ray0, ray1 = make_sector(verts, topo, spike_eid)
+    ray0, ray1 = make_sector(verts, topo, areas, accum_angles, spike_eid, threshold)
 
     while True:
         db("-"*80)
@@ -805,7 +803,9 @@ def convex_subdiv(verts, topo, threshold, db_visitor=None):
         db("SPIKE {} ==> {}, AA={}", topo.debug_repr(spike_eid), topo.debug_repr(topo.next_edge(spike_eid)), r2d*accum_angles[spike_eid])
 
         with timed_exec("find a connection"):
-            target_eid, target_coords = find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor)
+            target_eid, target_coords = find_connection_point_for_spike(
+                verts, topo, areas, accum_angles, spike_eid, threshold, db_visitor)
+
         if target_coords == verts[topo.target(target_eid)]:
             eid0, eid1 = connect_to_target(spike_eid, target_eid)
         else:

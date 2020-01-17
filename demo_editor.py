@@ -21,7 +21,7 @@ except NameError:
     AnyError = Exception
 
 
-RELAX_ANGLE = 0.0001 # degrees
+RELAX_ANGLE = 2 # degrees
 
 
 class RecordType:
