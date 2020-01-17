@@ -170,6 +170,9 @@ def trace_ray(topo, ray, edges, db):
     for eid, B, A in edges:
         db("    EDGE {}", topo.debug_repr(eid))
 
+        if ray.less(upper, A[ray.main_component]) and ray.less(upper, B[ray.main_component]):
+            continue
+
         orientation = signed_area(A, B, ray.target)
         db("    orientation w.r.t G = {:.18f}", orientation)
         if orientation >= 0:
