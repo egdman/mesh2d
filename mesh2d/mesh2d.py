@@ -167,8 +167,8 @@ def trace_ray(topo, ray, edges, db):
     for eid, B, A in edges:
         db("    EDGE {}", topo.debug_repr(eid))
 
-        if ray.less(upper, A[ray.main_component]) and ray.less(upper, B[ray.main_component]):
-            continue
+        # if ray.less(upper, A[ray.main_component]) and ray.less(upper, B[ray.main_component]):
+        #     continue
 
         orientation = signed_area(A, B, ray.target)
         db("    orientation w.r.t G = {:.18f}", orientation)
@@ -415,12 +415,12 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
     for eid, B, A in edges:
         db("    EDGE {}", topo.debug_repr(eid))
 
-        if ray0.less(upper0, A[ray0.main_component]) and ray0.less(upper0, B[ray0.main_component]):
-            clipped_verts[eid] = None, None
-            continue
-        if ray1.less(upper1, A[ray1.main_component]) and ray1.less(upper1, B[ray1.main_component]):
-            clipped_verts[eid] = None, None
-            continue
+        # if ray0.less(upper0, A[ray0.main_component]) and ray0.less(upper0, B[ray0.main_component]):
+        #     clipped_verts[eid] = None, None
+        #     continue
+        # if ray1.less(upper1, A[ray1.main_component]) and ray1.less(upper1, B[ray1.main_component]):
+        #     clipped_verts[eid] = None, None
+        #     continue
 
         area0_A = calc_area0(A)
         if area0_A >= 0:
@@ -521,7 +521,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
 
 
 def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
-    db = debug(spike_eid==-999 and db_visitor)
+    db = debug(spike_eid==5 and db_visitor)
 
     tip = verts[topo.target(spike_eid)]
     vertex_is_connectable = [False] * topo.num_edges()
