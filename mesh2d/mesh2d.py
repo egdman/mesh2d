@@ -368,7 +368,7 @@ def clamp_by_orientation(tip, L, R, point):
     return point
 
 
-def select_connectable_endpoint(topo, vertex_is_connectable, eid):
+def select_connectable_endpoint(topo, areas, visible_set, skip, eid):
     '''
     Gotta make sure that a portal endpoint that is selected for connection is actually connectable.
     This function cycles through the inbound eid's to find a connectable eid that belongs to the same room.
@@ -376,51 +376,50 @@ def select_connectable_endpoint(topo, vertex_is_connectable, eid):
     the same room (the endpoint is a 'simple' vertex with no inbound 'antennas'),
     therefore we have to select it and hope that it will be occluded by another edge.
     '''
+    def _vertex_is_connectable(eid):
+        if eid in skip:
+            return False
+        elif eid in visible_set:
+            return (topo.next_edge(eid) in visible_set) or areas[eid] > 0
+        else:
+            return (topo.next_edge(eid) in visible_set) and areas[eid] > 0
+
     eid_ = eid
     room_id = topo.room_id(eid)
-    while topo.room_id(eid) != room_id or (not vertex_is_connectable[eid]):
+    while topo.room_id(eid) != room_id or (not _vertex_is_connectable(eid)):
         eid = topo.opposite(topo.next_edge(eid))
         if eid == eid_: break
     return eid
 
 
-def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
-    clipped_verts = {}
-
+def sector_clip(tip, ray0, ray1, edges):
     # quickly skip segments that lie entirely behind the sector
     if ray0.main_component != ray1.main_component or ray0.less == ray1.less:
         edges_ = []
         for eid, A, B in edges:
-            if (not ray0.less(tip[ray0.main_component], A[ray0.main_component])) and \
-               (not ray0.less(tip[ray0.main_component], B[ray0.main_component])) and \
-               (not ray1.less(tip[ray1.main_component], A[ray1.main_component])) and \
-               (not ray1.less(tip[ray1.main_component], B[ray1.main_component])):
-                clipped_verts[eid] = None, None
-            else:
+            if ray0.less(tip[ray0.main_component], A[ray0.main_component]) or \
+               ray0.less(tip[ray0.main_component], B[ray0.main_component]) or \
+               ray1.less(tip[ray1.main_component], A[ray1.main_component]) or \
+               ray1.less(tip[ray1.main_component], B[ray1.main_component]):
                 edges_.append((eid, A, B))
         edges = edges_
 
 
     calc_area0 = get_area_calculator(ray0.tip, ray0.target)
     calc_area1 = get_area_calculator(ray1.tip, ray1.target)
-    closest_edge_point, closest_eid, closest_edge_distSq = None, None, float('inf')
-    closest_vertex_eid, closest_vertex_distSq = None, float('inf')
-
     upper0 = float('inf') if ray0.less == op_less else -float('inf')
     upper1 = float('inf') if ray1.less == op_less else -float('inf')
     # detect when current segment continues from the previous to reuse a previously calculated area
     A_prev, area0_B = vec(float('nan')), None
 
+    clipped_edges = []
+
     # we must reverse the segment to match the orientation of the sector rays
     for eid, B, A in edges:
-        db("    EDGE {}", topo.debug_repr(eid))
-
-        # if ray0.less(upper0, A[ray0.main_component]) and ray0.less(upper0, B[ray0.main_component]):
-        #     clipped_verts[eid] = None, None
-        #     continue
-        # if ray1.less(upper1, A[ray1.main_component]) and ray1.less(upper1, B[ray1.main_component]):
-        #     clipped_verts[eid] = None, None
-        #     continue
+        if ray0.less(upper0, A[ray0.main_component]) and ray0.less(upper0, B[ray0.main_component]):
+            continue
+        if ray1.less(upper1, A[ray1.main_component]) and ray1.less(upper1, B[ray1.main_component]):
+            continue
 
         area0_A = calc_area0(A)
         if area0_A >= 0:
@@ -445,6 +444,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                     AxB = vec.cross2(A, B)
                     clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
                     clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
+                    upper1 = clip_B[ray1.main_component]
 
         else: # area0_A < 0
             # calculate only if segments are not continuous, otherwise reuse previous value
@@ -459,6 +459,7 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                 AxB = vec.cross2(A, B)
                 clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, area0_B - area0_A))
                 clip_A = clamp_by_orientation(tip, A, B, clip_A)
+                upper0 = clip_A[ray0.main_component]
                 area1_B = calc_area1(B)
                 if area1_B <= 0:
                     clip_B = B
@@ -466,37 +467,41 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                     area1_A = calc_area1(A)
                     clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
                     clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
+                    upper1 = clip_B[ray1.main_component]
 
-        db("      CLIPPED {}, {}", clip_B, clip_A)
         A_prev = A
         area0_B = area0_A
-        clipped_verts[eid] = clip_B, clip_A
-        if clip_A is None:
-            continue
 
+        if clip_A is not None:
+            clipped_edges.append((eid, B, clip_B, A, clip_A))
+    return clipped_edges
+
+
+def select_connection_point(topo, areas, skip, tip, clipped_edges, visible_set, db):
+    closest_edge_point, closest_eid, closest_edge_distSq = None, None, float('inf')
+    closest_vertex_eid, closest_vertex_distSq = None, float('inf')
+
+    for eid, B, clip_B, A, clip_A in clipped_edges:
+        db("    EDGE {}, A={}, B={}", topo.debug_repr(eid), clip_A, clip_B)
         points = []
 
-        if clip_B == B:
-            if vertex_is_connectable[topo.prev_edge(eid)]:
-                distSq_B = (clip_B - tip).normSq()
-                if distSq_B <= closest_vertex_distSq:
-                    points.append((B, distSq_B))
-                    closest_vertex_distSq = distSq_B
-                    closest_vertex_eid = topo.prev_edge(eid)
-        elif clip_B != A:
-            points.append((clip_B, (clip_B - tip).normSq()))
-            upper1 = clip_B[ray1.main_component]
-
+        db_msg = "["
         if clip_A == A:
-            if vertex_is_connectable[eid]:
+            A_connectable = eid not in skip and (
+                (topo.next_edge(eid) in visible_set) or areas[eid] > 0)
+
+            if A_connectable:
+                db_msg += "A, "
                 distSq_A = (clip_A - tip).normSq()
                 if distSq_A <= closest_vertex_distSq:
                     points.append((A, distSq_A))
                     closest_vertex_distSq = distSq_A
                     closest_vertex_eid = eid
         elif clip_A != B:
+            db_msg += "a, "
             points.append((clip_A, (clip_A - tip).normSq()))
-            upper0 = clip_A[ray0.main_component]
+        else:
+            db_msg += "B, "
 
         if clip_B != clip_A:
             diff = clip_A - clip_B
@@ -505,9 +510,31 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
                 ortho_point = clip_B + ortho_param*diff
                 ortho_point = clamp_by_orientation(tip, clip_A, clip_B, ortho_point)
                 if ortho_point not in (clip_A, clip_B):
+                    db_msg += "O, "
                     points.append((ortho_point, (ortho_point - tip).normSq()))
 
-        db("        -- {} POINTS", len(points))
+
+        if clip_B == B:
+            eid_prev = topo.prev_edge(eid)
+            B_connectable = eid_prev not in skip and (
+                (eid_prev in visible_set) or areas[eid_prev] > 0)
+
+            if B_connectable:
+                db_msg += "B"
+                distSq_B = (clip_B - tip).normSq()
+                if distSq_B <= closest_vertex_distSq:
+                    points.append((B, distSq_B))
+                    closest_vertex_distSq = distSq_B
+                    closest_vertex_eid = eid_prev
+        elif clip_B != A:
+            db_msg += "b"
+            points.append((clip_B, (clip_B - tip).normSq()))
+        else:
+            db_msg += "A"
+
+        db_msg += "]"
+        db("        "+db_msg)
+
         if len(points) == 0:
             continue
 
@@ -517,6 +544,8 @@ def sector_clip(topo, vertex_is_connectable, tip, ray0, ray1, edges, db):
             closest_edge_distSq = edge_distSq
             closest_edge_point = edge_point
             closest_eid = eid
+
+    clipped_verts = {eid: (clip_B, clip_A) for eid, _, clip_B, _, clip_A in clipped_edges}
     return closest_vertex_eid, closest_eid, closest_edge_point, clipped_verts
 
 
@@ -524,56 +553,38 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     db = debug(spike_eid==5 and db_visitor)
 
     tip = verts[topo.target(spike_eid)]
-    vertex_is_connectable = [False] * topo.num_edges()
     visible_edges = []
     skip = (topo.prev_edge(spike_eid), topo.next_edge(spike_eid))
 
-    # determine visibility of edges and vertices from tip
-    def add_visibility(eid, A, B, area_A, area_B):
-        if area_A:
-            visible_edges.append((eid, A, B))
-            vertex_is_connectable[eid] = eid not in skip and (area_B or areas[eid] > 0)
-        else:
-            vertex_is_connectable[eid] = eid not in skip and (area_B and areas[eid] > 0)
+    # determine visibility of edges from the tip
+    with timed_exec("VISIBILITY"):
+        room = topo.rooms[topo.room_id(spike_eid)]
+        for loop_eid in [room.outline] + room.holes:
+            loop = iter(topo.iterate_loop_edges(loop_eid))
+            eid = next(loop)
+            A, B = topo.edge_verts(eid)
+            A, B = verts[A], verts[B]
+            calc_area = get_area_calculator(tip, B)
+            if calc_area(A) > 0:
+                visible_edges.append((eid, A, B))
 
-    room = topo.rooms[topo.room_id(spike_eid)]
-    for loop_eid in [room.outline] + room.holes:
-        loop = iter(topo.iterate_loop_edges(loop_eid))
-        eid = next(loop)
-        next_eid = next(loop)
-        A, B, C = topo.get_triangle(eid, next_eid)
-        A, B, C = verts[A], verts[B], verts[C]
-        calc_area = get_area_calculator(tip, B)
-        area_1 = calc_area(A) > 0
-        area_2 = calc_area(C) < 0
-        add_visibility(eid, A, B, area_1, area_2)
+            try:
+                while True:
+                    eid = next(loop)
+                    C = verts[topo.target(eid)]
+                    if calc_area(C) < 0:
+                        visible_edges.append((eid, B, C))
 
-        A_, area_2_ = A, area_1
-        try:
-            while True:
-                eid, area_1 = next_eid, area_2
-                X, A = B, C
+                    eid = next(loop)
+                    A = C
+                    B = verts[topo.target(eid)]
+                    calc_area = get_area_calculator(tip, B)
+                    if calc_area(A) > 0:
+                        visible_edges.append((eid, A, B))
+            except StopIteration:
+                pass
 
-                next_eid = next(loop)
-                B = verts[topo.target(next_eid)]
-                calc_area = get_area_calculator(tip, B)
-
-                area_2 = calc_area(A) > 0
-                add_visibility(eid, X, A, area_1, area_2)
-
-                eid, area_1 = next_eid, area_2
-                X, A = A, B
-
-                next_eid = next(loop)
-                C = verts[topo.target(next_eid)]
-
-                area_2 = calc_area(C) < 0
-                add_visibility(eid, X, A, area_1, area_2)
-
-        except StopIteration:
-            add_visibility(eid, X, A_, area_1, area_2_)
-
-
+    visible_set = set(eid for eid, _, _ in visible_edges)
     db("    NUM VISIBLE EDGES IS {}", len(visible_edges))
 
     ray0, ray1 = make_sector(verts, topo, spike_eid)
@@ -581,8 +592,10 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
     while True:
         db("-"*80)
 
-        closest_vertex_eid, closest_eid, closest_coords, clipped_verts = sector_clip(
-            topo, vertex_is_connectable, tip, ray0, ray1, visible_edges, db)
+        clip_result = sector_clip(tip, ray0, ray1, visible_edges)
+        closest_vertex_eid, closest_eid, closest_coords, clipped_verts = select_connection_point(
+            topo, areas, skip, tip, clip_result, visible_set, db)
+
 
         if closest_eid is None:
             if db_visitor:
@@ -615,7 +628,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                     target_eid = closest_eid
 
                 else:
-                    clip0, clip1 = clipped_verts[closest_eid]
+                    clip0, clip1 = clipped_verts.get(closest_eid, (None, None))
                     v0, v1 = topo.edge_verts(closest_eid)
                     r_inside = verts[v0] == clip0
                     l_inside = verts[v1] == clip1
@@ -641,7 +654,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
                         db("ONLY MIDDLE SECTION INSIDE")
                         target_eid = topo.prev_edge(closest_eid)
 
-                target_eid = select_connectable_endpoint(topo, vertex_is_connectable, target_eid)
+                target_eid = select_connectable_endpoint(topo, areas, visible_set, skip, target_eid)
                 target_coords = verts[topo.target(target_eid)]
 
             else:
@@ -659,7 +672,7 @@ def find_connection_point_for_spike(verts, topo, areas, spike_eid, db_visitor):
 
         else:
             db("    OCCLUDED BY {}", topo.debug_repr(occluder))
-            clip1, clip0 = clipped_verts[occluder]
+            clip1, clip0 = clipped_verts.get(occluder, (None, None))
 
             ray0_ = ray0
             ray1_ = ray1
