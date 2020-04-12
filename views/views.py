@@ -1,10 +1,14 @@
 from mesh2d import vec, Matrix
-import Tkinter as tk
-from tkFont import Font as font
+try:
+    import Tkinter as tk
+    from tkFont import Font as font
+    from itertools import izip as zip
+except ImportError:
+    import tkinter as tk
+    from tkinter import font
 import random
 import numpy as np
 import uuid
-from itertools import izip
 
 class ObjectView(object):
     '''
@@ -88,7 +92,7 @@ class ObjectView(object):
     def redraw(self, camera_transform, canvas):
         screen_coords = self.world_vertices_np.dot(camera_transform[:-1].T)
         notch = 0
-        for (elem_id, fence) in izip(self.element_ids, self.coord_fences):
+        for (elem_id, fence) in zip(self.element_ids, self.coord_fences):
             canvas.coords(elem_id, *(screen_coords[notch:fence].flatten()))
             notch = fence
 

@@ -10,7 +10,6 @@ except ImportError:
 
 from .polygon import Polygon2d
 from .vector2 import Geom2
-from .utils import debug_draw_bool
 
 class Union       : pass
 class Subtraction : pass

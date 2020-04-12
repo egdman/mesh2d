@@ -4,7 +4,10 @@ import random
 import fnmatch
 import platform
 import struct
-import Tkinter as tk
+try:
+    import Tkinter as tk
+except ImportError:
+    import tkinter as tk
 from argparse import ArgumentParser
 import traceback
 from math import floor
