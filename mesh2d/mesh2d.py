@@ -393,22 +393,22 @@ def select_connectable_endpoint(topo, areas, visible_set, skip, eid):
 
 
 def sector_clip(tip, ray0, ray1, edges):
-    # quickly skip segments that lie entirely behind the sector
-    if ray0.main_component != ray1.main_component or ray0.less == ray1.less:
-        edges_ = []
-        for eid, A, B in edges:
-            if ray0.less(tip[ray0.main_component], A[ray0.main_component]) or \
-               ray0.less(tip[ray0.main_component], B[ray0.main_component]) or \
-               ray1.less(tip[ray1.main_component], A[ray1.main_component]) or \
-               ray1.less(tip[ray1.main_component], B[ray1.main_component]):
-                edges_.append((eid, A, B))
-        edges = edges_
+    # # quickly skip segments that lie entirely behind the sector
+    # if ray0.main_component != ray1.main_component or ray0.less == ray1.less:
+    #     edges_ = []
+    #     for eid, A, B in edges:
+    #         if ray0.less(tip[ray0.main_component], A[ray0.main_component]) or \
+    #            ray0.less(tip[ray0.main_component], B[ray0.main_component]) or \
+    #            ray1.less(tip[ray1.main_component], A[ray1.main_component]) or \
+    #            ray1.less(tip[ray1.main_component], B[ray1.main_component]):
+    #             edges_.append((eid, A, B))
+    #     edges = edges_
 
 
     calc_area0 = get_area_calculator(ray0.tip, ray0.target)
     calc_area1 = get_area_calculator(ray1.tip, ray1.target)
-    upper0 = float('inf') if ray0.less == op_less else -float('inf')
-    upper1 = float('inf') if ray1.less == op_less else -float('inf')
+    # upper0 = float('inf') if ray0.less == op_less else -float('inf')
+    # upper1 = float('inf') if ray1.less == op_less else -float('inf')
     # detect when current segment continues from the previous to reuse a previously calculated area
     A_prev, area0_B = vec(float('nan')), None
 
@@ -416,10 +416,10 @@ def sector_clip(tip, ray0, ray1, edges):
 
     # we must reverse the segment to match the orientation of the sector rays
     for eid, B, A in edges:
-        if ray0.less(upper0, A[ray0.main_component]) and ray0.less(upper0, B[ray0.main_component]):
-            continue
-        if ray1.less(upper1, A[ray1.main_component]) and ray1.less(upper1, B[ray1.main_component]):
-            continue
+        # if ray0.less(upper0, A[ray0.main_component]) and ray0.less(upper0, B[ray0.main_component]):
+        #     continue
+        # if ray1.less(upper1, A[ray1.main_component]) and ray1.less(upper1, B[ray1.main_component]):
+        #     continue
 
         area0_A = calc_area0(A)
         if area0_A >= 0:
@@ -444,7 +444,7 @@ def sector_clip(tip, ray0, ray1, edges):
                     AxB = vec.cross2(A, B)
                     clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
                     clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
-                    upper1 = clip_B[ray1.main_component]
+                    # upper1 = clip_B[ray1.main_component]
 
         else: # area0_A < 0
             # calculate only if segments are not continuous, otherwise reuse previous value
@@ -459,7 +459,7 @@ def sector_clip(tip, ray0, ray1, edges):
                 AxB = vec.cross2(A, B)
                 clip_A = ray0.intersect_full(ray0.intersect_main_comp(A, B, AxB, area0_B - area0_A))
                 clip_A = clamp_by_orientation(tip, A, B, clip_A)
-                upper0 = clip_A[ray0.main_component]
+                # upper0 = clip_A[ray0.main_component]
                 area1_B = calc_area1(B)
                 if area1_B <= 0:
                     clip_B = B
@@ -467,7 +467,7 @@ def sector_clip(tip, ray0, ray1, edges):
                     area1_A = calc_area1(A)
                     clip_B = ray1.intersect_full(ray1.intersect_main_comp(A, B, AxB, area1_B - area1_A))
                     clip_B = clamp_by_orientation(tip, clip_A, B, clip_B)
-                    upper1 = clip_B[ray1.main_component]
+                    # upper1 = clip_B[ray1.main_component]
 
         A_prev = A
         area0_B = area0_A
