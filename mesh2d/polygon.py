@@ -15,8 +15,10 @@ class Loops(object):
         ids = range(loop_start, loop_start + how_many_nodes)
 
         self.loops.append(loop_start)
-        self.next.extend(ids[1:] + ids[:1])
-        self.prev.extend(ids[-1:] + ids[:-1])
+        self.next.extend(ids[1:])
+        self.next.extend(ids[:1])
+        self.prev.extend(ids[-1:])
+        self.prev.extend(ids[:-1])
         return loop_start
 
 

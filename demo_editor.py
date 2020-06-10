@@ -378,7 +378,7 @@ class Application(tk.Frame):
 
         self.debug_canvas = tk.Canvas(self, background='#000020', width=cwidth, height=cheight,
             scrollregion=(-1000, -1000, 1000, 1000))
-        self.debug_canvas.scan_dragto(cwidth/2, cheight/2, gain=1)
+        self.debug_canvas.scan_dragto(cwidth//2, cheight//2, gain=1)
 
         self.canvas.config(xscrollincrement=1, yscrollincrement=1)
 

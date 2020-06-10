@@ -24,13 +24,16 @@ class debug:
     def __init__(self, cond):
         cond = not not cond
         if cond:
-            self.__call__ = _printf
+            self._call = _printf
         else:
-            self.__call__ = lambda *a, **kw: None
+            self._call = lambda *a, **kw: None
         self.cond = cond
 
     def __nonzero__(self):
         return self.cond
+
+    def __call__(self, *a, **kw):
+        return self._call(*a, **kw)
 
 def rand_color(s):
     randseed(s)

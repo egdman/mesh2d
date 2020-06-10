@@ -216,14 +216,14 @@ def _add_intersections_to_polys(A, B):
 
 
     A_inserted_ids = {}
-    for (A_edge, pair_ids) in A_new_vert_lists.iteritems():
+    for (A_edge, pair_ids) in A_new_vert_lists.items():
         params = list(intersection_param_pairs[idx][0] for idx in pair_ids)
         inserted_ids = A.add_vertices_to_border(A_edge, params)
         A_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
 
 
     B_inserted_ids = {}
-    for (B_edge, pair_ids) in B_new_vert_lists.iteritems():
+    for (B_edge, pair_ids) in B_new_vert_lists.items():
         params = list(intersection_param_pairs[idx][1] for idx in pair_ids)
         inserted_ids = B.add_vertices_to_border(B_edge, params)
         B_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))

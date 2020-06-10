@@ -1,11 +1,11 @@
 from mesh2d import vec, Matrix
 try:
     import Tkinter as tk
-    from tkFont import Font as font
+    from tkFont import Font
     from itertools import izip as zip
 except ImportError:
     import tkinter as tk
-    from tkinter import font
+    from tkinter.font import Font
 import random
 import numpy as np
 import uuid
@@ -51,7 +51,7 @@ class ObjectView(object):
 
                 # remember all coordinates of all canvas objects of this draw object
                 curr_obj_crds = canvas.coords(eid)
-                for idx in range(len(curr_obj_crds) / 2):
+                for idx in range(len(curr_obj_crds) // 2):
                     verts_added += 1
                     np_buffer.extend((
                         curr_obj_crds[2*idx],
@@ -61,7 +61,7 @@ class ObjectView(object):
                 self.coord_fences.append(verts_added)
 
             self.world_vertices_np = np.ndarray(
-                shape = (len(np_buffer) / 3, 3),
+                shape = (len(np_buffer) // 3, 3),
                 buffer=np.array(np_buffer))
 
         self.redraw(camera_transform, canvas)
@@ -132,7 +132,7 @@ class TextView(ObjectView):
 
     def draw_self(self, camera_transform, canvas):
         if self.world_vertices_np is None:
-            textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=font(size=self.size), anchor=tk.NW)
+            textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=Font(size=self.size), anchor=tk.NW)
             canvas.addtag_withtag(self.tag, textId)
             self.element_ids = (textId,)
 
@@ -157,7 +157,7 @@ class TextView(ObjectView):
                 self.cleanup(canvas)
 
                 if new_size >= 10:
-                    textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=font(size=new_size), anchor=tk.NW)
+                    textId = canvas.create_text(0, 0, fill=self.color, text=self.text, font=Font(size=new_size), anchor=tk.NW)
                     canvas.addtag_withtag(self.tag, textId)
                     self.element_ids = (textId,)
                 else:
