@@ -477,6 +477,30 @@ def sector_clip(tip, ray0, ray1, edges):
     return clipped_edges
 
 
+# def select_connection_point(topo, areas, skip, tip, clipped_edges, visible_set, db):
+#     while len(clipped_edges):
+
+#     for eid, B, clip_B, A, clip_A in clipped_edges:
+
+def filter_behind_occluder(occluder, edges):
+    eid, B, clip_B, A, clip_A = occluder
+    if A == clip_A:
+        # has a gap to the left of A
+        if B == clip_B:
+            # has a gap to the right of B
+            pass
+        else:
+            pass
+    else:
+        if B == clip_B:
+            # has a gap to the right of B
+            pass
+        else:
+            # has np gaps
+            pass 
+
+
+
 def select_connection_point(topo, areas, skip, tip, clipped_edges, visible_set, db):
     closest_edge_point, closest_eid, closest_edge_distSq = None, None, float('inf')
     closest_vertex_eid, closest_vertex_distSq = None, float('inf')
