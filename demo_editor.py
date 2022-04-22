@@ -267,11 +267,11 @@ class SelectTool(Tool):
 
 
 def get_event_modifiers(event):
-    state = [
+    state = (
         ('ctrl',  event.state & 0x0004),
         ('ralt',  event.state & 0x0080),
         ('shift', event.state & 0x0001),
-    ]
+    )
     return set(modname for (modname, hit) in state if hit != 0)
 
 class Bool:
@@ -304,11 +304,16 @@ class VisualDebug(object):
 class Application(tk.Frame):
     def __init__(self, master=None, input_polys=(), db_mode=False, camera_pos=vec(0, 0)):
         tk.Frame.__init__(self, master)
+        self.focus_set()
+
         self.debugger = VisualDebug(self) if db_mode else None
 
         self.history = []
         self.this_is_windows = "windows" in platform.system().lower()
         self.this_is_osx = "darwin" in platform.system().lower()
+
+        self.bind('<Control-z>', self.undo_or_redo)
+        self.bind('<Control-Z>', self.undo_or_redo)
 
         self.grid()
         self.createWidgets()
@@ -355,12 +360,51 @@ class Application(tk.Frame):
             if navmesh:
                 self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
                 self.navmeshes.append(navmesh)
-                # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
             else:
                 self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
 
+        self.undo_stack = [self._polygons]
+        self.undo_depth = 0
         self.draw_all()
 
+
+    def _set_polygons(self, polygons):
+        self.remove_draw_objects_glob('polys/*')
+        self.remove_draw_objects_glob('debug_*')
+
+        self._polygons = []
+        self.navmeshes = []
+        for poly in polygons:
+            self._polygons.append(poly)
+            num_polys = len(self.find_draw_objects_glob('polys/*'))
+
+            navmesh = subdivide_polygon(poly, RELAX_ANGLE, self.debugger)
+            if navmesh:
+                self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+                self.navmeshes.append(navmesh)
+            else:
+                self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
+
+
+    def undo_or_redo(self, event):
+        mods = get_event_modifiers(event)
+        if "shift" in mods:
+            self.redo()
+        else:
+            self.undo()
+
+
+    def undo(self):
+        if self.undo_depth + 1 < len(self.undo_stack):
+            self.undo_depth += 1
+            self._set_polygons(self.undo_stack[len(self.undo_stack) - self.undo_depth - 1])
+            self.draw_all()
+
+    def redo(self):
+        if self.undo_depth > 0:
+            self.undo_depth -= 1
+            self._set_polygons(self.undo_stack[len(self.undo_stack) - self.undo_depth - 1])
+            self.draw_all()
 
 
     def createWidgets(self):
@@ -737,59 +781,63 @@ class Application(tk.Frame):
         return vec(screen_crds[0], screen_crds[1])
 
 
+    def _do_boolean_ops(self, mode, polygons, poly_b):
+        new_polys = []
+
+        if mode == Bool.Subtract:
+            for poly_a in polygons:
+                try:
+                    subtracted = bool_subtract(poly_a, poly_b, self.debug_canvas)
+                except AnyError as err:
+                    self.save_polygons()
+                    print("Exception was thrown inside method 'bool_subtract': {}".format(err))
+                    print(traceback.format_exc())
+                    subtracted = (poly_a,)
+
+                new_polys.extend(subtracted)
+
+        elif mode == Bool.Add:
+            for poly_a in polygons:
+                # add 2 polys, get either 1 or 2 polys
+                try:
+                    added = bool_add(poly_a, poly_b, self.debug_canvas)
+                except AnyError as err:
+                    self.save_polygons()
+                    print("Exception was thrown inside method 'bool_add': {}".format(err))
+                    print(traceback.format_exc())
+                    added = poly_a, poly_b
+
+                if len(added) == 1:
+                    (poly_b,) = added
+                else:
+                    new_polys.append(poly_a)
+
+            new_polys.append(poly_b)
+
+        return new_polys
+
+
     def add_polygon(self, vertices):
         mode = self.get_bool_mode()
 
-        # delete all polygon views (we'll add them after boolean operation)
         self.remove_draw_objects_glob('polys/*')
         self.remove_draw_objects_glob('debug_*')
 
-        try:
-            new_poly = Polygon2d(vertices[:])
+        self._polygons = self._do_boolean_ops(mode, self._polygons, Polygon2d(vertices[:]))
 
-            # do boolean operations
-            new_polys = []
+        del self.undo_stack[len(self.undo_stack) - self.undo_depth :]
+        self.undo_depth = 0
+        self.undo_stack.append(self._polygons)
 
-            if mode == Bool.Subtract:
-                for old_poly in self._polygons:
-                    new_polys.extend(bool_subtract(old_poly, new_poly, self.debug_canvas))
-                
-            elif mode == Bool.Add:
-                while len(self._polygons):
-                    old_poly = self._polygons.pop()
 
-                    # add 2 polys, get either 1 or 2 polys
-                    added = bool_add(old_poly, new_poly, self.debug_canvas)
-                    if len(added) == 1:
-                        (new_poly,) = added
-                    else:
-                        new_polys.append(old_poly)
-
-                new_polys.append(new_poly)
-
-            else:
-                return
-
-            self._polygons = new_polys
-
-            # draw navmeshes
-            for poly in self._polygons:
-                navmesh = Mesh2d(poly, RELAX_ANGLE, self.debugger)
-                num_polys = len(self.find_draw_objects_glob('polys/*'))
-                self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
-                self.navmeshes.append(navmesh)
-                # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
-
-        except AnyError as err:
-            self.save_polygons()
-            print("Exception was thrown inside method 'add_polygon': {}".format(err))
-            print(traceback.format_exc())
-
-        # # draw polygons
-        # for poly in self._polygons:
-        #     num_polys = len(self.find_draw_objects_glob('polys/*'))
-        #     self.add_draw_object('polys/poly_{}'.format(num_polys),
-        #         PolygonView(poly))
+        self.navmeshes = []
+        # draw navmeshes
+        for poly in self._polygons:
+            num_polys = len(self.find_draw_objects_glob('polys/*'))
+            navmesh = Mesh2d(poly, RELAX_ANGLE, self.debugger)
+            self.add_draw_object('polys/poly_{}'.format(num_polys), NavMeshView(navmesh))
+            self.navmeshes.append(navmesh)
+            # self.add_draw_object('polys/poly_{}'.format(num_polys), PolygonView(poly))
 
 
     def draw_all(self):
