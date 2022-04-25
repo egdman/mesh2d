@@ -224,7 +224,7 @@ class Geom2:
 
 
     @staticmethod
-    def is_origin_inside_polyline(polyline):
+    def is_origin_inside_polyline_v1(polyline):
         # count how many times the polyline intersects the (x>0, y=0) line
         num_inters = 0
         # iterate over polyline segments
@@ -237,3 +237,188 @@ class Geom2:
                 num_inters += 1
 
         return num_inters % 2 > 0
+
+
+    # @staticmethod
+    # def is_origin_inside_polyline(polyline):
+    #     inside = False
+    #     for a, b in pairs(polyline):
+    #         if a[1] >= 0:
+    #             if b[1] < 0 and a[0] * b[1] < a[1] * b[0]:
+    #                 inside = not inside
+
+    #         elif b[1] >= 0 and a[0] * b[1] > a[1] * b[0]:
+    #             inside = not inside
+
+    #     return inside
+
+
+
+    # @staticmethod
+    # def signed_area(a, b, c):
+    #     if a.comps <= b.comps:
+    #         if c.comps <= b.comps:
+    #             return vec.cross2(c - b, a - b)
+    #     else:
+    #         if c.comps <= a.comps:
+    #             return vec.cross2(c - a, a - b)
+
+    #     return vec.cross2(c - b, a - c)
+
+    # @staticmethod
+    # def is_origin_inside_polyline(polyline):
+    #     inside = False
+    #     for a, b in pairs(polyline):
+    #         if a[1] >= 0:
+    #             if b[1] < 0:
+    #                 area = Geom2.signed_area(vec(0, 0), a, b)
+    #                 if area > 0:
+    #                     inside = not inside
+
+    #         else:
+    #             if b[1] >= 0:
+    #                 area = Geom2.signed_area(vec(0, 0), a, b)
+    #                 if area < 0:
+    #                     inside = not inside
+
+    #     return inside
+
+
+    @staticmethod
+    def signed_area(a, b, c):
+        if a.comps <= b.comps:
+            if c.comps <= b.comps:
+                return vec.cross2(c - b, a - b)
+        else:
+            if c.comps <= a.comps:
+                return vec.cross2(c - a, a - b)
+
+        return vec.cross2(c - b, a - c)
+
+
+    @staticmethod
+    def is_point_inside_polyline_stable(point, polyline):
+        inside = False
+
+        for a, b in pairs(polyline):
+            if a[1] >= point[1]:
+                if b[1] < point[1]:
+                    area = Geom2.signed_area(point, a, b)
+                    if area > 0:
+                        inside = not inside
+
+            else: # a[1] < point[1]
+                if b[1] >= point[1]:
+                    area = Geom2.signed_area(point, a, b)
+                    if area < 0:
+                        inside = not inside
+
+        return inside
+
+
+
+
+
+    @staticmethod
+    def signed_area_with_zero(a, b):
+        # # # REFERENCE
+        ############################
+        if 0 < a[0] or (0 == a[0] and 0 <= a[1]):
+        # if 0.comps <= a.comps:
+
+            if b[0] < a[0] or (b[0] == a[0] and b[1] <= a[1]):
+            # if b.comps <= a.comps:
+                return vec.cross2(b - a, -a)
+        else:
+            if b[0] < 0 or (b[0] == 0 and b[1] <= 0):
+            # if b.comps <= 0.comps:
+                return vec.cross2(b, -a)
+
+        return vec.cross2(b - a, -b)
+        ############################
+
+
+    @staticmethod
+    def is_origin_inside_polyline__reference(polyline):
+                    # # # # REFERENCE
+                    # ############################
+                    # if 0 < a[0] or (0 == a[0] and 0 <= a[1]):
+                    # # if 0.comps <= a.comps:
+
+                    #     if b[0] < a[0] or (b[0] == a[0] and b[1] <= a[1]):
+                    #     # if b.comps <= a.comps:
+                    #         return vec.cross2(b - a, -a)
+                    # else:
+                    #     if b[0] < 0 or (b[0] == 0 and b[1] <= 0):
+                    #     # if b.comps <= 0.comps:
+                    #         return vec.cross2(b, -a)
+
+                    # return vec.cross2(b - a, -b)
+                    # ############################
+
+
+        inside = False
+        for a, b in pairs(polyline):
+            if a[1] >= 0:
+                if b[1] < 0:
+
+                    def _area():
+                        if a[0] >= 0:
+                            # return vec.cross2(b - a, -a)
+                            # return (a[0] - b[0]) * a[1] - (a[1] - b[1]) * a[0]
+                            return b[1]*a[0] - b[0]*a[1] > 0
+
+                        else:
+                            if b[0] <= 0:
+                                # return vec.cross2(b, -a)
+                                return b[1]*a[0] - b[0]*a[1] > 0
+
+
+                        # return vec.cross2(b - a, -b)
+                        # return (a[0] - b[0]) * b[1] - (a[1] - b[1]) * b[0]
+
+                        return b[1]*a[0] - b[0]*a[1] > 0
+
+                    # area = Geom2.signed_area(vec(0, 0), a, b)
+                    # area = _area()
+                    # if area > 0:
+                    if b[1]*a[0] > b[0]*a[1]:
+                        inside = not inside
+
+                # @staticmethod
+                # def cross2(u, v):
+                #     return u[0] * v[1] - u[1] * v[0]
+
+            else: # a[1] < 0
+                if b[1] >= 0:
+
+                    def _area():
+                        if a[0] > 0:
+
+                            if b[0] < a[0]:
+                                # return vec.cross2(b - a, -a)
+                                return (a[0] - b[0]) * a[1] - (a[1] - b[1]) * a[0]
+                                # return b[1]*a[0] - b[0]*a[1] < 0
+
+                            else:
+                                return (a[0] - b[0]) * b[1] - (a[1] - b[1]) * b[0]
+
+                        else:
+                            if b[0] < 0 or (b[0] == 0 and b[1] <= 0):
+                                # return vec.cross2(b, -a)
+                                return b[1]*a[0] - b[0]*a[1]
+                            else:
+                                # return vec.cross2(b - a, -b)
+                                return (a[0] - b[0]) * b[1] - (a[1] - b[1]) * b[0]
+
+                        # return b[1]*a[0] - b[0]*a[1] < 0
+
+                    # area = Geom2.signed_area(vec(0, 0), a, b)
+                    # area = _area()
+                    # if area < 0:
+
+                    # if b[1]*a[0] < b[0]*a[1]:
+                    if _area() < 0:
+                        inside = not inside
+
+        return inside

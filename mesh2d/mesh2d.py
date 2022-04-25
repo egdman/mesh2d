@@ -977,8 +977,7 @@ class Topology(object):
     def inside_loop(self, query_eid, loop_eid, verts):
         query_pt = verts[self.edges[query_eid].target]
         vert_ids = (self.edges[eid].target for eid in self.iterate_loop_edges(loop_eid))
-        polyline = (verts[vid] - query_pt for vid in vert_ids)
-        return Geom2.is_origin_inside_polyline(polyline)
+        return Geom2.is_point_inside_polyline_stable(query_pt, (verts[vid] for vid in vert_ids))
 
     def loop_is_ccw(self, loop_eid, verts):
         vert_ids = (self.edges[eid].target for eid in self.iterate_loop_edges(loop_eid))
@@ -1222,7 +1221,6 @@ class Mesh2d(object):
                 continue
 
             room = self.rooms[room_id]
-            verts = (self.vertices[vid] - point for vid in room)
-            if Geom2.is_origin_inside_polyline(verts):
+            if Geom2.is_point_inside_polyline_stable(point, (self.vertices[vid] for vid in room)):
                 return room_id
         return None
