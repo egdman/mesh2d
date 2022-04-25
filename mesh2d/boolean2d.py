@@ -2,6 +2,7 @@ from itertools import chain, cycle, repeat
 from functools import partial
 from collections import defaultdict
 from copy import deepcopy
+from operator import lt as op_less, gt as op_more
 
 try:
     from itertools import izip as zip
@@ -177,13 +178,6 @@ def _bool_impl(A, B, op, canvas=None):
     return new_polys
 
 
-
-
-
-
-
-from operator import itemgetter, lt as op_less, gt as op_more
-
 class Ray:
     def __init__(self, tip, target):
         self.tip = tip
@@ -198,12 +192,6 @@ class Ray:
             self.less = op_less
         else:
             self.less = op_more
-
-    # def __eq__(self, right):
-    #     return (self.tip, self.target) == (right.tip, right.target)
-
-    # def __ne__(self, right):
-    #     return (self.tip, self.target) != (right.tip, right.target)
 
 
     def intersect_main_comp(self, A, B, AxB, area_diff):
@@ -244,27 +232,16 @@ def get_area_calculator(tip, target):
 def trace_ray(ray, edges):
     calc_area = get_area_calculator(ray.tip, ray.target)
 
-    # xl, xu = sorted((ray.tip[0], ray.target[0]))
-    # yl, yu = sorted((ray.tip[1], ray.target[1]))
-
     for edge, seg in edges:
         B, A = seg
 
-        # if A[0] < xl and B[0] < xl:
-        #     continue
-        # if A[0] >= xu and B[0] >= xu:
-        #     continue
-        # if A[1] < yl and B[1] < yl:
-        #     continue
-        # if A[1] >= yu and B[1] >= yu:
-        #     continue
-
+        sign = 1
         orient_wrt_tip = Geom2.signed_area(A, B, ray.tip)
         orient_wrt_target = Geom2.signed_area(A, B, ray.target)
 
         if orient_wrt_tip == 0:
             if orient_wrt_target < 0:
-                A, B = B, A # now orient_wrt_target > 0
+                sign = -1
             elif orient_wrt_target == 0:
                 continue
 
@@ -272,7 +249,7 @@ def trace_ray(ray, edges):
             if orient_wrt_target >= 0:
                 continue
             else:
-                A, B = B, A # now orient_wrt_target > 0
+                sign = -1
 
         # orient_wrt_tip < 0
         elif orient_wrt_target <= 0:
@@ -280,17 +257,17 @@ def trace_ray(ray, edges):
         # now orient_wrt_target > 0
 
         area_A = calc_area(A)
-        if area_A < 0:
+        if area_A * sign < 0:
             continue
 
         area_B = calc_area(B)
         if area_A == 0:
-            if area_B < 0:
+            if area_B * sign < 0:
                 intersection_mc = A[ray.main_component]
             else:
                 continue
 
-        elif area_B < 0: # area_A > 0
+        elif area_B * sign < 0: # area_A > 0
             intersection_mc = ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A)
         else: # area_B >= 0
             continue
@@ -313,8 +290,7 @@ def trace_ray(ray, edges):
             param_seg = (intersection_sc - s0[seg_main_component]) / seg_stride[seg_main_component]
 
         param_seg = min(max(0., param_seg), 1.)
-        yield edge, seg, param_ray, param_seg
-
+        yield edge, param_ray, param_seg
 
 
 
@@ -322,9 +298,6 @@ def _add_intersections_to_polys(A, B):
 
     def get_segment_crds(seg, verts):
         return tuple(verts[idx] for idx in seg)
-
-    def seglike_to_raylike(seglike):
-        return (seglike[0], seglike[1] - seglike[0])
 
     def iter_segments(poly):
         def loop_segments(loop):
@@ -336,69 +309,46 @@ def _add_intersections_to_polys(A, B):
 
     # These are maps that for each edge maintain a list of vertices to add to that edge.
     # These maps actually store only indices of those vertices. The vertices themselves are
-    # in the 'intersection_param_pairs' list as pairs of parameters from0 to 1.
+    # in the 'intersection_param_pairs' list as pairs of parameters from 0 to 1.
     A_new_vert_lists = defaultdict(list)
     B_new_vert_lists = defaultdict(list)
-
-
-    # # find all A's edges that intersect B's border
-    # def _A_edges():
-    #     for A_loop in A.graph.loops:
-    #         loop_it = A.graph.loop_iterator(A_loop)
-    #         v0 = next(loop_it)
-    #         v_first = v0
-
-    #         inside_B = B.point_inside(A.vertices[v0])
-    #         first_inside_B = inside_B
-
-    #         for v1 in loop_it:
-    #             inside_B_ = B.point_inside(A.vertices[v1])
-    #             if inside_B_ != inside_B:
-    #                 yield v0, v1
-
-    #             inside_B = inside_B_
-    #             v0 = v1
-
-    #         if inside_B != first_inside_B:
-    #             yield v0, v_first
-
-
 
     # Find all intersections of A and B borders.
     for A_edge in iter_segments(A):
         A_seg = get_segment_crds(A_edge, A.vertices)
         B_segs = ((B_edge, get_segment_crds(B_edge, B.vertices)) for B_edge in iter_segments(B))
-        
-        for B_edge, B_seg, a, b in trace_ray(Ray(*A_seg), B_segs):
-            # print(f"intersection_mc={intersection_mc}")
-        # for B_edge in iter_segments(B):
 
-            # a, b, _ = Geom2.lines_intersect(seglike_to_raylike(A_seg), seglike_to_raylike(B_seg))
-
-            if a<=0 or a>=1 or b<=0 or b>=1:
-                print(f"!!!!! a={a} b={b}")
-
-            # if 0 <= a and a <= 1 and 0 <= b and b <= 1:
+        for B_edge, a, b in trace_ray(Ray(*A_seg), B_segs):
             pair_index = len(intersection_param_pairs)
             intersection_param_pairs.append((a, b))
 
             A_new_vert_lists[A_edge].append(pair_index)
             B_new_vert_lists[B_edge].append(pair_index)
-            # else:
-            #     raise RuntimeError(f"this is wrong!! {a} and {b}")
+
+
+    def insert_vertices(poly, edge, params):
+        _params = tuple(p for p in params if p not in (0, 1))
+        inserted_ids = iter(poly.add_vertices_to_border(edge, _params))
+        for p in params:
+            if p == 0:
+                yield edge[0]
+            elif p == 1:
+                yield edge[1]
+            else:
+                yield next(inserted_ids)
 
 
     A_inserted_ids = {}
     for (A_edge, pair_ids) in A_new_vert_lists.items():
-        params = list(intersection_param_pairs[idx][0] for idx in pair_ids)
-        inserted_ids = A.add_vertices_to_border(A_edge, params)
+        params = tuple(intersection_param_pairs[idx][0] for idx in pair_ids)
+        inserted_ids = insert_vertices(A, A_edge, params)
         A_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
 
 
     B_inserted_ids = {}
     for (B_edge, pair_ids) in B_new_vert_lists.items():
-        params = list(intersection_param_pairs[idx][1] for idx in pair_ids)
-        inserted_ids = B.add_vertices_to_border(B_edge, params)
+        params = tuple(intersection_param_pairs[idx][1] for idx in pair_ids)
+        inserted_ids = insert_vertices(B, B_edge, params)
         B_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
 
 
