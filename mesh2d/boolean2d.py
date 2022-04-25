@@ -9,7 +9,7 @@ except ImportError:
     pass
 
 from .polygon import Polygon2d
-from .vector2 import Geom2
+from .vector2 import Geom2, vec
 
 class Union       : pass
 class Subtraction : pass
@@ -178,6 +178,142 @@ def _bool_impl(A, B, op, canvas=None):
 
 
 
+
+
+
+
+from operator import itemgetter, lt as op_less, gt as op_more
+
+class Ray:
+    def __init__(self, tip, target):
+        self.tip = tip
+        self.target = target
+        self.stride = target - tip
+        if abs(self.stride[0]) > abs(self.stride[1]):
+            self.main_component = 0
+        else:
+            self.main_component = 1
+
+        if self.stride[self.main_component] > 0:
+            self.less = op_less
+        else:
+            self.less = op_more
+
+    # def __eq__(self, right):
+    #     return (self.tip, self.target) == (right.tip, right.target)
+
+    # def __ne__(self, right):
+    #     return (self.tip, self.target) != (right.tip, right.target)
+
+
+    def intersect_main_comp(self, A, B, AxB, area_diff):
+        GxT = vec.cross2(self.target, self.tip)
+
+        c0 = self.main_component
+        i = (AxB / area_diff) * self.stride[c0] + (GxT / area_diff) * (B[c0] - A[c0])
+
+        lower, upper = A[c0], B[c0]
+        if self.less(upper, lower):
+            lower, upper = upper, lower
+
+        if self.less(i, lower):
+            return lower
+        if self.less(upper, i):
+            return upper
+        return i
+
+
+def get_area_calculator(tip, target):
+    stride = target - tip
+
+    if tip.comps <= target.comps:
+        def _calc_area(A):
+            if target.comps <= A.comps:
+                return vec.cross2(tip - A, target - A)
+            else:
+                return vec.cross2(target - A, stride)
+    else:
+        def _calc_area(A):
+            if tip.comps <= A.comps:
+                return vec.cross2(tip - A, target - A)
+            else:
+                return vec.cross2(tip - A, stride)
+    return _calc_area
+
+
+def trace_ray(ray, edges):
+    calc_area = get_area_calculator(ray.tip, ray.target)
+
+    # xl, xu = sorted((ray.tip[0], ray.target[0]))
+    # yl, yu = sorted((ray.tip[1], ray.target[1]))
+
+    lower = ray.tip[ray.main_component]
+    upper = ray.target[ray.main_component]
+
+    for edge, seg in edges:
+        B, A = seg
+
+        # if A[0] < xl and B[0] < xl:
+        #     continue
+        # if A[0] >= xu and B[0] >= xu:
+        #     continue
+        # if A[1] < yl and B[1] < yl:
+        #     continue
+        # if A[1] >= yu and B[1] >= yu:
+        #     continue
+
+        orient_wrt_tip = Geom2.signed_area(A, B, ray.tip)
+        if orient_wrt_tip > 0:
+            A, B = B, A
+
+        elif orient_wrt_tip == 0:
+            if Geom2.signed_area(A, B, ray.target) < 0:
+                A, B = B, A
+
+        if Geom2.signed_area(A, B, ray.target) <= 0:
+            continue
+
+        area_A = calc_area(A)
+        if area_A < 0:
+            continue
+
+        area_B = calc_area(B)
+        if area_A == 0:
+            if area_B < 0:
+                intersection_mc = A[ray.main_component]
+            else:
+                continue
+
+        elif area_B < 0: # area_A > 0
+            intersection_mc = ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A)
+        else: # area_B >= 0
+            continue
+
+        param_ray = (intersection_mc - ray.tip[ray.main_component]) / ray.stride[ray.main_component]
+        param_ray = min(max(0., param_ray), 1.)
+
+        s0, s1 = seg
+        seg_stride = s1 - s0
+        if abs(seg_stride[0]) > abs(seg_stride[1]):
+            seg_main_component = 0
+        else:
+            seg_main_component = 1
+
+        if seg_main_component == ray.main_component:
+            param_seg = (intersection_mc - s0[seg_main_component]) / seg_stride[seg_main_component]
+        else:
+            c1 = 1 - ray.main_component
+            intersection_sc = param_ray * ray.target[c1] + (1. - param_ray) * ray.tip[c1]
+            param_seg = (intersection_sc - s0[seg_main_component]) / seg_stride[seg_main_component]
+
+        param_seg = min(max(0., param_seg), 1.)
+        yield edge, seg, param_ray, param_seg
+
+        # if (not ray.less(intersection_mc, lower)) and ray.less(intersection_mc, upper):
+        #     yield edge, seg, intersection_mc
+
+
+
 def _add_intersections_to_polys(A, B):
 
     def get_segment_crds(seg, verts):
@@ -186,7 +322,7 @@ def _add_intersections_to_polys(A, B):
     def seglike_to_raylike(seglike):
         return (seglike[0], seglike[1] - seglike[0])
 
-    def get_segments(poly):
+    def iter_segments(poly):
         def loop_segments(loop):
             return ((idx, poly.graph.next[idx]) for idx in poly.graph.loop_iterator(loop))
         return chain(*(loop_segments(loop) for loop in poly.graph.loops))
@@ -200,19 +336,52 @@ def _add_intersections_to_polys(A, B):
     A_new_vert_lists = defaultdict(list)
     B_new_vert_lists = defaultdict(list)
 
+
+    # # find all A's edges that intersect B's border
+    # def _A_edges():
+    #     for A_loop in A.graph.loops:
+    #         loop_it = A.graph.loop_iterator(A_loop)
+    #         v0 = next(loop_it)
+    #         v_first = v0
+
+    #         inside_B = B.point_inside(A.vertices[v0])
+    #         first_inside_B = inside_B
+
+    #         for v1 in loop_it:
+    #             inside_B_ = B.point_inside(A.vertices[v1])
+    #             if inside_B_ != inside_B:
+    #                 yield v0, v1
+
+    #             inside_B = inside_B_
+    #             v0 = v1
+
+    #         if inside_B != first_inside_B:
+    #             yield v0, v_first
+
+
+
     # Find all intersections of A and B borders.
-    for A_edge in get_segments(A):
-        for B_edge in get_segments(B):
-            seg_A = seglike_to_raylike(get_segment_crds(A_edge, A.vertices))
-            seg_B = seglike_to_raylike(get_segment_crds(B_edge, B.vertices))
+    for A_edge in iter_segments(A):
+        A_seg = get_segment_crds(A_edge, A.vertices)
+        B_segs = ((B_edge, get_segment_crds(B_edge, B.vertices)) for B_edge in iter_segments(B))
+        
+        for B_edge, B_seg, a, b in trace_ray(Ray(*A_seg), B_segs):
+            # print(f"intersection_mc={intersection_mc}")
+        # for B_edge in iter_segments(B):
 
-            a, b, _ = Geom2.lines_intersect(seg_A, seg_B)
-            if 0 <= a and a < 1 and 0 <= b and b < 1:
-                pair_index = len(intersection_param_pairs)
-                intersection_param_pairs.append((a, b))
+            # a, b, _ = Geom2.lines_intersect(seglike_to_raylike(A_seg), seglike_to_raylike(B_seg))
 
-                A_new_vert_lists[A_edge].append(pair_index)
-                B_new_vert_lists[B_edge].append(pair_index)
+            if a<=0 or a>=1 or b<=0 or b>=1:
+                print(f"!!!!! a={a} b={b}")
+
+            # if 0 <= a and a <= 1 and 0 <= b and b <= 1:
+            pair_index = len(intersection_param_pairs)
+            intersection_param_pairs.append((a, b))
+
+            A_new_vert_lists[A_edge].append(pair_index)
+            B_new_vert_lists[B_edge].append(pair_index)
+            # else:
+            #     raise RuntimeError(f"this is wrong!! {a} and {b}")
 
 
     A_inserted_ids = {}
