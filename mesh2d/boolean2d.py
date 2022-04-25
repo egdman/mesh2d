@@ -247,9 +247,6 @@ def trace_ray(ray, edges):
     # xl, xu = sorted((ray.tip[0], ray.target[0]))
     # yl, yu = sorted((ray.tip[1], ray.target[1]))
 
-    lower = ray.tip[ray.main_component]
-    upper = ray.target[ray.main_component]
-
     for edge, seg in edges:
         B, A = seg
 
@@ -263,15 +260,24 @@ def trace_ray(ray, edges):
         #     continue
 
         orient_wrt_tip = Geom2.signed_area(A, B, ray.tip)
-        if orient_wrt_tip > 0:
-            A, B = B, A
+        orient_wrt_target = Geom2.signed_area(A, B, ray.target)
 
-        elif orient_wrt_tip == 0:
-            if Geom2.signed_area(A, B, ray.target) < 0:
-                A, B = B, A
+        if orient_wrt_tip == 0:
+            if orient_wrt_target < 0:
+                A, B = B, A # now orient_wrt_target > 0
+            elif orient_wrt_target == 0:
+                continue
 
-        if Geom2.signed_area(A, B, ray.target) <= 0:
+        elif orient_wrt_tip > 0:
+            if orient_wrt_target >= 0:
+                continue
+            else:
+                A, B = B, A # now orient_wrt_target > 0
+
+        # orient_wrt_tip < 0
+        elif orient_wrt_target <= 0:
             continue
+        # now orient_wrt_target > 0
 
         area_A = calc_area(A)
         if area_A < 0:
@@ -309,8 +315,6 @@ def trace_ray(ray, edges):
         param_seg = min(max(0., param_seg), 1.)
         yield edge, seg, param_ray, param_seg
 
-        # if (not ray.less(intersection_mc, lower)) and ray.less(intersection_mc, upper):
-        #     yield edge, seg, intersection_mc
 
 
 
