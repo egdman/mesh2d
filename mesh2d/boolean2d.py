@@ -232,8 +232,8 @@ def get_area_calculator(tip, target):
 def trace_ray(ray, edges):
     calc_area = get_area_calculator(ray.tip, ray.target)
 
-    for edge, seg in edges:
-        B, A = seg
+    for edge, endpoints in edges:
+        A, B = endpoints
 
         sign = 1
         orient_wrt_tip = Geom2.signed_area(A, B, ray.tip)
@@ -254,7 +254,6 @@ def trace_ray(ray, edges):
         # orient_wrt_tip < 0
         elif orient_wrt_target <= 0:
             continue
-        # now orient_wrt_target > 0
 
         area_A = calc_area(A)
         if area_A * sign < 0:
@@ -275,19 +274,18 @@ def trace_ray(ray, edges):
         param_ray = (intersection_mc - ray.tip[ray.main_component]) / ray.stride[ray.main_component]
         param_ray = min(max(0., param_ray), 1.)
 
-        s0, s1 = seg
-        seg_stride = s1 - s0
+        seg_stride = B - A
         if abs(seg_stride[0]) > abs(seg_stride[1]):
             seg_main_component = 0
         else:
             seg_main_component = 1
 
         if seg_main_component == ray.main_component:
-            param_seg = (intersection_mc - s0[seg_main_component]) / seg_stride[seg_main_component]
+            param_seg = (intersection_mc - A[seg_main_component]) / seg_stride[seg_main_component]
         else:
             c1 = 1 - ray.main_component
             intersection_sc = param_ray * ray.target[c1] + (1. - param_ray) * ray.tip[c1]
-            param_seg = (intersection_sc - s0[seg_main_component]) / seg_stride[seg_main_component]
+            param_seg = (intersection_sc - A[seg_main_component]) / seg_stride[seg_main_component]
 
         param_seg = min(max(0., param_seg), 1.)
         yield edge, param_ray, param_seg
