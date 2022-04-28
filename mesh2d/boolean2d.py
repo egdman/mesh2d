@@ -46,6 +46,7 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
         ref_idx, ref_piece = next((n, piece) for n, piece in enumerate(pieces) if len(piece) > 1)
         ref_vertex = this_poly.vertices[ref_piece[1]]
         ref_inside = other_poly.point_inside(ref_vertex)
+        print(f"REF INSIDE = {ref_inside}")
         ref_even = ref_idx & 1 == 0
         if ref_inside == ref_even:
             in_out_flags = cycle((Inside, Outside))
@@ -69,12 +70,19 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 
 
-def _bool_impl(A, B, op, canvas=None):
+def _bool_impl(A, B, op, db):
     # Copy the original polygons because they will be changed by this algorithm.
     A = deepcopy(A)
     B = deepcopy(B)
 
-    A_contacts, B_contacts = _add_intersections_to_polys(A, B)
+    A_contacts, B_contacts = _add_intersections_to_polys(A, B, db)
+
+    if db:
+        for contact in A_contacts:
+            v = A.vertices[contact]
+            db.add_plus(v, color="gold")
+
+    print(f"contacts: {A_contacts} {B_contacts}")
 
     A_pieces = list(split_poly_boundaries(A, A_contacts, B, False))
     B_pieces = list(split_poly_boundaries(B, B_contacts, A, op == Subtraction))
@@ -229,12 +237,18 @@ def get_area_calculator(tip, target):
     return _calc_area
 
 
-def trace_ray(ray, edges):
+from itertools import tee
+
+def pairs(iterable):
+    a, b = tee(iterable, 2)
+    first = next(b, None)
+    return zip(a, chain(b, [first]))
+
+
+def trace_ray(ray, edges, state):
     calc_area = get_area_calculator(ray.tip, ray.target)
 
-    for edge, endpoints in edges:
-        A, B = endpoints
-
+    for edge, (A, B) in edges:
         sign = 1
         orient_wrt_tip = Geom2.signed_area(A, B, ray.tip)
         orient_wrt_target = Geom2.signed_area(A, B, ray.target)
@@ -257,18 +271,37 @@ def trace_ray(ray, edges):
 
         area_A = calc_area(A)
         if area_A * sign < 0:
+            state.prev_area = area_A
             continue
 
         area_B = calc_area(B)
         if area_A == 0:
-            if area_B * sign < 0:
-                intersection_mc = A[ray.main_component]
-            else:
+
+            if area_B == 0:
+                raise RuntimeError("TODO: handle area_B == 0 situation")
+
+            # _, (A_, _) = e1
+            # area_A_ = calc_area(A_) # could have cached this
+
+            # if area_A_ == 0
+            #     raise RuntimeError("TODO: handle area_A_ == 0 situation")
+
+            # if state.prev_area is None:
+
+
+            elif (state.prev_area < 0) == (area_B < 0):
+                print("areas have same sign")
                 continue
+            else:
+                print("areas have opposite signs")
+                intersection_mc = A[ray.main_component]
+
 
         elif area_B * sign < 0: # area_A > 0
+            state.prev_area = area_A
             intersection_mc = ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A)
         else: # area_B >= 0
+            state.prev_area = area_A
             continue
 
         param_ray = (intersection_mc - ray.tip[ray.main_component]) / ray.stride[ray.main_component]
@@ -292,15 +325,16 @@ def trace_ray(ray, edges):
 
 
 
-def _add_intersections_to_polys(A, B):
+def _add_intersections_to_polys(A, B, db):
 
     def get_segment_crds(seg, verts):
         return tuple(verts[idx] for idx in seg)
 
+    def loop_segments(poly, loop):
+        return ((idx, poly.graph.next[idx]) for idx in poly.graph.loop_iterator(loop))
+
     def iter_segments(poly):
-        def loop_segments(loop):
-            return ((idx, poly.graph.next[idx]) for idx in poly.graph.loop_iterator(loop))
-        return chain(*(loop_segments(loop) for loop in poly.graph.loops))
+        return chain(*(loop_segments(poly, loop) for loop in poly.graph.loops))
 
     # List of vertices on edge intersections.
     intersection_param_pairs = []
@@ -312,16 +346,45 @@ def _add_intersections_to_polys(A, B):
     B_new_vert_lists = defaultdict(list)
 
     # Find all intersections of A and B borders.
-    for A_edge in iter_segments(A):
-        A_seg = get_segment_crds(A_edge, A.vertices)
-        B_segs = ((B_edge, get_segment_crds(B_edge, B.vertices)) for B_edge in iter_segments(B))
+    class State: pass
 
-        for B_edge, a, b in trace_ray(Ray(*A_seg), B_segs):
+    for A_edge in loop_segments(A, A.graph.loops[0]): # TODO: use all loops instead of just the first loop
+        A_ray = Ray(*get_segment_crds(A_edge, A.vertices))
+        B_segs = ((B_edge, get_segment_crds(B_edge, B.vertices)) for B_edge in loop_segments(B, B.graph.loops[0]))
+
+        state = State()
+        state.prev_area = 0.
+        deferred = []
+        for B_edge, (vertex, vertex_next) in B_segs:
+            deferred.append((B_edge, (vertex, vertex_next)))
+            state.prev_area = Geom2.signed_area(A_ray.tip, A_ray.target, vertex)
+            if state.prev_area != 0:
+                break
+
+
+        if state.prev_area == 0:
+            raise RuntimeError("TODO: handle state.prev_area == 0 situation")
+
+        B_segs = chain(B_segs, deferred)
+
+        for B_edge, a, b in trace_ray(A_ray, B_segs, state):
             pair_index = len(intersection_param_pairs)
             intersection_param_pairs.append((a, b))
 
             A_new_vert_lists[A_edge].append(pair_index)
             B_new_vert_lists[B_edge].append(pair_index)
+
+
+    # for A_edge in iter_segments(A):
+    #     A_seg = get_segment_crds(A_edge, A.vertices)
+    #     B_segs = ((B_edge, get_segment_crds(B_edge, B.vertices)) for B_edge in iter_segments(B))
+
+    #     for B_edge, a, b in trace_ray(Ray(*A_seg), B_segs):
+    #         pair_index = len(intersection_param_pairs)
+    #         intersection_param_pairs.append((a, b))
+
+    #         A_new_vert_lists[A_edge].append(pair_index)
+    #         B_new_vert_lists[B_edge].append(pair_index)
 
 
     def insert_vertices(poly, edge, params):
@@ -358,17 +421,17 @@ def _add_intersections_to_polys(A, B):
     return ids_in_A, ids_in_B
 
 
-def bool_subtract(A, B, canvas=None):
+def bool_subtract(A, B, db=None):
     '''
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-    return _bool_impl(A, B, Subtraction, canvas)
+    return _bool_impl(A, B, Subtraction, db)
 
 
-def bool_add(A, B, canvas=None):
+def bool_add(A, B, db=None):
     '''
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-    return _bool_impl(A, B, Union, canvas)
+    return _bool_impl(A, B, Union, db)
