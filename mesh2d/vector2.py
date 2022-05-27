@@ -12,7 +12,7 @@ def pairs(iterable):
     return zip(a, chain(b, [first]))
 
 
-class vec(object):
+class vec:
     """
     vector of arbitrary size
     """
@@ -49,7 +49,7 @@ class vec(object):
         return vec(*(c0 - c1 for (c0, c1) in zip(self.comps, right.comps)))
 
     # scalar division
-    def __div__(self, right_scalar):
+    def __truediv__(self, right_scalar):
         a = 1. / right_scalar
         return vec(*(a * c for c in self.comps))
 
