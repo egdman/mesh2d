@@ -46,7 +46,6 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
         ref_idx, ref_piece = next((n, piece) for n, piece in enumerate(pieces) if len(piece) > 1)
         ref_vertex = this_poly.vertices[ref_piece[1]]
         ref_inside = other_poly.point_inside(ref_vertex)
-        print(f"REF INSIDE = {ref_inside}")
         ref_even = ref_idx & 1 == 0
         if ref_inside == ref_even:
             in_out_flags = cycle((Inside, Outside))
@@ -237,14 +236,6 @@ def get_area_calculator(tip, target):
     return _calc_area
 
 
-from itertools import tee
-
-def pairs(iterable):
-    a, b = tee(iterable, 2)
-    first = next(b, None)
-    return zip(a, chain(b, [first]))
-
-
 def trace_ray(ray, edges, state):
     calc_area = get_area_calculator(ray.tip, ray.target)
 
@@ -254,10 +245,15 @@ def trace_ray(ray, edges, state):
         orient_wrt_target = Geom2.signed_area(A, B, ray.target)
 
         if orient_wrt_tip == 0:
-            if orient_wrt_target < 0:
-                sign = -1
-            elif orient_wrt_target == 0:
+            if orient_wrt_target == 0:
+                # edge rides along the ray
                 continue
+
+            elif Geom2.signed_area(A, B, state.prev_ray.tip) >= 0:
+                continue
+
+            elif orient_wrt_target < 0:
+                sign = -1
 
         elif orient_wrt_tip > 0:
             if orient_wrt_target >= 0:
@@ -279,15 +275,6 @@ def trace_ray(ray, edges, state):
 
             if area_B == 0:
                 raise RuntimeError("TODO: handle area_B == 0 situation")
-
-            # _, (A_, _) = e1
-            # area_A_ = calc_area(A_) # could have cached this
-
-            # if area_A_ == 0
-            #     raise RuntimeError("TODO: handle area_A_ == 0 situation")
-
-            # if state.prev_area is None:
-
 
             elif (state.prev_area < 0) == (area_B < 0):
                 print("areas have same sign")
@@ -347,12 +334,18 @@ def _add_intersections_to_polys(A, B, db):
 
     # Find all intersections of A and B borders.
     class State: pass
+    state = State()
 
-    for A_edge in loop_segments(A, A.graph.loops[0]): # TODO: use all loops instead of just the first loop
+    A_segs = loop_segments(A, A.graph.loops[0]) # TODO: use all loops instead of just the first loop
+    for A_edge in A_segs:
+        state.prev_ray = Ray(*get_segment_crds(A_edge, A.vertices))
+        A_segs = chain(A_segs, (A_edge,))
+        break
+
+    for A_edge in A_segs:
         A_ray = Ray(*get_segment_crds(A_edge, A.vertices))
         B_segs = ((B_edge, get_segment_crds(B_edge, B.vertices)) for B_edge in loop_segments(B, B.graph.loops[0]))
 
-        state = State()
         state.prev_area = 0.
         deferred = []
         for B_edge, (vertex, vertex_next) in B_segs:
@@ -374,6 +367,7 @@ def _add_intersections_to_polys(A, B, db):
             A_new_vert_lists[A_edge].append(pair_index)
             B_new_vert_lists[B_edge].append(pair_index)
 
+        state.prev_ray = A_ray
 
     # for A_edge in iter_segments(A):
     #     A_seg = get_segment_crds(A_edge, A.vertices)
