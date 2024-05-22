@@ -226,14 +226,40 @@ class Geom2:
     @staticmethod
     def is_origin_inside_polyline(polyline):
         # count how many times the polyline intersects the (x>0, y=0) line
-        num_inters = 0
+        inside = False
         # iterate over polyline segments
         for a, b in pairs(polyline):
             if a[1] >= 0:
                 if b[1] < 0 and a[0] * b[1] < a[1] * b[0]:
-                    num_inters += 1
+                    inside = not inside
 
             elif b[1] >= 0 and a[0] * b[1] > a[1] * b[0]:
-                num_inters += 1
+                inside = not inside
 
-        return num_inters % 2 > 0
+        return inside
+
+    @staticmethod
+    def is_point_inside_polyline(point, polyline):
+        inside = False
+
+        # convert polyline to a forward iterator
+        polyline = iter(polyline)
+
+        # iterate over the polyline segments,
+        # including the (p_last, p_first) segment
+        for p_first in polyline:
+            a = p_first - point
+
+            for b in chain(polyline, (p_first,)):
+                b = b - point
+                # see if (a, b) intersects the {x>0, y=0} ray
+                if a[1] >= 0:
+                    if b[1] < 0 and a[0] * b[1] < a[1] * b[0]:
+                        inside = not inside
+
+                elif b[1] >= 0 and a[0] * b[1] > a[1] * b[0]:
+                    inside = not inside
+
+                a = b
+            break
+        return inside
