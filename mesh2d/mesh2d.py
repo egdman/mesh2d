@@ -161,7 +161,7 @@ def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
     # return vec(v1x, v1y), vec(v2x, v2y)
 
 
-def find_intersections(topo, ray, edges):
+def find_intersections(ray, edges):
     calc_area = get_area_calculator(ray.tip, ray.target)
     for eid, A, B in edges:
         area_A = calc_area(A) # == signed_area(ray.tip, ray.target, A)
@@ -178,18 +178,12 @@ def find_intersections(topo, ray, edges):
                     # no intersection
                     continue
 
-                elif area_tgt == 0:
+                elif area_tgt == 0 or signed_area(A, B, ray.tip) > 0:
                     # intersection is at target
-                    yield eid,
-                        ray.intersect_full(ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
-
-                elif signed_area(A, B, ray.tip) > 0:
-                    # intersection is between tip and target
-                    yield eid,
-                        ray.intersect_full(ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
+                    yield eid, ray.intersect_full(
+                        ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
                 else:
                     continue
-
             else:
                 # area_A < 0 and area_B <= 0
                 continue
@@ -205,18 +199,12 @@ def find_intersections(topo, ray, edges):
                     # no intersection
                     continue
 
-                elif area_tip == 0:
+                elif area_tip == 0 or signed_area(A, B, ray.target) > 0:
                     # intersection is at tip
-                    yield eid,
-                        ray.intersect_full(ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
-
-                elif signed_area(A, B, ray.target) > 0:
-                    # intersection is between tip and target
-                    yield eid,
-                        ray.intersect_full(ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
+                    yield eid, ray.intersect_full(
+                        ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
                 else:
                     continue
-
             else:
                 # area_B < 0 and area_A <= 0
                 continue
