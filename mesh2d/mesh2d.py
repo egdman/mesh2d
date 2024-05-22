@@ -167,51 +167,38 @@ def find_intersections(ray, edges):
         area_A = calc_area(A) # == signed_area(ray.tip, ray.target, A)
         area_B = calc_area(B) # == signed_area(ray.tip, ray.target, B)
 
-        if area_B > area_A:
-            if area_A > 0:
-                continue
+        has_intersection = find_intersection(ray, A, B, area_A, area_B)
+        if has_intersection:
+            intersection = ray.intersect_full(
+                ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
 
-            elif area_A == 0 or area_B > 0:
-                # intersection is at A or between A and B
-                area_tgt = signed_area(A, B, ray.target)
-                if area_tgt > 0:
-                    # no intersection
-                    continue
 
-                elif area_tgt == 0 or signed_area(A, B, ray.tip) > 0:
-                    # intersection is at target
-                    yield eid, ray.intersect_full(
-                        ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
-                else:
-                    continue
-            else:
-                # area_A < 0 and area_B <= 0
-                continue
+def find_intersection(ray, A, B, area_A, area_B):
+    if area_B > area_A:
+        if area_A > 0:
+            pass
+        elif area_A == 0 or area_B > 0:
+            # intersection is at A or between A and B
+            area_tgt = signed_area(A, B, ray.target)
+            if area_tgt > 0:
+                pass
+            elif area_tgt == 0 or signed_area(A, B, ray.tip) > 0:
+                # intersection is at target
+                return True
 
-        elif area_B < area_A:
-            if area_B > 0:
-                continue
+    elif area_B < area_A:
+        if area_B > 0:
+            pass
+        elif area_B == 0 or area_A > 0:
+            # intersection is at B or between A and B
+            area_tip = signed_area(A, B, ray.tip)
+            if area_tip > 0:
+                pass
+            elif area_tip == 0 or signed_area(A, B, ray.target) > 0:
+                # intersection is at tip
+                return True
 
-            elif area_B == 0 or area_A > 0:
-                # intersection is at B or between A and B
-                area_tip = signed_area(A, B, ray.tip)
-                if area_tip > 0:
-                    # no intersection
-                    continue
-
-                elif area_tip == 0 or signed_area(A, B, ray.target) > 0:
-                    # intersection is at tip
-                    yield eid, ray.intersect_full(
-                        ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
-                else:
-                    continue
-            else:
-                # area_B < 0 and area_A <= 0
-                continue
-        else:
-            # area_A == area_B
-            # this can be conceived as AB being parallel to ray
-            continue
+    return False
 
 
 def trace_ray(topo, ray, edges, db):
