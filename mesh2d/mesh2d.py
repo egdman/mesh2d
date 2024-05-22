@@ -163,7 +163,7 @@ def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
 
 def find_intersections(ray, edges):
     calc_area = get_area_calculator(ray.tip, ray.target)
-    for eid, A, B in edges:
+    for A, B in edges:
         area_A = calc_area(A) # == signed_area(ray.tip, ray.target, A)
         area_B = calc_area(B) # == signed_area(ray.tip, ray.target, B)
 
@@ -175,28 +175,16 @@ def find_intersections(ray, edges):
 
 def find_intersection(ray, A, B, area_A, area_B):
     if area_B > area_A:
-        if area_A > 0:
-            pass
-        elif area_A == 0 or area_B > 0:
+        if area_A == 0 or (area_A < 0 and area_B > 0):
             # intersection is at A or between A and B
             area_tgt = signed_area(A, B, ray.target)
-            if area_tgt > 0:
-                pass
-            elif area_tgt == 0 or signed_area(A, B, ray.tip) > 0:
-                # intersection is at target
-                return True
+            return area_tgt == 0 or (area_tgt < 0 and signed_area(A, B, ray.tip) > 0)
 
     elif area_B < area_A:
-        if area_B > 0:
-            pass
-        elif area_B == 0 or area_A > 0:
+        if area_B == 0 or (area_B < 0 and area_A > 0):
             # intersection is at B or between A and B
             area_tip = signed_area(A, B, ray.tip)
-            if area_tip > 0:
-                pass
-            elif area_tip == 0 or signed_area(A, B, ray.target) > 0:
-                # intersection is at tip
-                return True
+            return area_tip == 0 or (area_tip < 0 and signed_area(A, B, ray.target) > 0)
 
     return False
 
