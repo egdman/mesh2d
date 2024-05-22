@@ -1,5 +1,5 @@
 from mesh2d import vec
-from mesh2d.mesh2d import signed_area, Ray
+from mesh2d.mesh2d import signed_area, get_area_calculator
 import struct
 import random
 
@@ -21,7 +21,7 @@ def get_float():
     # b = struct.pack('<Q', n)
     # f, = struct.unpack('<d', b)
     # return f
-    return random.uniform(0, 1e24)
+    return random.uniform(-1e3, 1e3)
 
 
 def ieee754_ser(floatNumber):
@@ -73,7 +73,7 @@ def report(A, B, C):
 
 
 N = 1000
-# for A, B, C in (get_triangle() for _ in xrange(N)):
+# for A, B, C in (get_triangle() for _ in range(N)):
 #     sector1 = (B-A, A, C-A)
 #     sector2 = (C-B, B, A-B)
 #     sector3 = (A-C, C, B-C)
@@ -100,7 +100,7 @@ def printf(s, *args):
 
 
 delta = 1e-12
-# for _ in xrange(N):
+# for _ in range(N):
 #     a = get_float()
 #     mul = get_float()
 
@@ -141,42 +141,45 @@ delta = 1e-12
 # report(A, B, C)
 
 
-def fail_fmt(*vecs):
-    return "\n" + "\n".join(("({}, {})".format(ieee754_ser(v[0]), ieee754_ser(v[1])) for v in vecs))
+def fail_fmt(vert1, vert2, vert3, area1, area2):
+    a, b, c = vert1, vert2, vert3
+    msg = ["{} = ({}, {})".format(name, ieee754_ser(v[0]), ieee754_ser(v[1]))
+        for name, v in (("a", a), ("b", b), ("c", c))]
+    return f"\n{area1} != {area2}\n" + "\n".join(msg)
 
 
 def test_signed_area(a, b, c):
     a1 = signed_area(c, a, b)
     b1 = signed_area(a, b, c)
     c1 = signed_area(b, c, a)
-    assert b1 == c1, fail_fmt(a, b, c)
-    assert c1 == a1, fail_fmt(a, b, c)
-    assert a1 == b1, fail_fmt(a, b, c)
+    assert b1 == c1, fail_fmt(a, b, c, b1, c1)
+    assert c1 == a1, fail_fmt(a, b, c, c1, a1)
+    assert a1 == b1, fail_fmt(a, b, c, a1, b1)
 
-    x1 = Ray(c, a).calc_area(b)
-    y1 = Ray(a, b).calc_area(c)
-    z1 = Ray(b, c).calc_area(a)
-    assert x1 == a1, fail_fmt(a, b, c)
-    assert y1 == b1, fail_fmt(a, b, c)
-    assert z1 == c1, fail_fmt(a, b, c)
+    x1 = get_area_calculator(c, a)(b)
+    y1 = get_area_calculator(a, b)(c)
+    z1 = get_area_calculator(b, c)(a)
+    assert x1 == a1, fail_fmt(a, b, c, x1, a1)
+    assert y1 == b1, fail_fmt(a, b, c, y1, b1)
+    assert z1 == c1, fail_fmt(a, b, c, z1, c1)
 
     a2 = signed_area(c, b, a)
     b2 = signed_area(a, c, b)
     c2 = signed_area(b, a, c)
-    assert a2 == -a1, fail_fmt(a, b, c)
-    assert b2 == -a1, fail_fmt(a, b, c)
-    assert c2 == -a1, fail_fmt(a, b, c)
+    assert a2 == -a1, fail_fmt(a, b, c, a2, -a1)
+    assert b2 == -a1, fail_fmt(a, b, c, b2, -a1)
+    assert c2 == -a1, fail_fmt(a, b, c, c2, -a1)
 
-    x2 = Ray(c, b).calc_area(a)
-    y2 = Ray(a, c).calc_area(b)
-    z2 = Ray(b, a).calc_area(c)
-    assert x2 == -a1, fail_fmt(a, b, c)
-    assert y2 == -a1, fail_fmt(a, b, c)
-    assert z2 == -a1, fail_fmt(a, b, c)
+    x2 = get_area_calculator(c, b)(a)
+    y2 = get_area_calculator(a, c)(b)
+    z2 = get_area_calculator(b, a)(c)
+    assert x2 == -a1, fail_fmt(a, b, c, x2, -a1)
+    assert y2 == -a1, fail_fmt(a, b, c, y2, -a1)
+    assert z2 == -a1, fail_fmt(a, b, c, z2, -a1)
 
 # random.seed(7378547834)
-N = 50000
-for A, B, C in (get_triangle() for _ in xrange(N)):
+N = 100_000
+for A, B, C in (get_triangle() for _ in range(N)):
     test_signed_area(A, B, C)
 
 print("DONE")
