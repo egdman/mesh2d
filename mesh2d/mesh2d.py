@@ -169,7 +169,30 @@ def find_intersections_edges(ray, edges):
                 ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
 
 
+class ComparableSegment:
+    def __init__(self, a, b):
+        self._a = a
+        self._b = b
+        self.calc_area = get_area_calculator(self._a, self._b)
+
+    def __lt__(self, other):
+        area_a = other.calc_area(self._a)
+        area_b = other.calc_area(self._b)
+
+        if area_a < 0:
+            return area_b < 0 or self.calc_area(other._a) > 0
+        else:
+            if area_b > 0:
+                return False
+            else:
+                return self.calc_area(other._a) > 0
+
+    def points(self):
+        return self._a, self._b
+
+
 def find_intersections_points(ray, points):
+    intersections = []
     points = iter(points)
     calc_area = get_area_calculator(ray.tip, ray.target)
 
@@ -182,16 +205,22 @@ def find_intersections_points(ray, points):
             area_B = calc_area(B)
 
             if find_intersection(ray, A, B, area_A, area_B):
-                intersection = ray.intersect_full(
-                    ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
+                if area_B > area_A:
+                    intersections.append(ComparableSegment(A, B))
+                else:
+                    intersections.append(ComparableSegment(B, A))
             A = B
             area_A = area_B
 
         B = p_first
         area_B = area_first
         if find_intersection(ray, A, B, area_A, area_B):
-            intersection = ray.intersect_full(
-                ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
+            if area_B > area_A:
+                intersections.append(ComparableSegment(A, B))
+            else:
+                intersections.append(ComparableSegment(B, A))
+    intersections.sort()
+    return intersections
 
 
 def find_intersection(ray, A, B, area_A, area_B):

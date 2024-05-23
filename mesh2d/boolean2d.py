@@ -10,6 +10,7 @@ except ImportError:
 
 from .polygon import Polygon2d
 from .vector2 import Geom2
+from .mesh2d import find_intersections_points, Ray
 
 class Union       : pass
 class Subtraction : pass
@@ -202,12 +203,29 @@ def _add_intersections_to_polys(A, B):
 
     # Find all intersections of A and B borders.
     for A_edge in get_segments(A):
+        seg_A = seglike_to_raylike(get_segment_crds(A_edge, A.vertices))
+
+        for loop_in_B in B.graph.loops:
+            verts_B = (B.vertices[idx] for idx in B.graph.loop_iterator(loop_in_B))
+            intersections = find_intersections_points(
+                Ray(A.vertices[A_edge[0]], A.vertices[A_edge[1]]),
+                verts_B,
+            )
+
+            if intersections:
+                print(40*'~`')
+            for intersection in intersections:
+                seg_B = seglike_to_raylike(intersection.points())
+                a, b, _ = Geom2.lines_intersect(seg_A, seg_B)
+                print(f"{a} x {b}")
+
         for B_edge in get_segments(B):
             seg_A = seglike_to_raylike(get_segment_crds(A_edge, A.vertices))
             seg_B = seglike_to_raylike(get_segment_crds(B_edge, B.vertices))
 
             a, b, _ = Geom2.lines_intersect(seg_A, seg_B)
             if 0 <= a and a < 1 and 0 <= b and b < 1:
+                print(f"    {a} x {b}")
                 pair_index = len(intersection_param_pairs)
                 intersection_param_pairs.append((a, b))
 
