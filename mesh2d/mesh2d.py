@@ -182,10 +182,7 @@ class ComparableSegment:
         if area_a < 0:
             return area_b < 0 or self.calc_area(other._a) > 0
         else:
-            if area_b > 0:
-                return False
-            else:
-                return self.calc_area(other._a) > 0
+            return area_b < 0 and self.calc_area(other._a) > 0
 
     def points(self):
         return self._a, self._b
