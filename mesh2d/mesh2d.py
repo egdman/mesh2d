@@ -161,14 +161,38 @@ def make_sector(verts, topo, spike_eid):#, accum_angles, threshold):
     # return vec(v1x, v1y), vec(v2x, v2y)
 
 
-def find_intersections(ray, edges):
+def find_intersections_edges(ray, edges):
     calc_area = get_area_calculator(ray.tip, ray.target)
     for A, B in edges:
         area_A = calc_area(A) # == signed_area(ray.tip, ray.target, A)
         area_B = calc_area(B) # == signed_area(ray.tip, ray.target, B)
 
-        has_intersection = find_intersection(ray, A, B, area_A, area_B)
-        if has_intersection:
+        if find_intersection(ray, A, B, area_A, area_B):
+            intersection = ray.intersect_full(
+                ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
+
+
+def find_intersections_points(ray, points):
+    points = iter(points)
+    calc_area = get_area_calculator(ray.tip, ray.target)
+
+    for p_first in points:
+        A = p_first
+        area_first = calc_area(p_first)
+        area_A = area_first
+
+        for B in points:
+            area_B = calc_area(B)
+
+            if find_intersection(ray, A, B, area_A, area_B):
+                intersection = ray.intersect_full(
+                    ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
+            A = B
+            area_A = area_B
+
+        B = p_first
+        area_B = area_first
+        if find_intersection(ray, A, B, area_A, area_B):
             intersection = ray.intersect_full(
                 ray.intersect_main_comp(A, B, vec.cross2(A, B), area_B - area_A))
 
