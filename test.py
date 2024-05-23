@@ -35,19 +35,27 @@ def ieee754_unser(hexString):
 
 DISP = vec(10., 10.)
 
-def get_triangle():
-    while True:
-        A = vec(get_float(), get_float())
-        B = vec(get_float(), get_float())
-        # if A+DISP == B+DISP: continue
-        C = vec(get_float(), get_float())
-        # if A+DISP == C+DISP: continue
-        # if B+DISP == C+DISP: continue
+def get_triangle(allow_skinny=True):
+    A = vec(get_float(), get_float())
+    B = vec(get_float(), get_float())
 
-        # if vec.cross2(B-A, C-A) <= 0:
-        #     return A, C, B
+    if allow_skinny and (param := random.uniform(0, 2)) <= 1:
+        # make skinny triangle
+        c0 = (1 - param) * A[0] + param * B[0]
+        c1 = (1 - param) * A[1] + param * B[1]
+        return A, B, vec(c0, c1)
+    else:
+        # make non-skinny triangle
+        C = vec(get_float(), get_float())
         return A, B, C
 
+def get_skinny_triangle():
+    A = vec(get_float(), get_float())
+    B = vec(get_float(), get_float())
+    param = random.uniform(0, 1)
+    c0 = (1 - param) * A[0] + param * B[0]
+    c1 = (1 - param) * A[1] + param * B[1]
+    return A, B, vec(c0, c1)
 
 
 def report(A, B, C):
@@ -145,7 +153,7 @@ def fail_fmt(vert1, vert2, vert3, area1, area2):
     a, b, c = vert1, vert2, vert3
     msg = ["{} = ({}, {})".format(name, ieee754_ser(v[0]), ieee754_ser(v[1]))
         for name, v in (("a", a), ("b", b), ("c", c))]
-    return f"\n{area1} != {area2}\n" + "\n".join(msg)
+    return f"\n{area1:.24f} != {area2:.24f}\n" + "\n".join(msg)
 
 
 def test_signed_area(a, b, c):
