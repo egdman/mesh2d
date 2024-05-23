@@ -123,21 +123,18 @@ class Ray:
         return vec(*i)
 
 
-def get_area_calculator(tip, target):
-    stride = target - tip
-
-    if tip.comps <= target.comps:
-        def _calc_area(A):
-            if target.comps <= A.comps:
-                return vec.cross2(tip - A, target - A)
-            else:
-                return vec.cross2(target - A, stride)
+def get_area_calculator(a, b):
+    if a.comps <= b.comps:
+        X = b
     else:
-        def _calc_area(A):
-            if tip.comps <= A.comps:
-                return vec.cross2(tip - A, target - A)
-            else:
-                return vec.cross2(tip - A, stride)
+        X = a
+
+    stride = b - a
+    def _calc_area(c):
+        if X.comps <= c.comps:
+            return vec.cross2(a - c, b - c)
+        else:
+            return vec.cross2(X - c, stride)
     return _calc_area
 
 
