@@ -10,7 +10,7 @@ except ImportError:
 
 from .polygon import Polygon2d
 from .vector2 import Geom2
-from .mesh2d import find_intersections_points, Ray
+from .mesh2d import get_area_calculator, signed_area
 
 class Union       : pass
 class Subtraction : pass
@@ -179,6 +179,79 @@ def _bool_impl(A, B, op, canvas=None):
 
 
 
+class ComparableSegment:
+    def __init__(self, a, b, payload):
+        self._a = a
+        self._b = b
+        self.calc_area = get_area_calculator(self._a, self._b)
+        self.payload = payload
+
+    def __lt__(self, other):
+        area_a = other.calc_area(self._a)
+        area_b = other.calc_area(self._b)
+
+        if area_a < 0:
+            return area_b < 0 or self.calc_area(other._a) > 0
+        else:
+            return area_b < 0 and self.calc_area(other._a) > 0
+
+
+def _has_intersection(X, Y, A, B, area_A, area_B):
+    if area_B > area_A:
+        if area_A == 0 or (area_A < 0 and area_B > 0):
+            # intersection is at A or between A and B
+            area_Y = signed_area(A, B, Y)
+            return area_Y == 0 or (area_Y < 0 and signed_area(A, B, X) > 0)
+
+    elif area_B < area_A:
+        if area_B == 0 or (area_B < 0 and area_A > 0):
+            # intersection is at B or between A and B
+            area_X = signed_area(A, B, X)
+            return area_X == 0 or (area_X < 0 and signed_area(A, B, Y) > 0)
+
+    return False
+
+
+def _intersect_segment_with_polygon(segment, polygon):
+    intersections = []
+    seg0, seg1 = segment
+    calc_area = get_area_calculator(seg0, seg1)
+
+    for loop in polygon.graph.loops:
+        vertex_ids = polygon.graph.loop_iterator(loop)
+        vertex_A = next(vertex_ids)
+        A = polygon.vertices[vertex_A]
+        area_A = calc_area(A)
+
+        vertex_first = vertex_A
+        area_first = area_A
+
+        for vertex_B in vertex_ids:
+            B = polygon.vertices[vertex_B]
+            area_B = calc_area(B)
+
+            if _has_intersection(seg0, seg1, A, B, area_A, area_B):
+                if area_B > area_A:
+                    intersections.append(ComparableSegment(A, B, vertex_A))
+                else:
+                    intersections.append(ComparableSegment(B, A, vertex_A))
+            vertex_A = vertex_B
+            A = B
+            area_A = area_B
+
+        vertex_B = vertex_first
+        B = polygon.vertices[vertex_B]
+        area_B = area_first
+        if _has_intersection(seg0, seg1, A, B, area_A, area_B):
+            if area_B > area_A:
+                intersections.append(ComparableSegment(A, B, vertex_A))
+            else:
+                intersections.append(ComparableSegment(B, A, vertex_A))
+
+    intersections.sort()
+    return tuple(isect.payload for isect in intersections)
+
+
 def _add_intersections_to_polys(A, B):
 
     def get_segment_crds(seg, verts):
@@ -203,35 +276,20 @@ def _add_intersections_to_polys(A, B):
 
     # Find all intersections of A and B borders.
     for A_edge in get_segments(A):
-        seg_A = seglike_to_raylike(get_segment_crds(A_edge, A.vertices))
-
-        for loop_in_B in B.graph.loops:
-            verts_B = (B.vertices[idx] for idx in B.graph.loop_iterator(loop_in_B))
-            intersections = find_intersections_points(
-                Ray(A.vertices[A_edge[0]], A.vertices[A_edge[1]]),
-                verts_B,
-            )
-
-            if intersections:
-                print(40*'~`')
-            for intersection in intersections:
-                seg_B = seglike_to_raylike(intersection.points())
-                a, b, _ = Geom2.lines_intersect(seg_A, seg_B)
-                print(f"{a} x {b}")
-
-        for B_edge in get_segments(B):
+        intersections = _intersect_segment_with_polygon(
+            get_segment_crds(A_edge, A.vertices),
+            B,
+        )
+        for intersection_idx in intersections:
+            B_edge = (intersection_idx, B.graph.next[intersection_idx])
             seg_A = seglike_to_raylike(get_segment_crds(A_edge, A.vertices))
             seg_B = seglike_to_raylike(get_segment_crds(B_edge, B.vertices))
-
             a, b, _ = Geom2.lines_intersect(seg_A, seg_B)
-            if 0 <= a and a < 1 and 0 <= b and b < 1:
-                print(f"    {a} x {b}")
-                pair_index = len(intersection_param_pairs)
-                intersection_param_pairs.append((a, b))
+            pair_index = len(intersection_param_pairs)
+            intersection_param_pairs.append((a, b))
 
-                A_new_vert_lists[A_edge].append(pair_index)
-                B_new_vert_lists[B_edge].append(pair_index)
-
+            A_new_vert_lists[A_edge].append(pair_index)
+            B_new_vert_lists[B_edge].append(pair_index)
 
     A_inserted_ids = {}
     for (A_edge, pair_ids) in A_new_vert_lists.items():
