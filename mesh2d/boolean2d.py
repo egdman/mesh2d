@@ -10,6 +10,7 @@ except ImportError:
 
 from .polygon import Polygon2d
 from .vector2 import Geom2
+from .vector2 import vec
 from .mesh2d import get_area_calculator, signed_area
 
 class Union       : pass
@@ -69,12 +70,16 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 
 
-def _bool_impl(A, B, op, canvas=None):
-    # Copy the original polygons because they will be changed by this algorithm.
-    A = deepcopy(A)
-    B = deepcopy(B)
+def _bool_impl(A, B, op, db_visitor=None):
+    A, B, A_contacts, B_contacts = _add_intersections_to_polys(A, B)
 
-    A_contacts, B_contacts = _add_intersections_to_polys(A, B)
+    if db_visitor:
+        for idx, vert in enumerate(A.vertices):
+            db_visitor.add_text(vert, str(idx), color="gold")
+
+        for idx, vert in enumerate(B.vertices):
+            db_visitor.add_text(vert + vec(15, 0), str(idx), color="green")
+    # return [A, B]
 
     A_pieces = list(split_poly_boundaries(A, A_contacts, B, False))
     B_pieces = list(split_poly_boundaries(B, B_contacts, A, op == Subtraction))
@@ -231,7 +236,7 @@ def _intersect_segment_with_polygon(segment, polygon):
             area_B = calc_area(B)
 
             if _has_intersection(seg0, seg1, A, B, area_A, area_B):
-                if area_B > area_A:
+                if area_B < area_A:
                     intersections.append(ComparableSegment(A, B, vertex_A))
                 else:
                     intersections.append(ComparableSegment(B, A, vertex_A))
@@ -243,7 +248,7 @@ def _intersect_segment_with_polygon(segment, polygon):
         B = polygon.vertices[vertex_B]
         area_B = area_first
         if _has_intersection(seg0, seg1, A, B, area_A, area_B):
-            if area_B > area_A:
+            if area_B < area_A:
                 intersections.append(ComparableSegment(A, B, vertex_A))
             else:
                 intersections.append(ComparableSegment(B, A, vertex_A))
@@ -252,78 +257,103 @@ def _intersect_segment_with_polygon(segment, polygon):
     return tuple(isect.payload for isect in intersections)
 
 
+def calc_intersection_point(s1, r1, s2, r2):
+    r2r1 = vec.cross2(r2, r1)
+    r2s1 = vec.cross2(r2, s1)
+    r2s2 = vec.cross2(r2, s2)
+    return (r2s2 - r2s1) / r2r1
+
+
 def _add_intersections_to_polys(A, B):
+    sect_data = defaultdict(list)
+    A_new = None
+    loop_offset = 0
+    for loop in A.graph.loops:
+        A_new_verts = []
 
-    def get_segment_crds(seg, verts):
-        return tuple(verts[idx] for idx in seg)
+        for A_idx in A.graph.loop_iterator(loop):
+            A_p0 = A.vertices[A_idx]
+            A_p1 = A.vertices[A.graph.next[A_idx]]
+            A_diff = A_p1 - A_p0
+            A_new_verts.append(A_p0)
 
-    def seglike_to_raylike(seglike):
-        return (seglike[0], seglike[1] - seglike[0])
+            intersections = _intersect_segment_with_polygon((A_p0, A_p1), B)
 
-    def get_segments(poly):
-        def loop_segments(loop):
-            return ((idx, poly.graph.next[idx]) for idx in poly.graph.loop_iterator(loop))
-        return chain(*(loop_segments(loop) for loop in poly.graph.loops))
+            for B_idx in intersections:
+                B_p0 = B.vertices[B_idx]
+                B_diff = B.vertices[B.graph.next[B_idx]] - B_p0
 
-    # List of vertices on edge intersections.
-    intersection_param_pairs = []
+                sect_param = calc_intersection_point(A_p0, A_diff, B_p0, B_diff)
+                print(f"A sect param = {sect_param}")
+                sect_data[B_idx].append((A_p0, A_p1, loop_offset + len(A_new_verts)))
+                A_new_verts.append(A_p0 + sect_param * A_diff)
 
-    # These are maps that for each edge maintain a list of vertices to add to that edge.
-    # These maps actually store only indices of those vertices. The vertices themselves are
-    # in the 'intersection_param_pairs' list as pairs of parameters from0 to 1.
-    A_new_vert_lists = defaultdict(list)
-    B_new_vert_lists = defaultdict(list)
+            if intersections:
+                print('~~')
 
-    # Find all intersections of A and B borders.
-    for A_edge in get_segments(A):
-        intersections = _intersect_segment_with_polygon(
-            get_segment_crds(A_edge, A.vertices),
-            B,
-        )
-        for intersection_idx in intersections:
-            B_edge = (intersection_idx, B.graph.next[intersection_idx])
-            seg_A = seglike_to_raylike(get_segment_crds(A_edge, A.vertices))
-            seg_B = seglike_to_raylike(get_segment_crds(B_edge, B.vertices))
-            a, b, _ = Geom2.lines_intersect(seg_A, seg_B)
-            pair_index = len(intersection_param_pairs)
-            intersection_param_pairs.append((a, b))
-
-            A_new_vert_lists[A_edge].append(pair_index)
-            B_new_vert_lists[B_edge].append(pair_index)
-
-    A_inserted_ids = {}
-    for (A_edge, pair_ids) in A_new_vert_lists.items():
-        params = list(intersection_param_pairs[idx][0] for idx in pair_ids)
-        inserted_ids = A.add_vertices_to_border(A_edge, params)
-        A_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
-
-
-    B_inserted_ids = {}
-    for (B_edge, pair_ids) in B_new_vert_lists.items():
-        params = list(intersection_param_pairs[idx][1] for idx in pair_ids)
-        inserted_ids = B.add_vertices_to_border(B_edge, params)
-        B_inserted_ids.update(dict(zip(pair_ids, inserted_ids)))
+        loop_offset += len(A_new_verts)
+        print(f"new loop in A, size={len(A_new_verts)}")
+        if A_new is None:
+            A_new = Polygon2d(A_new_verts)
+        else:
+            A_new.add_hole(A_new_verts)
 
 
     ids_in_A, ids_in_B = [], []
-    for pair_idx in range(len(intersection_param_pairs)):
-        ids_in_A.append(A_inserted_ids[pair_idx])
-        ids_in_B.append(B_inserted_ids[pair_idx])
+    B_new = None
+    loop_offset = 0
+    for loop in B.graph.loops:
+        B_new_verts = []
 
-    return ids_in_A, ids_in_B
+        for B_idx in B.graph.loop_iterator(loop):
+            # we need to occlusion-sort A edges that intersect this B edge
+            B_p0 = B.vertices[B_idx]
+            B_new_verts.append(B_p0)
+
+            if len(this_edge_intersections := sect_data[B_idx]) == 0:
+                continue
+
+            intersections = []
+            B_p1 = B.vertices[B.graph.next[B_idx]]
+            B_calc_area = get_area_calculator(B_p0, B_p1)
+            for A_p0, A_p1, idx_in_A in this_edge_intersections:
+                if B_calc_area(A_p1) < B_calc_area(A_p0):
+                    intersections.append(ComparableSegment(A_p0, A_p1, idx_in_A))
+                else:
+                    intersections.append(ComparableSegment(A_p1, A_p0, idx_in_A))
+
+            intersections.sort()
+            for isect in intersections:
+                idx_in_A = isect.payload
+                ids_in_A.append(idx_in_A)
+                ids_in_B.append(loop_offset + len(B_new_verts))
+                B_new_verts.append(A_new.vertices[idx_in_A])
+
+                print(f"B sect param = {Geom2.project_to_line(A_new.vertices[idx_in_A], (B_p0, B_p1 - B_p0))}")
+            print('~~')
 
 
-def bool_subtract(A, B, canvas=None):
+        loop_offset += len(B_new_verts)
+        print(f"new loop in B, size={len(B_new_verts)}")
+        if B_new is None:
+            B_new = Polygon2d(B_new_verts)
+        else:
+            B_new.add_hole(B_new_verts)
+
+    return A_new, B_new, ids_in_A, ids_in_B
+
+
+def bool_subtract(A, B, db_visitor=None):
     '''
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-    return _bool_impl(A, B, Subtraction, canvas)
+    return _bool_impl(A, B, Subtraction, db_visitor)
 
 
-def bool_add(A, B, canvas=None):
+def bool_add(A, B, db_visitor=None):
     '''
     Performs boolean subtraction of B from A. Returns a list of new Polygon2d instances
     or an empty list.
     '''
-    return _bool_impl(A, B, Union, canvas)
+    return _bool_impl(A, B, Union, db_visitor)
