@@ -191,8 +191,8 @@ class ComparableSegment:
         self.payload = payload
 
     def __lt__(self, other):
-        area_a = other.calc_area(self._a)
-        area_b = other.calc_area(self._b)
+        area_a = self.calc_area(other._a)
+        area_b = self.calc_area(other._b)
 
         if area_a == 0:
             return area_b < 0
@@ -201,9 +201,9 @@ class ComparableSegment:
             return area_a < 0
 
         elif area_a < 0:
-            return area_b < 0 or self.calc_area(other._a) > 0
+            return area_b < 0 or other.calc_area(self._a) > 0
         else:
-            return area_b < 0 and self.calc_area(other._a) > 0
+            return area_b < 0 and other.calc_area(self._a) > 0
 
 
 def _has_intersection(X, Y, A, B, area_A, area_B):
@@ -241,7 +241,7 @@ def _intersect_segment_with_polygon(segment, polygon):
             area_B = calc_area(B)
 
             if _has_intersection(seg0, seg1, A, B, area_A, area_B):
-                if area_B < area_A:
+                if area_B > area_A:
                     intersections.append(ComparableSegment(A, B, vertex_A))
                 else:
                     intersections.append(ComparableSegment(B, A, vertex_A))
@@ -253,7 +253,7 @@ def _intersect_segment_with_polygon(segment, polygon):
         B = polygon.vertices[vertex_B]
         area_B = area_first
         if _has_intersection(seg0, seg1, A, B, area_A, area_B):
-            if area_B < area_A:
+            if area_B > area_A:
                 intersections.append(ComparableSegment(A, B, vertex_A))
             else:
                 intersections.append(ComparableSegment(B, A, vertex_A))
@@ -316,7 +316,7 @@ def _add_intersections_to_polys(A, B):
             intersections = []
             B_calc_area = get_area_calculator(B_p0, B.vertices[B.graph.next[B_idx]])
             for A_p0, A_p1, idx_in_A in this_edge_intersections:
-                if B_calc_area(A_p1) < B_calc_area(A_p0):
+                if B_calc_area(A_p1) > B_calc_area(A_p0):
                     intersections.append(ComparableSegment(A_p0, A_p1, idx_in_A))
                 else:
                     intersections.append(ComparableSegment(A_p1, A_p0, idx_in_A))
