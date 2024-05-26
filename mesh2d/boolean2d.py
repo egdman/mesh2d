@@ -79,7 +79,6 @@ def _bool_impl(A, B, op, db_visitor=None):
 
         for idx, vert in enumerate(B.vertices):
             db_visitor.add_text(vert + vec(15, 0), str(idx), color="green")
-    # return [A, B]
 
     A_pieces = list(split_poly_boundaries(A, A_contacts, B, False))
     B_pieces = list(split_poly_boundaries(B, B_contacts, A, op == Subtraction))
@@ -195,7 +194,13 @@ class ComparableSegment:
         area_a = other.calc_area(self._a)
         area_b = other.calc_area(self._b)
 
-        if area_a < 0:
+        if area_a == 0:
+            return area_b < 0
+
+        elif area_b == 0:
+            return area_a < 0
+
+        elif area_a < 0:
             return area_b < 0 or self.calc_area(other._a) > 0
         else:
             return area_b < 0 and self.calc_area(other._a) > 0
@@ -284,15 +289,10 @@ def _add_intersections_to_polys(A, B):
                 B_diff = B.vertices[B.graph.next[B_idx]] - B_p0
 
                 sect_param = calc_intersection_point(A_p0, A_diff, B_p0, B_diff)
-                print(f"A sect param = {sect_param}")
                 sect_data[B_idx].append((A_p0, A_p1, loop_offset + len(A_new_verts)))
                 A_new_verts.append(A_p0 + sect_param * A_diff)
 
-            if intersections:
-                print('~~')
-
         loop_offset += len(A_new_verts)
-        print(f"new loop in A, size={len(A_new_verts)}")
         if A_new is None:
             A_new = Polygon2d(A_new_verts)
         else:
@@ -314,8 +314,7 @@ def _add_intersections_to_polys(A, B):
                 continue
 
             intersections = []
-            B_p1 = B.vertices[B.graph.next[B_idx]]
-            B_calc_area = get_area_calculator(B_p0, B_p1)
+            B_calc_area = get_area_calculator(B_p0, B.vertices[B.graph.next[B_idx]])
             for A_p0, A_p1, idx_in_A in this_edge_intersections:
                 if B_calc_area(A_p1) < B_calc_area(A_p0):
                     intersections.append(ComparableSegment(A_p0, A_p1, idx_in_A))
@@ -329,12 +328,7 @@ def _add_intersections_to_polys(A, B):
                 ids_in_B.append(loop_offset + len(B_new_verts))
                 B_new_verts.append(A_new.vertices[idx_in_A])
 
-                print(f"B sect param = {Geom2.project_to_line(A_new.vertices[idx_in_A], (B_p0, B_p1 - B_p0))}")
-            print('~~')
-
-
         loop_offset += len(B_new_verts)
-        print(f"new loop in B, size={len(B_new_verts)}")
         if B_new is None:
             B_new = Polygon2d(B_new_verts)
         else:
