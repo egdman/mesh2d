@@ -73,15 +73,14 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 def _bool_impl(A, B, op, db_visitor=None):
     _find_all_intersections(A, B)
 
-
-    A, B, A_contacts, B_contacts = _add_intersections_to_polys(A, B)
-
     if db_visitor:
         for idx, vert in enumerate(A.vertices):
             db_visitor.add_text(vert, str(idx), color="gold")
 
         for idx, vert in enumerate(B.vertices):
             db_visitor.add_text(vert + vec(15, 0), str(idx), color="green")
+
+    A, B, A_contacts, B_contacts = _add_intersections_to_polys(A, B)
 
     A_pieces = list(split_poly_boundaries(A, A_contacts, B, False))
     B_pieces = list(split_poly_boundaries(B, B_contacts, A, op == Subtraction))
@@ -377,14 +376,12 @@ def _find_all_intersections(A, B):
             sections, p0_inside_B = _intersect_segment_with_polygon((A_p0, A_p1), B)
 
             for B_idx in sections:
-                B_p0 = B.vertices[B_idx]
-                B_p1 = B.vertices[B.graph.next[B_idx]]
                 section = A_idx, B_idx, p0_inside_B
 
                 if p0_inside_B:
-                    occlusion_key = ComparableSegment(B_p0, B_p1, (*section, len(A_sections)))
+                    occlusion_key = ComparableSegment(A_p1, A_p0, (*section, len(A_sections)))
                 else:
-                    occlusion_key = ComparableSegment(B_p1, B_p0, (*section, len(A_sections)))
+                    occlusion_key = ComparableSegment(A_p0, A_p1, (*section, len(A_sections)))
 
                 B_traversal_idx = B_idx # TODO: this is not guaranteed in general
 
@@ -410,47 +407,47 @@ def _find_all_intersections(A, B):
         print(section)
 
 
-    # section_idx_A = 0
-    # A_idx = A.graph.loops[0]
-    # for A_loop in A.graph.loops:
-    #     A_idx = A_loop
+    section_idx_A = 0
+    A_idx = A.graph.loops[0]
+    for A_loop in A.graph.loops:
+        A_idx = A_loop
 
-    #     while True:
-    #         section = A_sections[section_idx_A]
+        while section_idx_A < len(A_sections):
+            section = A_sections[section_idx_A]
+            print(f"A {section=}")
 
-    #         print(f"A: {A_idx}")
-    #         while A_idx != section[0]:
-    #             A_idx = A.graph.next[A_idx]
-    #             if A_idx == A_loop:
-    #                 # reached the end of the loop
-    #                 section = None
-    #                 break
-    #             print(f"A: {A_idx}")
+            print(f"A: {A_idx}")
+            while A_idx != section[0]:
+                A_idx = A.graph.next[A_idx]
+                if A_idx == A_loop:
+                    # reached the end of the loop
+                    section = None
+                    break
+                print(f"A: {A_idx}")
 
-    #         if not section:
-    #             break
+            if not section:
+                break
 
-    #         _, B_idx, is_inside, section_idx_B = section
-    #         section_idx_B += 1
-    #         section_idx_B %= len(B_sections)
-    #         section = B_sections[section_idx_B]
+            _, B_idx, is_inside, section_idx_B = section
+            section_idx_B = (section_idx_B + 1) % len(B_sections)
+            section = B_sections[section_idx_B]
+            print(f"B {section=}")
 
-    #         B_loop = B_idx
-    #         print(f"B: {B_idx}")
-    #         while B_idx != section[1]:
-    #             B_idx = B.graph.next[B_idx]
-    #             if B_idx == B_loop:
-    #                 # reached the end of the loop
-    #                 section = None
-    #                 break
-    #             print(f"B: {B_idx}")
+            B_loop = B_idx
+            print(f"B: {B_idx}")
+            while B_idx != section[1]:
+                B_idx = B.graph.next[B_idx]
+                if B_idx == B_loop:
+                    # reached the end of the loop
+                    section = None
+                    break
+                print(f"B: {B_idx}")
 
-    #         if not section:
-    #             break
+            if not section:
+                break
 
-    #         A_idx, _, is_inside, section_idx_A = section
-    #         section_idx_A += 1
-    #         section_idx_A %= len(A_sections)
+            A_idx, _, is_inside, section_idx_A = section
+            section_idx_A += 1
 
 
 def bool_subtract(A, B, db_visitor=None):
