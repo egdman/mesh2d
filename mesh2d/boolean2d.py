@@ -253,6 +253,7 @@ def _intersect_segment_with_polygon(segment, polygon):
         else:
             sections.append(section)
 
+    traversal_idx = 0
     for loop in polygon.graph.loops:
         vertex_ids = polygon.graph.loop_iterator(loop)
         vertex_A = next(vertex_ids)
@@ -263,6 +264,7 @@ def _intersect_segment_with_polygon(segment, polygon):
         area_first = area_A
 
         for vertex_B in vertex_ids:
+            assert vertex_A == traversal_idx, f"{vertex_A} != {traversal_idx}" # TODO: this is not guaranteed in general
             B = polygon.vertices[vertex_B]
             area_B = calc_area(B)
 
@@ -272,12 +274,15 @@ def _intersect_segment_with_polygon(segment, polygon):
             vertex_A = vertex_B
             A = B
             area_A = area_B
+            traversal_idx += 1
 
+        assert vertex_A == traversal_idx, f"{vertex_A} != {traversal_idx}" # TODO: this is not guaranteed in general
         vertex_B = vertex_first
         B = polygon.vertices[vertex_B]
         area_B = area_first
         if _has_intersection(seg0, seg1, A, B, area_A, area_B):
             _add_intersection(A, B, area_B - area_A, vertex_A)
+        traversal_idx += 1
 
     sections.sort()
     return tuple(section.payload for section in sections), seg0_inside
@@ -359,8 +364,11 @@ def _add_intersections_to_polys(A, B):
 
 
 def _find_all_intersections(A, B):
-    # intersections sorted by A_idx
+    # intersections sorted in traversal order of A
     A_sections = []
+
+    # intersections that will later be sorted in traversal order of B
+    B_sections = []
     for loop in A.graph.loops:
         for A_idx in A.graph.loop_iterator(loop):
             A_p0 = A.vertices[A_idx]
@@ -369,35 +377,29 @@ def _find_all_intersections(A, B):
             sections, p0_inside_B = _intersect_segment_with_polygon((A_p0, A_p1), B)
 
             for B_idx in sections:
-                A_sections.append((A_idx, B_idx, p0_inside_B))
+                B_p0 = B.vertices[B_idx]
+                B_p1 = B.vertices[B.graph.next[B_idx]]
+                section = A_idx, B_idx, p0_inside_B
 
+                if p0_inside_B:
+                    occlusion_key = ComparableSegment(B_p0, B_p1, (*section, len(A_sections)))
+                else:
+                    occlusion_key = ComparableSegment(B_p1, B_p0, (*section, len(A_sections)))
 
-    # group intersections by B_idx, then occlusion-sort them within groups
-    sorted_sections = list((*section, idx) for idx, section in enumerate(A_sections))
-    sorted_sections.sort(key=itemgetter(1))
+                B_traversal_idx = B_idx # TODO: this is not guaranteed in general
 
-    B_sections = []
-    for B_idx, group in groupby(sorted_sections, key=itemgetter(1)):
-        # we need to occlusion-sort A edges that intersect this B edge
-        B_p0 = B.vertices[B_idx]
+                A_sections.append(section)
+                # we'll sort lexicographically, first by traversal index and then by occlusion
+                B_sections.append((B_traversal_idx, occlusion_key))
+                p0_inside_B = not p0_inside_B
 
-        sort_keys = []
-        B_calc_area = get_area_calculator(B_p0, B.vertices[B.graph.next[B_idx]])
-        for section in group:
-            A_idx = section[0]
-            A_p0 = A.vertices[A_idx]
-            A_p1 = A.vertices[A.graph.next[A_idx]]
+    B_sections.sort()
+    B_sections = list(key.payload for _, key in B_sections)
 
-            if B_calc_area(A_p1) > B_calc_area(A_p0):
-                sort_keys.append(ComparableSegment(A_p0, A_p1, section))
-            else:
-                sort_keys.append(ComparableSegment(A_p1, A_p0, section))
-
-        sort_keys.sort()
-        for section in sort_keys:
-            idx_into_A_sections = section.payload[-1]
-            A_sections[idx_into_A_sections] = *A_sections[idx_into_A_sections], len(B_sections)
-            B_sections.append(section.payload)
+    # set reference indexes to A_sections
+    for idx, section in enumerate(B_sections):
+        idx_into_A_sections = section[-1]
+        A_sections[idx_into_A_sections] = *A_sections[idx_into_A_sections], idx
 
     print("A_sections:")
     for section in A_sections:
@@ -408,147 +410,47 @@ def _find_all_intersections(A, B):
         print(section)
 
 
-    section_idx_A = 0
-    A_idx = A.graph.loops[0]
-    for A_loop in A.graph.loops:
-        A_idx = A_loop
+    # section_idx_A = 0
+    # A_idx = A.graph.loops[0]
+    # for A_loop in A.graph.loops:
+    #     A_idx = A_loop
 
-        while True:
-            section = A_sections[section_idx_A]
+    #     while True:
+    #         section = A_sections[section_idx_A]
 
-            print(f"A: {A_idx}")
-            while A_idx != section[0]:
-                A_idx = A.graph.next[A_idx]
-                if A_idx == A_loop:
-                    # reached the end of the loop
-                    section = None
-                    break
-                print(f"A: {A_idx}")
+    #         print(f"A: {A_idx}")
+    #         while A_idx != section[0]:
+    #             A_idx = A.graph.next[A_idx]
+    #             if A_idx == A_loop:
+    #                 # reached the end of the loop
+    #                 section = None
+    #                 break
+    #             print(f"A: {A_idx}")
 
-            if not section:
-                break
+    #         if not section:
+    #             break
 
-            _, B_idx, is_inside, section_idx_B = section
-            section_idx_B += 1
-            section_idx_B %= len(B_sections)
-            section = B_sections[section_idx_B]
+    #         _, B_idx, is_inside, section_idx_B = section
+    #         section_idx_B += 1
+    #         section_idx_B %= len(B_sections)
+    #         section = B_sections[section_idx_B]
 
-            B_loop = B_idx
-            print(f"B: {B_idx}")
-            while B_idx != section[1]:
-                B_idx = B.graph.next[B_idx]
-                if B_idx == B_loop:
-                    # reached the end of the loop
-                    section = None
-                    break
-                print(f"B: {B_idx}")
+    #         B_loop = B_idx
+    #         print(f"B: {B_idx}")
+    #         while B_idx != section[1]:
+    #             B_idx = B.graph.next[B_idx]
+    #             if B_idx == B_loop:
+    #                 # reached the end of the loop
+    #                 section = None
+    #                 break
+    #             print(f"B: {B_idx}")
 
-            if not section:
-                break
+    #         if not section:
+    #             break
 
-            A_idx, _, is_inside, section_idx_A = section
-            section_idx_A += 1
-            section_idx_A %= len(A_sections)
-
-
-
-# def _unite(A, B):
-#     sect_data = defaultdict(list)
-#     A_new = None
-#     loop_offset = 0
-
-#     def _next(idx):
-#         return A.graph.next[idx]
-
-#     # def _next_B(idx):
-#     #     return B.graph.next[idx]
-
-#     A_idx = A.graph.loops[0]
-#     # _next = _next_A
-
-#     while True:
-#         B_idx = _next(A_idx)
-
-#         A_p0 = A.vertices[A_idx]
-#         A_p1 = A.vertices[B_idx]
-#         A_diff = A_p1 - A_p0
-
-#         intersections, A_inside = _intersect_segment_with_polygon((A_p0, A_p1), B)
-
-#         if intersections:
-#             A_idx = intersections[0]
-#             A, B = B, A
-
-#         else:
-#             A_idx = B_idx
-
-
-
-#     for loop in A.graph.loops:
-#         A_new_verts = []
-
-#         for A_idx in A.graph.loop_iterator(loop):
-#             A_p0 = A.vertices[A_idx]
-#             A_p1 = A.vertices[A.graph.next[A_idx]]
-#             A_diff = A_p1 - A_p0
-#             A_new_verts.append(A_p0)
-
-#             intersections, p0_inside = _intersect_segment_with_polygon((A_p0, A_p1), B)
-
-#             for B_idx in intersections:
-#                 B_p0 = B.vertices[B_idx]
-#                 B_diff = B.vertices[B.graph.next[B_idx]] - B_p0
-
-#                 sect_param = calc_intersection_point(A_p0, A_diff, B_p0, B_diff)
-#                 sect_data[B_idx].append((A_p0, A_p1, loop_offset + len(A_new_verts)))
-#                 A_new_verts.append(A_p0 + sect_param * A_diff)
-
-#         loop_offset += len(A_new_verts)
-#         if A_new is None:
-#             A_new = Polygon2d(A_new_verts)
-#         else:
-#             A_new.add_hole(A_new_verts)
-
-
-#     ids_in_A, ids_in_B = [], []
-#     B_new = None
-#     loop_offset = 0
-#     for loop in B.graph.loops:
-#         B_new_verts = []
-
-#         for B_idx in B.graph.loop_iterator(loop):
-#             # we need to occlusion-sort A edges that intersect this B edge
-#             B_p0 = B.vertices[B_idx]
-#             B_new_verts.append(B_p0)
-
-#             if len(this_edge_intersections := sect_data[B_idx]) == 0:
-#                 continue
-
-#             intersections = []
-#             B_calc_area = get_area_calculator(B_p0, B.vertices[B.graph.next[B_idx]])
-#             for A_p0, A_p1, idx_in_A in this_edge_intersections:
-#                 if B_calc_area(A_p1) > B_calc_area(A_p0):
-#                     intersections.append(ComparableSegment(A_p0, A_p1, idx_in_A))
-#                 else:
-#                     intersections.append(ComparableSegment(A_p1, A_p0, idx_in_A))
-
-#             intersections.sort()
-#             for isect in intersections:
-#                 idx_in_A = isect.payload
-#                 ids_in_A.append(idx_in_A)
-#                 ids_in_B.append(loop_offset + len(B_new_verts))
-#                 B_new_verts.append(A_new.vertices[idx_in_A])
-
-#         loop_offset += len(B_new_verts)
-#         if B_new is None:
-#             B_new = Polygon2d(B_new_verts)
-#         else:
-#             B_new.add_hole(B_new_verts)
-
-#     return A_new, B_new, ids_in_A, ids_in_B
-
-
-
+    #         A_idx, _, is_inside, section_idx_A = section
+    #         section_idx_A += 1
+    #         section_idx_A %= len(A_sections)
 
 
 def bool_subtract(A, B, db_visitor=None):
