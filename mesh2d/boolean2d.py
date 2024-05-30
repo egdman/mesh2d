@@ -187,11 +187,10 @@ def _bool_impl(A, B, op, db_visitor=None):
 
 
 class ComparableSegment:
-    def __init__(self, a, b, payload):
+    def __init__(self, a, b):
         self._a = a
         self._b = b
         self.calc_area = get_area_calculator(self._a, self._b)
-        self.payload = payload
 
     def __lt__(self, other):
         area_a = self.calc_area(other._a)
@@ -238,15 +237,17 @@ def _intersect_segment_with_polygon(segment, polygon):
 
     def _add_intersection(A, B, area_diff, A_idx):
         if area_diff > 0:
-            section = ComparableSegment(A, B, A_idx)
+            occlusion_key = ComparableSegment(A, B)
         else:
-            section = ComparableSegment(B, A, A_idx)
+            occlusion_key = ComparableSegment(B, A)
+
+        section = occlusion_key, A_idx
 
         nonlocal seg0_inside
         if len(sections) == 0:
             sections.append(section)
             seg0_inside = area_diff > 0
-        elif section < sections[0]:
+        elif occlusion_key < sections[0][0]:
             sections.append(sections[0])
             sections[0] = section
             seg0_inside = area_diff > 0
@@ -284,8 +285,8 @@ def _intersect_segment_with_polygon(segment, polygon):
             _add_intersection(A, B, area_B - area_A, vertex_A)
         traversal_idx += 1
 
-    sections.sort()
-    return tuple(section.payload for section in sections), seg0_inside
+    sections.sort(key=itemgetter(0))
+    return tuple(section for _, section in sections), seg0_inside
 
 
 def calc_intersection_param(s1, r1, s2, r2):
@@ -348,13 +349,12 @@ def _add_intersections_to_polys(A, B):
             B_calc_area = get_area_calculator(B_p0, B.vertices[B.graph.next[B_idx]])
             for A_p0, A_p1, idx_in_A in this_edge_intersections:
                 if B_calc_area(A_p1) > B_calc_area(A_p0):
-                    intersections.append(ComparableSegment(A_p0, A_p1, idx_in_A))
+                    intersections.append((ComparableSegment(A_p0, A_p1), idx_in_A))
                 else:
-                    intersections.append(ComparableSegment(A_p1, A_p0, idx_in_A))
+                    intersections.append((ComparableSegment(A_p1, A_p0), idx_in_A))
 
-            intersections.sort()
-            for isect in intersections:
-                idx_in_A = isect.payload
+            intersections.sort(key=itemgetter(0))
+            for _, idx_in_A in intersections:
                 ids_in_A.append(idx_in_A)
                 ids_in_B.append(loop_offset + len(B_new_verts))
                 B_new_verts.append(A_new.vertices[idx_in_A])
@@ -385,19 +385,19 @@ def _find_all_intersections(A, B):
                 section = A_idx, B_idx, p0_inside_B
 
                 if p0_inside_B:
-                    occlusion_key = ComparableSegment(A_p1, A_p0, (*section, len(A_sections)))
+                    occlusion_key = ComparableSegment(A_p1, A_p0)
                 else:
-                    occlusion_key = ComparableSegment(A_p0, A_p1, (*section, len(A_sections)))
+                    occlusion_key = ComparableSegment(A_p0, A_p1)
 
                 B_traversal_idx = B_idx # TODO: this is not guaranteed in general
 
                 A_sections.append(section)
                 # we'll sort lexicographically, first by traversal index and then by occlusion
-                B_sections.append((B_traversal_idx, occlusion_key))
+                B_sections.append(((B_traversal_idx, occlusion_key), (*section, len(B_sections))))
                 p0_inside_B = not p0_inside_B
 
-    B_sections.sort()
-    B_sections = list(key.payload for _, key in B_sections)
+    B_sections.sort(key=itemgetter(0))
+    B_sections = list(section for _, section in B_sections)
 
     # set reference indexes to A_sections
     for idx, section in enumerate(B_sections):
