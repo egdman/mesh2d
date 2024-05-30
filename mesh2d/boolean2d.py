@@ -71,14 +71,15 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 
 def _bool_impl(A, B, op, db_visitor=None):
-    _find_all_intersections(A, B)
+    A_sections, B_sections = _find_all_intersections(A, B)
+    _calc_polygon_union(A, B, A_sections, B_sections, db_visitor)
 
-    if db_visitor:
-        for idx, vert in enumerate(A.vertices):
-            db_visitor.add_text(vert, str(idx), color="gold")
+    # if db_visitor:
+        # for idx, vert in enumerate(A.vertices):
+        #     db_visitor.add_text(vert, str(idx), color="gold")
 
-        for idx, vert in enumerate(B.vertices):
-            db_visitor.add_text(vert + vec(15, 0), str(idx), color="green")
+        # for idx, vert in enumerate(B.vertices):
+        #     db_visitor.add_text(vert + vec(15, 0), str(idx), color="green")
 
     A, B, A_contacts, B_contacts = _add_intersections_to_polys(A, B)
 
@@ -287,11 +288,16 @@ def _intersect_segment_with_polygon(segment, polygon):
     return tuple(section.payload for section in sections), seg0_inside
 
 
-def calc_intersection_point(s1, r1, s2, r2):
+def calc_intersection_param(s1, r1, s2, r2):
     r2r1 = vec.cross2(r2, r1)
     r2s1 = vec.cross2(r2, s1)
     r2s2 = vec.cross2(r2, s2)
     return (r2s2 - r2s1) / r2r1
+
+def calc_intersection_point(a, a1, b, b1):
+    a_diff = a1 - a
+    param = calc_intersection_param(a, a_diff, b, b1 - b)
+    return a + param * a_diff
 
 
 def _add_intersections_to_polys(A, B):
@@ -313,7 +319,7 @@ def _add_intersections_to_polys(A, B):
                 B_p0 = B.vertices[B_idx]
                 B_diff = B.vertices[B.graph.next[B_idx]] - B_p0
 
-                sect_param = calc_intersection_point(A_p0, A_diff, B_p0, B_diff)
+                sect_param = calc_intersection_param(A_p0, A_diff, B_p0, B_diff)
                 sect_data[B_idx].append((A_p0, A_p1, loop_offset + len(A_new_verts)))
                 A_new_verts.append(A_p0 + sect_param * A_diff)
 
@@ -406,6 +412,17 @@ def _find_all_intersections(A, B):
     for section in B_sections:
         print(section)
 
+    return A_sections, B_sections
+
+
+def _calc_polygon_union(A, B, A_sections, B_sections, db_visitor):
+    def _calc_intersection(A_idx, B_idx):
+        A_p0 = A.vertices[A_idx]
+        A_p1 = A.vertices[A.graph.next[A_idx]]
+        B_p0 = B.vertices[B_idx]
+        B_p1 = B.vertices[B.graph.next[B_idx]]
+        return calc_intersection_point(A_p0, A_p1, B_p0, B_p1)
+    new_verts = []
 
     section_idx_A = 0
     A_idx = A.graph.loops[0]
@@ -429,6 +446,11 @@ def _find_all_intersections(A, B):
                 break
 
             _, B_idx, is_inside, section_idx_B = section
+
+            new_verts.append(_calc_intersection(A_idx, B_idx))
+            if db_visitor:
+                db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color='gold')
+
             section_idx_B = (section_idx_B + 1) % len(B_sections)
             section = B_sections[section_idx_B]
             print(f"B {section=}")
@@ -448,6 +470,10 @@ def _find_all_intersections(A, B):
 
             A_idx, _, is_inside, section_idx_A = section
             section_idx_A += 1
+
+            new_verts.append(_calc_intersection(A_idx, B_idx))
+            if db_visitor:
+                db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color='gold')
 
 
 def bool_subtract(A, B, db_visitor=None):
