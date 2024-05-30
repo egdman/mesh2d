@@ -45,15 +45,19 @@ class Loops(object):
 
 
 class Polygon2d(object):
-    def __init__(self, vertices):
-        # ensure CCW order - outline must be CCW
-        if Geom2.poly_signed_area(vertices) > 0:
-            self.vertices = list(vertices)
-        else:
-            self.vertices = list(vertices[::-1])
+    def __init__(self, vertices, graph=None):
+        if graph is None:
+            # ensure CCW order - outline must be CCW
+            if Geom2.poly_signed_area(vertices) > 0:
+                self.vertices = list(vertices)
+            else:
+                self.vertices = list(vertices[::-1])
 
-        self.graph = Loops()
-        self.graph.add_loop(len(self.vertices))
+            self.graph = Loops()
+            self.graph.add_loop(len(self.vertices))
+        else:
+            self.vertices = vertices
+            self.graph = graph
 
 
     def add_hole(self, vertices):

@@ -8,7 +8,7 @@ try:
 except ImportError:
     pass
 
-from .polygon import Polygon2d
+from .polygon import Polygon2d, Loops
 from .vector2 import Geom2
 from .vector2 import vec
 from .mesh2d import get_area_calculator, signed_area
@@ -71,8 +71,9 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 
 def _bool_impl(A, B, op, db_visitor=None):
-    A_sections, B_sections = _find_all_intersections(A, B)
-    _calc_polygon_union(A, B, A_sections, B_sections, db_visitor)
+    if op == Union:
+        A_sections, B_sections = _find_all_intersections(A, B)
+        return _calc_polygon_union(A, B, A_sections, B_sections, db_visitor)
 
     # if db_visitor:
         # for idx, vert in enumerate(A.vertices):
@@ -379,12 +380,12 @@ def _find_all_intersections(A, B):
             A_p0 = A.vertices[A_idx]
             A_p1 = A.vertices[A.graph.next[A_idx]]
 
-            sections, p0_inside_B = _intersect_segment_with_polygon((A_p0, A_p1), B)
+            sections, exiting = _intersect_segment_with_polygon((A_p0, A_p1), B)
 
             for B_idx in sections:
-                section = A_idx, B_idx, p0_inside_B
+                section = A_idx, B_idx, exiting
 
-                if p0_inside_B:
+                if exiting:
                     occlusion_key = ComparableSegment(A_p1, A_p0)
                 else:
                     occlusion_key = ComparableSegment(A_p0, A_p1)
@@ -394,7 +395,7 @@ def _find_all_intersections(A, B):
                 A_sections.append(section)
                 # we'll sort lexicographically, first by traversal index and then by occlusion
                 B_sections.append(((B_traversal_idx, occlusion_key), (*section, len(B_sections))))
-                p0_inside_B = not p0_inside_B
+                exiting = not exiting
 
     B_sections.sort(key=itemgetter(0))
     B_sections = list(section for _, section in B_sections)
@@ -404,15 +405,62 @@ def _find_all_intersections(A, B):
         idx_into_A_sections = section[-1]
         A_sections[idx_into_A_sections] = *A_sections[idx_into_A_sections], idx
 
-    print("A_sections:")
+    # print("A_sections:")
     for section in A_sections:
         print(section)
 
-    print("B_sections:")
+    # print("B_sections:")
     for section in B_sections:
         print(section)
 
     return A_sections, B_sections
+
+
+def _no_intersections_union(X, Y):
+    def _loop_iter(poly, loop):
+        return (poly.vertices[idx] for idx in poly.graph.loop_iterator(loop))
+
+    def _B_contains_A(A, B):
+        new_holes = []
+        discard_A = True
+        for hole_B in B.graph.loops[1:]:
+            if Geom2.is_point_inside_polyline(A.vertices[A.graph.loops[0]], _loop_iter(B, hole_B)):
+                return A, B
+            elif Geom2.is_point_inside_polyline(B.vertices[hole_B], _loop_iter(A, A.graph.loops[0])):
+                discard_A = False
+                # if this B hole is inside A outline, check if it's inside any A hole
+                for hole_A in A.graph.loops[1:]:
+                    if Geom2.is_point_inside_polyline(B.vertices[hole_B], _loop_iter(A, hole_A)):
+                        new_holes.append((hole_B, B))
+                    elif Geom2.is_point_inside_polyline(A.vertices[hole_A], _loop_iter(B, hole_B)):
+                        new_holes.append((hole_A, A))
+            else:
+                new_holes.append((hole_B, B))
+        if discard_A:
+            return (B,)
+
+        new_verts = list(_loop_iter(B, B.graph.loops[0]))
+        vertex_count = len(new_verts)
+        new_graph = Loops()
+        new_graph.add_loop(vertex_count)
+        for hole, source in new_holes:
+            new_verts.extend(_loop_iter(source, hole))
+            new_graph.add_loop(len(new_verts) - vertex_count)
+            vertex_count = len(new_verts)
+        return (Polygon2d(new_verts, graph=new_graph),)
+
+    X_vertex = X.vertices[X.graph.loops[0]]
+    Y_contains_X = Geom2.is_point_inside_polyline(X_vertex, _loop_iter(Y, Y.graph.loops[0]))
+    if Y_contains_X:
+        return _B_contains_A(A=X, B=Y)
+    else:
+        Y_vertex = Y.vertices[Y.graph.loops[0]]
+        X_contains_Y = Geom2.is_point_inside_polyline(Y_vertex, _loop_iter(X, X.graph.loops[0]))
+
+        if X_contains_Y:
+            return _B_contains_A(A=Y, B=X)
+        else:
+            return X, Y
 
 
 def _calc_polygon_union(A, B, A_sections, B_sections, db_visitor):
@@ -422,6 +470,12 @@ def _calc_polygon_union(A, B, A_sections, B_sections, db_visitor):
         B_p0 = B.vertices[B_idx]
         B_p1 = B.vertices[B.graph.next[B_idx]]
         return calc_intersection_point(A_p0, A_p1, B_p0, B_p1)
+
+    if len(A_sections) == 0:
+        return _no_intersections_union(A, B)
+    else:
+        raise RuntimeError("Union of intersecting polygons not yet supported")
+
     new_verts = []
 
     section_idx_A = 0
@@ -445,7 +499,7 @@ def _calc_polygon_union(A, B, A_sections, B_sections, db_visitor):
             if not section:
                 break
 
-            _, B_idx, is_inside, section_idx_B = section
+            _, B_idx, exiting, section_idx_B = section
 
             new_verts.append(_calc_intersection(A_idx, B_idx))
             if db_visitor:
@@ -468,7 +522,7 @@ def _calc_polygon_union(A, B, A_sections, B_sections, db_visitor):
             if not section:
                 break
 
-            A_idx, _, is_inside, section_idx_A = section
+            A_idx, _, exiting, section_idx_A = section
             section_idx_A += 1
 
             new_verts.append(_calc_intersection(A_idx, B_idx))
