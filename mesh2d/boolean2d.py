@@ -309,6 +309,44 @@ def _intersect_segment_with_polygon(segment, polygon, process_sections=True):
         return (), enclosure
 
 
+def _find_point_enclosure(point, polygon):
+    '''find the loop of polygon that encloses point, or return NoEnclosure'''
+    def _has_intersection(A, B):
+        if B[1] < A[1]:
+            if A[1] == point[1] or (A[1] > point[1] and B[1] < point[1]):
+                return signed_area(A, B, point) > 0
+
+        elif B[1] > A[1]:
+            if B[1] == point[1] or (B[1] > point[1] and A[1] < point[1]):
+                return signed_area(A, B, point) <= 0
+
+        return False
+
+    enclosure = NoEnclosure
+
+    for loop in polygon.graph.loops:
+        point_in_loop = False
+
+        vertex_ids = polygon.graph.loop_iterator(loop)
+        vertex_first = next(vertex_ids)
+
+        A = polygon.vertices[vertex_first]
+        for vertex_B in vertex_ids:
+            B = polygon.vertices[vertex_B]
+            if _has_intersection(A, B):
+                point_in_loop = not point_in_loop
+            A = B
+
+        B = polygon.vertices[vertex_first]
+        if _has_intersection(A, B):
+            point_in_loop = not point_in_loop
+
+        if point_in_loop:
+            enclosure = loop
+
+    return enclosure
+
+
 def calc_intersection_param(s1, r1, s2, r2):
     r2r1 = vec.cross2(r2, r1)
     r2s1 = vec.cross2(r2, s1)
@@ -533,9 +571,7 @@ def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=Non
 
         for hole_B in B.graph.loops[1:]:
             B_hole_vertex = B.graph.loops[0]
-            B_p0 = B.vertices[B_hole_vertex]
-            B_p1 = B.vertices[B.graph.next[B_hole_vertex]]
-            _, enclosure_A = _intersect_segment_with_polygon((B_p0, B_p1), A, False)
+            enclosure_A = _find_point_enclosure(B.vertices[B_hole_vertex], A)
             if enclosure_A == NoEnclosure:
                 yield _loop_iter(B, hole_B)
             elif enclosure_A not in (A.graph.loops[0], AmbiguousEnclosure):
@@ -546,12 +582,7 @@ def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=Non
     _, A_enclosed_in = next(enclosures)
     if A_enclosed_in == NoEnclosure:
         B_outer_vertex = B.graph.loops[0]
-        B_p0 = B.vertices[B_outer_vertex]
-        B_p1 = B.vertices[B.graph.next[B_outer_vertex]]
-        _, B_enclosed_in = _intersect_segment_with_polygon((B_p0, B_p1), A, False)
-
-        assert B_enclosed_in != AmbiguousEnclosure, f"{B_enclosed_in=}"
-
+        B_enclosed_in = _find_point_enclosure(B.vertices[B_outer_vertex], A)
         if B_enclosed_in == NoEnclosure:
             # B is fully outside A
             assert len(A_sections) == 0
