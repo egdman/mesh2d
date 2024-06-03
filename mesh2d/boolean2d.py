@@ -72,8 +72,8 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 def _bool_impl(A, B, op, db_visitor=None):
     if op == Union:
-        A_sections, B_sections = _find_all_intersections(A, B)
-        return _calc_polygon_union(A, B, A_sections, B_sections, db_visitor)
+        A_sections, B_sections, enclosures = _find_all_intersections(A, B)
+        return _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor)
 
     # if db_visitor:
         # for idx, vert in enumerate(A.vertices):
@@ -214,18 +214,32 @@ def _has_intersection(X, Y, A, B, area_A, area_B):
         if area_A == 0 or (area_A < 0 and area_B > 0):
             # intersection is at A or between A and B
             area_Y = signed_area(A, B, Y)
-            return area_Y == 0 or (area_Y < 0 and signed_area(A, B, X) > 0)
+            if area_Y < 0:
+                has_section = signed_area(A, B, X) > 0
+                return has_section, has_section
+            else:
+                return area_Y == 0, True
 
     elif area_B < area_A:
         if area_B == 0 or (area_B < 0 and area_A > 0):
             # intersection is at B or between A and B
             area_X = signed_area(A, B, X)
-            return area_X == 0 or (area_X < 0 and signed_area(A, B, Y) > 0)
+            if area_X < 0:
+                return signed_area(A, B, Y) > 0, True
+            else:
+                has_section = area_X == 0
+                return has_section, has_section
 
-    return False
+    return False, False
 
 
-def _intersect_segment_with_polygon(segment, polygon):
+class AmbiguousEnclosure:
+    pass
+
+class NoEnclosure:
+    pass
+
+def _intersect_segment_with_polygon(segment, polygon, process_sections=True):
     # list of polygon segments that intersect the given segment,
     # each wrapped in a comparable object for sorting
     sections = []
@@ -233,8 +247,8 @@ def _intersect_segment_with_polygon(segment, polygon):
     seg0, seg1 = segment
     calc_area = get_area_calculator(seg0, seg1)
 
-    # this value is only meaningful if segment actually intersects polygon
-    seg0_inside = False
+    # polygon loop that encloses seg0
+    enclosure = NoEnclosure
 
     def _add_intersection(A, B, area_diff, A_idx):
         if area_diff > 0:
@@ -242,21 +256,12 @@ def _intersect_segment_with_polygon(segment, polygon):
         else:
             occlusion_key = ComparableSegment(B, A)
 
-        section = occlusion_key, A_idx
-
-        nonlocal seg0_inside
-        if len(sections) == 0:
-            sections.append(section)
-            seg0_inside = area_diff > 0
-        elif occlusion_key < sections[0][0]:
-            sections.append(sections[0])
-            sections[0] = section
-            seg0_inside = area_diff > 0
-        else:
-            sections.append(section)
+        sections.append((occlusion_key, A_idx))
 
     traversal_idx = 0
     for loop in polygon.graph.loops:
+        sects_ray_odd_times = False
+
         vertex_ids = polygon.graph.loop_iterator(loop)
         vertex_A = next(vertex_ids)
         A = polygon.vertices[vertex_A]
@@ -270,8 +275,11 @@ def _intersect_segment_with_polygon(segment, polygon):
             B = polygon.vertices[vertex_B]
             area_B = calc_area(B)
 
-            if _has_intersection(seg0, seg1, A, B, area_A, area_B):
+            sects_segment, sects_ray = _has_intersection(seg0, seg1, A, B, area_A, area_B)
+            if process_sections and sects_segment:
                 _add_intersection(A, B, area_B - area_A, vertex_A)
+            if sects_ray:
+                sects_ray_odd_times = not sects_ray_odd_times
 
             vertex_A = vertex_B
             A = B
@@ -282,12 +290,23 @@ def _intersect_segment_with_polygon(segment, polygon):
         vertex_B = vertex_first
         B = polygon.vertices[vertex_B]
         area_B = area_first
-        if _has_intersection(seg0, seg1, A, B, area_A, area_B):
+
+        sects_segment, sects_ray = _has_intersection(seg0, seg1, A, B, area_A, area_B)
+        if process_sections and sects_segment:
             _add_intersection(A, B, area_B - area_A, vertex_A)
+        if sects_ray:
+            sects_ray_odd_times = not sects_ray_odd_times
+
+        if sects_ray_odd_times:
+            enclosure = loop
+
         traversal_idx += 1
 
-    sections.sort(key=itemgetter(0))
-    return tuple(section for _, section in sections), seg0_inside
+    if sections:
+        sections.sort(key=itemgetter(0))
+        return tuple(section for _, section in sections), AmbiguousEnclosure
+    else:
+        return (), enclosure
 
 
 def calc_intersection_param(s1, r1, s2, r2):
@@ -369,20 +388,35 @@ def _add_intersections_to_polys(A, B):
     return A_new, B_new, ids_in_A, ids_in_B
 
 
+def _loop_iter(poly, loop):
+    '''make an iterator over the loop's vertex coordinates'''
+    return (poly.vertices[idx] for idx in poly.graph.loop_iterator(loop))
+
+
 def _find_all_intersections(A, B):
     # intersections sorted in traversal order of A
     A_sections = []
 
     # intersections that will later be sorted in traversal order of B
     B_sections = []
+
+    enclosures = []
+
     for loop in A.graph.loops:
+        loop_sects_B = False
+
         for A_idx in A.graph.loop_iterator(loop):
             A_p0 = A.vertices[A_idx]
             A_p1 = A.vertices[A.graph.next[A_idx]]
 
-            sections, exiting = _intersect_segment_with_polygon((A_p0, A_p1), B)
+            sections, enclosure = _intersect_segment_with_polygon((A_p0, A_p1), B)
+
+            # is the current segment exiting or entering B?
+            # (this only makes sense if we have at least 1 intersection)
+            exiting = enclosure == B.graph.loops[0]
 
             for B_idx in sections:
+                loop_sects_B = True
                 section = A_idx, B_idx, exiting
 
                 if exiting:
@@ -396,6 +430,11 @@ def _find_all_intersections(A, B):
                 # we'll sort lexicographically, first by traversal index and then by occlusion
                 B_sections.append(((B_traversal_idx, occlusion_key), (*section, len(B_sections))))
                 exiting = not exiting
+
+        if loop_sects_B:
+            enclosures.append(AmbiguousEnclosure)
+        else:
+            enclosures.append(enclosure)
 
     B_sections.sort(key=itemgetter(0))
     B_sections = list(section for _, section in B_sections)
@@ -413,57 +452,10 @@ def _find_all_intersections(A, B):
     for section in B_sections:
         print(section)
 
-    return A_sections, B_sections
+    return A_sections, B_sections, enclosures
 
 
-def _no_intersections_union(X, Y):
-    def _loop_iter(poly, loop):
-        return (poly.vertices[idx] for idx in poly.graph.loop_iterator(loop))
-
-    def _B_contains_A(A, B):
-        new_holes = []
-        discard_A = True
-        for hole_B in B.graph.loops[1:]:
-            if Geom2.is_point_inside_polyline(A.vertices[A.graph.loops[0]], _loop_iter(B, hole_B)):
-                return A, B
-            elif Geom2.is_point_inside_polyline(B.vertices[hole_B], _loop_iter(A, A.graph.loops[0])):
-                discard_A = False
-                # if this B hole is inside A outline, check if it's inside any A hole
-                for hole_A in A.graph.loops[1:]:
-                    if Geom2.is_point_inside_polyline(B.vertices[hole_B], _loop_iter(A, hole_A)):
-                        new_holes.append((hole_B, B))
-                    elif Geom2.is_point_inside_polyline(A.vertices[hole_A], _loop_iter(B, hole_B)):
-                        new_holes.append((hole_A, A))
-            else:
-                new_holes.append((hole_B, B))
-        if discard_A:
-            return (B,)
-
-        new_verts = list(_loop_iter(B, B.graph.loops[0]))
-        vertex_count = len(new_verts)
-        new_graph = Loops()
-        new_graph.add_loop(vertex_count)
-        for hole, source in new_holes:
-            new_verts.extend(_loop_iter(source, hole))
-            new_graph.add_loop(len(new_verts) - vertex_count)
-            vertex_count = len(new_verts)
-        return (Polygon2d(new_verts, graph=new_graph),)
-
-    X_vertex = X.vertices[X.graph.loops[0]]
-    Y_contains_X = Geom2.is_point_inside_polyline(X_vertex, _loop_iter(Y, Y.graph.loops[0]))
-    if Y_contains_X:
-        return _B_contains_A(A=X, B=Y)
-    else:
-        Y_vertex = Y.vertices[Y.graph.loops[0]]
-        X_contains_Y = Geom2.is_point_inside_polyline(Y_vertex, _loop_iter(X, X.graph.loops[0]))
-
-        if X_contains_Y:
-            return _B_contains_A(A=Y, B=X)
-        else:
-            return X, Y
-
-
-def _calc_polygon_union(A, B, A_sections, B_sections, db_visitor):
+def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=None):
     def _calc_intersection(A_idx, B_idx):
         A_p0 = A.vertices[A_idx]
         A_p1 = A.vertices[A.graph.next[A_idx]]
@@ -471,11 +463,12 @@ def _calc_polygon_union(A, B, A_sections, B_sections, db_visitor):
         B_p1 = B.vertices[B.graph.next[B_idx]]
         return calc_intersection_point(A_p0, A_p1, B_p0, B_p1)
 
-    if len(A_sections) == 0:
-        return _no_intersections_union(A, B)
-    else:
+    if len(A_sections) > 0:
         raise RuntimeError("Union of intersecting polygons not yet supported")
 
+    assert len(A.graph.loops) == len(enclosures), f"{enclosures=}"
+
+    new_loops = []
     new_verts = []
 
     section_idx_A = 0
@@ -528,6 +521,72 @@ def _calc_polygon_union(A, B, A_sections, B_sections, db_visitor):
             new_verts.append(_calc_intersection(A_idx, B_idx))
             if db_visitor:
                 db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color='gold')
+
+
+    def _add_holes(enclosures_AB):
+        for hole_A, enclosure_B in enclosures_AB:
+            if enclosure_B == NoEnclosure:
+                yield _loop_iter(A, hole_A)
+
+            elif enclosure_B not in (B.graph.loops[0], AmbiguousEnclosure):
+                yield _loop_iter(A, hole_A)
+
+        for hole_B in B.graph.loops[1:]:
+            B_hole_vertex = B.graph.loops[0]
+            B_p0 = B.vertices[B_hole_vertex]
+            B_p1 = B.vertices[B.graph.next[B_hole_vertex]]
+            _, enclosure_A = _intersect_segment_with_polygon((B_p0, B_p1), A, False)
+            if enclosure_A == NoEnclosure:
+                yield _loop_iter(B, hole_B)
+            elif enclosure_A not in (A.graph.loops[0], AmbiguousEnclosure):
+                yield _loop_iter(B, hole_B)
+
+    enclosures = iter(zip(A.graph.loops, enclosures))
+
+    _, A_enclosed_in = next(enclosures)
+    if A_enclosed_in == NoEnclosure:
+        B_outer_vertex = B.graph.loops[0]
+        B_p0 = B.vertices[B_outer_vertex]
+        B_p1 = B.vertices[B.graph.next[B_outer_vertex]]
+        _, B_enclosed_in = _intersect_segment_with_polygon((B_p0, B_p1), A, False)
+
+        assert B_enclosed_in != AmbiguousEnclosure, f"{B_enclosed_in=}"
+
+        if B_enclosed_in == NoEnclosure:
+            # B is fully outside A
+            assert len(A_sections) == 0
+            return A, B
+
+        elif B_enclosed_in == A.graph.loops[0]:
+            new_loops = [_loop_iter(A, A.graph.loops[0])] + new_loops
+            new_loops.extend(_add_holes(enclosures))
+
+        else:
+            # B is fully enclosed in a hole
+            assert len(A_sections) == 0
+            return A, B
+
+    elif A_enclosed_in == AmbiguousEnclosure:
+        # outer loops of A and B intersect, need to process non-intersecting holes
+        new_loops.extend(_add_holes(enclosures))
+
+    elif A_enclosed_in == B.graph.loops[0]:
+        # A is enclosed in the outer loop of B, but not in any hole
+        new_loops = [_loop_iter(B, B.graph.loops[0])] + new_loops
+        new_loops.extend(_add_holes(enclosures))
+
+    else:
+        # A is fully enclosed in a hole
+        assert len(A_sections) == 0
+        return A, B
+
+    new_graph = Loops()
+    vertex_count = len(new_verts)
+    for loop in new_loops:
+        new_verts.extend(loop)
+        new_graph.add_loop(len(new_verts) - vertex_count)
+        vertex_count = len(new_verts)
+    return (Polygon2d(new_verts, new_graph),)
 
 
 def bool_subtract(A, B, db_visitor=None):
