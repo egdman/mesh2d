@@ -72,8 +72,8 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 def _bool_impl(A, B, op, db_visitor=None):
     if op == Union:
-        A_sections, B_sections, enclosures = _find_all_intersections(A, B)
-        return _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor)
+        sections, enclosures = _find_all_intersections(A, B)
+        return _calc_polygon_union(A, B, sections, enclosures, db_visitor)
 
     # if db_visitor:
         # for idx, vert in enumerate(A.vertices):
@@ -463,7 +463,7 @@ def _find_all_intersections(A, B):
 
                 A_sections.append(section)
                 # we'll sort lexicographically, first by traversal index and then by occlusion
-                B_sections.append(((B_traversal_idx, occlusion_key), (*section, len(B_sections))))
+                B_sections.append(((B_traversal_idx, occlusion_key), len(B_sections)))
                 exiting = not exiting
 
         if loop_sects_B:
@@ -472,25 +472,19 @@ def _find_all_intersections(A, B):
             enclosures.append(enclosure)
 
     B_sections.sort(key=itemgetter(0))
-    B_sections = list(section for _, section in B_sections)
 
-    # set reference indexes to A_sections
-    for idx, section in enumerate(B_sections):
-        idx_into_A_sections = section[-1]
-        A_sections[idx_into_A_sections] = *A_sections[idx_into_A_sections], idx
+    for idx_B, (_, idx_A) in enumerate(B_sections):
+        _, next_idx_A = B_sections[(idx_B + 1) % len(B_sections)]
+        A_sections[idx_A] = *A_sections[idx_A], next_idx_A
 
     print("A_sections:")
     for section in A_sections:
         print(section)
 
-    print("B_sections:")
-    for section in B_sections:
-        print(section)
-
-    return A_sections, B_sections, enclosures
+    return A_sections, enclosures
 
 
-def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=None):
+def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
     def _calc_intersection(A_idx, B_idx):
         A_p0 = A.vertices[A_idx]
         A_p1 = A.vertices[A.graph.next[A_idx]]
@@ -498,7 +492,7 @@ def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=Non
         B_p1 = B.vertices[B.graph.next[B_idx]]
         return calc_intersection_point(A_p0, A_p1, B_p0, B_p1)
 
-    # if len(A_sections) > 0:
+    # if len(sections) > 0:
     #     raise RuntimeError("Union of intersecting polygons not yet supported")
 
     assert len(A.graph.loops) == len(enclosures), f"{enclosures=}"
@@ -507,122 +501,75 @@ def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=Non
     new_verts = []
     vertex_count = 0
 
-    n_sect = len(A_sections)
-
-    section_idx_A = 0
-    A_idx, B_idx, exiting_B, section_idx_B = A_sections[section_idx_A]
-    A_sections[section_idx_A] = None
-    first_idx = last_idx = vert_idx = A_idx
-
+    n_sect = len(sections)
+    sect_idx = 0
+    idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
+    sections[sect_idx] = None
+    first_idx_A = idx_A
     while True:
-        new_verts.append(this_poly.vertices[vert_idx])
-        if vert_idx == last_idx:
-            if finished:
+        new_verts.append(_calc_intersection(idx_A, idx_B))
+        if db_visitor:
+            db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="green")
+
+        if exiting_B:
+            # follow A
+            vert_idx = idx_A
+            sect_idx += 1
+            wrap = sect_idx == len(sections)
+            sect_idx %= len(sections)
+            print(f"follow A until {sect_idx=}")
+
+            if sections[sect_idx] is None:
+                print("closing the loop")
+                # closing the loop
+                if vert_idx == first_idx_A and not wrap:
+                    # the next intersection is on the same edge
+                    pass
+                else:
+                    while True:
+                        vert_idx = A.graph.next[vert_idx]
+                        new_verts.append(A.vertices[vert_idx])
+                        if db_visitor:
+                            db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="purple")
+                        if vert_idx == first_idx_A:
+                            break
                 break
 
-            # arrived at the next intersection
-            new_verts.append(_calc_intersection(A_idx, B_idx))
-
-            if exiting_B:
-                # follow A
-                this_poly = A
-                vert_idx = A.graph.next[A_idx]
-                section_idx_A = (section_idx_A + 1) % n_sect
-                if A_sections[section_idx_A] is None:
-                    # closing the loop
-                    last_idx = first_idx
-                    finished = True
-                else:
-                    A_idx, B_idx, exiting_B, section_idx_B = A_sections[section_idx_A]
-                    A_sections[section_idx_A] = None
-
-                    last_idx = A_idx
-                    assert exiting_B == False
+            idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
+            sections[sect_idx] = None
+            if vert_idx == idx_A and not wrap:
+                # the next intersection is on the same edge
+                pass
             else:
-                # follow B
-                this_poly = B
-                vert_idx = B.graph.next[B_idx]
-                section_idx_B = (section_idx_B + 1) % n_sect
-                A_idx, B_idx, exiting_B, section_idx_A = B_sections[section_idx_B]
-                last_idx = B_idx
-                assert exiting_B == True
-        else:
-            vert_idx = this_poly.graph.next[vert_idx]
-
-
-
-
-
-    ##########################################
-    for section_idx_A in range(len(A_sections)):
-        if A_sections[section_idx_A] is None:
-            continue
-
-        start_A_idx, _, _, _ = A_sections[section_idx_A]
-        while True:
-            print(f"{section_idx_A=}")
-
-            if A_sections[section_idx_A] is None:
-                # close the loop
-                for idx in A.graph.loop_iterator(A.graph.next[A_idx]):
-                    new_verts.append(A.vertices[idx])
+                while True:
+                    vert_idx = A.graph.next[vert_idx]
+                    new_verts.append(A.vertices[vert_idx])
                     if db_visitor:
-                        db_visitor.add_text(new_verts[-1], str(len(new_verts) - 1), color="purple")
-
-                    if idx == start_A_idx:
+                        db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="blue")
+                    if vert_idx == idx_A:
                         break
-                break
 
-            A_idx, B_idx, exiting_B, section_idx_B = A_sections[section_idx_A]
-            A_sections[section_idx_A] = None
-
-            new_verts.append(_calc_intersection(A_idx, B_idx))
-            if db_visitor:
-                db_visitor.add_text(new_verts[-1], str(len(new_verts) - 1), color="blue")
-
-            if exiting_B:
-                # follow A
-                print("exiting B: following A")
-                verts_source = A.vertices
-
-                section_idx_A = (section_idx_A + 1) % len(A_sections)
-                if A_sections[section_idx_A] is None:
-                    ids_source = ()
-                else:
-                    last_idx, _, exiting_B, _ = A_sections[section_idx_A]
-                    assert exiting_B == False
-
-                    if A_idx == last_idx:
-                        ids_source = ()
-                    else:
-                        ids_source = A.graph.loop_iterator(A.graph.next[A_idx])
-
+        else:
+            # follow B
+            vert_idx = idx_B
+            wrap = ...
+            sect_idx = next_in_B
+            print(f"follow B until {sect_idx=}")
+            idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
+            sections[sect_idx] = None
+            if vert_idx == idx_B and not wrap:
+                pass
             else:
-                # entering B
-                print("entering B: following B")
-                verts_source = B.vertices
+                while True:
+                    vert_idx = B.graph.next[vert_idx]
+                    new_verts.append(B.vertices[vert_idx])
+                    if db_visitor:
+                        db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="red")
+                    if vert_idx == idx_B:
+                        break
 
-                section_idx_B = (section_idx_B + 1) % len(B_sections)
-                _, last_idx, exiting_B, section_idx_A = B_sections[section_idx_B]
-                assert exiting_B == True
-
-                if B_idx == last_idx:
-                    ids_source = ()
-                else:
-                    ids_source = B.graph.loop_iterator(B.graph.next[B_idx])
-
-            for idx in ids_source:
-                new_verts.append(verts_source[idx])
-                if db_visitor:
-                    db_visitor.add_text(new_verts[-1], str(len(new_verts) - 1), color="gold")
-
-                if idx == last_idx:
-                    break
-
-
-        new_graph.add_loop(len(new_verts) - vertex_count)
-        vertex_count = len(new_verts)
-    ##########################################
+    new_graph.add_loop(len(new_verts) - vertex_count)
+    vertex_count = len(new_verts)
 
     def _add_holes(enclosures_AB):
         for hole_A, enclosure_B in enclosures_AB:
@@ -649,7 +596,7 @@ def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=Non
         B_enclosed_in = _find_point_enclosure(B.vertices[B_outer_vertex], A)
         if B_enclosed_in == NoEnclosure:
             # B is fully outside A
-            assert len(A_sections) == 0
+            assert len(sections) == 0
             return A, B
 
         elif B_enclosed_in == A.graph.loops[0]:
@@ -658,7 +605,7 @@ def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=Non
 
         else:
             # B is fully enclosed in a hole
-            assert len(A_sections) == 0
+            assert len(sections) == 0
             return A, B
 
     elif A_enclosed_in == AmbiguousEnclosure:
@@ -672,7 +619,7 @@ def _calc_polygon_union(A, B, A_sections, B_sections, enclosures, db_visitor=Non
 
     else:
         # A is fully enclosed in a hole
-        assert len(A_sections) == 0
+        assert len(sections) == 0
         return A, B
 
     for loop in new_loops:
