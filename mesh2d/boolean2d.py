@@ -503,9 +503,13 @@ def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
 
     n_sect = len(sections)
     sect_idx = 0
+
     idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
     sections[sect_idx] = None
     first_idx_A = idx_A
+    first_idx_B = idx_B
+    wrap_A = True
+    wrap_B = True
     while True:
         new_verts.append(_calc_intersection(idx_A, idx_B))
         if db_visitor:
@@ -514,18 +518,12 @@ def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
         if exiting_B:
             # follow A
             vert_idx = idx_A
-            sect_idx += 1
-            wrap = sect_idx == len(sections)
-            sect_idx %= len(sections)
+            sect_idx = (sect_idx + 1) % len(sections)
             print(f"follow A until {sect_idx=}")
 
             if sections[sect_idx] is None:
                 print("closing the loop")
-                # closing the loop
-                if vert_idx == first_idx_A and not wrap:
-                    # the next intersection is on the same edge
-                    pass
-                else:
+                if vert_idx != first_idx_A or wrap_A:
                     while True:
                         vert_idx = A.graph.next[vert_idx]
                         new_verts.append(A.vertices[vert_idx])
@@ -537,10 +535,9 @@ def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
 
             idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
             sections[sect_idx] = None
-            if vert_idx == idx_A and not wrap:
-                # the next intersection is on the same edge
-                pass
-            else:
+            # TODO this is wrong: we must determine final value of wrap_A in advance
+            wrap_A = wrap_A and idx_A == first_idx_A
+            if vert_idx != idx_A or wrap_A:
                 while True:
                     vert_idx = A.graph.next[vert_idx]
                     new_verts.append(A.vertices[vert_idx])
@@ -552,14 +549,26 @@ def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
         else:
             # follow B
             vert_idx = idx_B
-            wrap = ...
             sect_idx = next_in_B
             print(f"follow B until {sect_idx=}")
+
+            if sections[sect_idx] is None:
+                print("closing the loop")
+                if vert_idx != first_idx_B or wrap_B:
+                    while True:
+                        vert_idx = B.graph.next[vert_idx]
+                        new_verts.append(B.vertices[vert_idx])
+                        if db_visitor:
+                            db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="purple")
+                        if vert_idx == first_idx_B:
+                            break
+                break
+
             idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
             sections[sect_idx] = None
-            if vert_idx == idx_B and not wrap:
-                pass
-            else:
+            # TODO this is wrong: we must determine final value of wrap_A in advance
+            wrap_B = wrap_B and idx_B == first_idx_B
+            if vert_idx != idx_B or wrap_B:
                 while True:
                     vert_idx = B.graph.next[vert_idx]
                     new_verts.append(B.vertices[vert_idx])
