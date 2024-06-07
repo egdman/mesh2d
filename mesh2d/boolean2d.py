@@ -250,13 +250,17 @@ def _intersect_segment_with_polygon(segment, polygon):
     # polygon loop that encloses seg0
     enclosure = NoEnclosure
 
-    def _add_intersection(A, B, area_diff, A_idx):
-        if area_diff > 0:
+    def _add_intersection(A, B, area_A, area_B, A_idx):
+        if area_B > area_A:
             occlusion_key = ComparableSegment(A, B)
         else:
             occlusion_key = ComparableSegment(B, A)
 
-        sections.append((occlusion_key, A_idx))
+        # calculate intersection coordinates
+        area_A = abs(area_A)
+        param = area_A / (area_A + abs(area_B))
+        coords = A + param * (B - A)
+        sections.append((occlusion_key, (A_idx, coords)))
 
     traversal_idx = 0
     for loop in polygon.graph.loops:
@@ -277,7 +281,7 @@ def _intersect_segment_with_polygon(segment, polygon):
 
             sects_segment, sects_ray = _has_intersection(seg0, seg1, A, B, area_A, area_B)
             if sects_segment:
-                _add_intersection(A, B, area_B - area_A, vertex_A)
+                _add_intersection(A, B, area_A, area_B, vertex_A)
             if sects_ray:
                 sects_ray_odd_times = not sects_ray_odd_times
 
@@ -293,7 +297,7 @@ def _intersect_segment_with_polygon(segment, polygon):
 
         sects_segment, sects_ray = _has_intersection(seg0, seg1, A, B, area_A, area_B)
         if sects_segment:
-            _add_intersection(A, B, area_B - area_A, vertex_A)
+            _add_intersection(A, B, area_A, area_B, vertex_A)
         if sects_ray:
             sects_ray_odd_times = not sects_ray_odd_times
 
@@ -344,18 +348,6 @@ def _find_point_enclosure(point, polygon):
     return enclosure
 
 
-def calc_intersection_param(s1, r1, s2, r2):
-    r2r1 = vec.cross2(r2, r1)
-    r2s1 = vec.cross2(r2, s1)
-    r2s2 = vec.cross2(r2, s2)
-    return (r2s2 - r2s1) / r2r1
-
-def calc_intersection_point(a, a1, b, b1):
-    a_diff = a1 - a
-    param = calc_intersection_param(a, a_diff, b, b1 - b)
-    return a + param * a_diff
-
-
 def _add_intersections_to_polys(A, B):
     sect_data = defaultdict(list)
     A_new = None
@@ -366,18 +358,16 @@ def _add_intersections_to_polys(A, B):
         for A_idx in A.graph.loop_iterator(loop):
             A_p0 = A.vertices[A_idx]
             A_p1 = A.vertices[A.graph.next[A_idx]]
-            A_diff = A_p1 - A_p0
             A_new_verts.append(A_p0)
 
             intersections, _ = _intersect_segment_with_polygon((A_p0, A_p1), B)
 
-            for B_idx in intersections:
+            for B_idx, sect_coords in intersections:
                 B_p0 = B.vertices[B_idx]
                 B_diff = B.vertices[B.graph.next[B_idx]] - B_p0
 
-                sect_param = calc_intersection_param(A_p0, A_diff, B_p0, B_diff)
                 sect_data[B_idx].append((A_p0, A_p1, loop_offset + len(A_new_verts)))
-                A_new_verts.append(A_p0 + sect_param * A_diff)
+                A_new_verts.append(sect_coords)
 
         loop_offset += len(A_new_verts)
         if A_new is None:
@@ -450,9 +440,9 @@ def _find_all_intersections(A, B):
             # (this only makes sense if we have at least 1 intersection)
             exiting = enclosure == B.graph.loops[0]
 
-            for B_idx in sections:
+            for B_idx, sect_coords in sections:
                 loop_sects_B = True
-                section = A_idx, B_idx, exiting
+                section = A_idx, B_idx, sect_coords, exiting
 
                 if exiting:
                     occlusion_key = ComparableSegment(A_p1, A_p0)
@@ -485,13 +475,6 @@ def _find_all_intersections(A, B):
 
 
 def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
-    def _calc_intersection(A_idx, B_idx):
-        A_p0 = A.vertices[A_idx]
-        A_p1 = A.vertices[A.graph.next[A_idx]]
-        B_p0 = B.vertices[B_idx]
-        B_p1 = B.vertices[B.graph.next[B_idx]]
-        return calc_intersection_point(A_p0, A_p1, B_p0, B_p1)
-
     # if len(sections) > 0:
     #     raise RuntimeError("Union of intersecting polygons not yet supported")
 
@@ -501,19 +484,18 @@ def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
     new_verts = []
     vertex_count = 0
 
-    n_sect = len(sections)
     sect_idx = 0
 
-    idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
+    idx_A, idx_B, sp, exiting_B, next_in_B = sections[sect_idx]
     sections[sect_idx] = None
     first_idx_A = idx_A
     first_idx_B = idx_B
     wrap_A = True
     wrap_B = True
     while True:
-        new_verts.append(_calc_intersection(idx_A, idx_B))
+        new_verts.append(sp)
         if db_visitor:
-            db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="green")
+            db_visitor.add_text(sp, str(len(new_verts)-1), color="green")
 
         if exiting_B:
             # follow A
@@ -533,7 +515,7 @@ def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
                             break
                 break
 
-            idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
+            idx_A, idx_B, sp, exiting_B, next_in_B = sections[sect_idx]
             sections[sect_idx] = None
             # TODO this is wrong: we must determine final value of wrap_A in advance
             wrap_A = wrap_A and idx_A == first_idx_A
@@ -564,7 +546,7 @@ def _calc_polygon_union(A, B, sections, enclosures, db_visitor=None):
                             break
                 break
 
-            idx_A, idx_B, exiting_B, next_in_B = sections[sect_idx]
+            idx_A, idx_B, sp, exiting_B, next_in_B = sections[sect_idx]
             sections[sect_idx] = None
             # TODO this is wrong: we must determine final value of wrap_A in advance
             wrap_B = wrap_B and idx_B == first_idx_B
