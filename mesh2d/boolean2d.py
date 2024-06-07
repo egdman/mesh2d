@@ -324,6 +324,7 @@ def _find_point_enclosure(point, polygon):
         return False
 
     enclosure = NoEnclosure
+    outer_loop = polygon.graph.loops[0]
 
     for loop in polygon.graph.loops:
         point_in_loop = False
@@ -343,7 +344,11 @@ def _find_point_enclosure(point, polygon):
             point_in_loop = not point_in_loop
 
         if point_in_loop:
+            if loop != outer_loop:
+                return loop
             enclosure = loop
+        elif loop == outer_loop:
+            return NoEnclosure
 
     return enclosure
 
