@@ -67,8 +67,8 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 def _bool_impl(A, B, op, db_visitor=None):
     if op == Union:
-        A_sections, A_order, B_sections, B_order, enclosures = _find_all_intersections(A, B)
-        return _calc_polygon_union(A, B, A_sections, A_order, B_sections, B_order, enclosures, db_visitor)
+        sections, idx_pairs, enclosures = _find_all_intersections(A, B)
+        return _calc_polygon_union(A, B, sections, idx_pairs, enclosures, db_visitor)
 
     # if db_visitor:
         # for idx, vert in enumerate(A.vertices):
@@ -429,9 +429,9 @@ def _make_traversal_map(graph):
     return trav_map
 
 
-def _iterate_section(polygon, section_coords, start_idx, last_idx):
-    yield section_coords
-    vert_idx = start_idx
+def _iterate_section(polygon, section, last_idx):
+    _, vert_idx, sect_coords = section
+    yield sect_coords
     while True:
         vert_idx = polygon.graph.next[vert_idx]
         yield polygon.vertices[vert_idx]
@@ -442,7 +442,8 @@ def _iterate_section(polygon, section_coords, start_idx, last_idx):
 def _find_all_intersections(A, B):
     # intersections sorted in traversal order of A
     A_sections = []
-    A_order = Loops()
+    # A_order = Loops()
+    idx_pairs = []
 
     # intersections that will later be sorted in traversal order of B
     B_sections = []
@@ -451,7 +452,7 @@ def _find_all_intersections(A, B):
 
     B_trav_map = _make_traversal_map(B.graph)
 
-    sections_count = 0
+    # sections_count = 0
     for A_loop in A.graph.loops:
         A_loop_has_section = False
 
@@ -464,23 +465,18 @@ def _find_all_intersections(A, B):
                 continue
 
             if A_loop_has_section:
-                tail_idx, tail_sect_coords, tail_exiting = A_sections[-1]
-                A_sections[-1] = _iterate_section(A, tail_sect_coords, tail_idx, A_idx), tail_exiting
+                A_sections.append(_iterate_section(A, tail_section, A_idx))
             else:
                 A_loop_has_section = True
                 A_idx_first = A_idx
 
+            for _, _, sect_coords in sections[:-1]:
+                A_sections.append((sect_coords,))
+            tail_section = sections[-1]
+
             # is the 1st intersection on segment exiting or entering B?
             exiting = enclosure == B.graph.loops[0]
-            for _, _, sect_coords in sections[:-1]:
-                A_sections.append((sect_coords,), exiting)
-                exiting = not exiting
-            _, _, sect_coords = sections[-1]
-            A_sections.append((A_idx, sect_coords, exiting))
-
-
-            exiting = enclosure == B.graph.loops[0]
-            for B_loop, B_idx, sect_coords in sections:
+            for _, B_idx, sect_coords in sections:
                 if exiting:
                     occlusion_key = ComparableSegment(A_p1, A_p0)
                 else:
@@ -490,73 +486,58 @@ def _find_all_intersections(A, B):
 
                 # we'll sort lexicographically, first by traversal index and then by occlusion
                 sorting_key = *B_traversal_idx, occlusion_key
-                B_section = B_idx, sect_coords, exiting
-                B_sections.append((sorting_key, B_section))
+                B_sections.append((sorting_key, len(B_sections)))
+                idx_pairs.append((A_idx, B_idx, sect_coords, exiting))
                 exiting = not exiting
 
         if A_loop_has_section:
-            assert len(A_sections) > sections_count
-            A_order.add_loop(len(A_sections) - sections_count)
-            sections_count = len(A_sections)
+            # assert len(A_sections) > sections_count
+            # A_order.add_loop(len(A_sections) - sections_count)
+            # sections_count = len(A_sections)
 
-            tail_idx, tail_sect_coords, tail_exiting = A_sections[-1]
-            A_sections[-1] = _iterate_section(A, tail_sect_coords, tail_idx, A_idx_first), tail_exiting
+            A_sections.append(_iterate_section(A, tail_section, A_idx_first))
             enclosures.append(AmbiguousEnclosure)
         else:
             enclosures.append(enclosure)
 
-    B_order = Loops()
-    B_sections_out = []
-    if len(B_sections) > 0:
+    if B_sections:
         B_sections.sort(key=itemgetter(0))
         B_sections = iter(B_sections)
+        (curr_loop_idx, curr_seg_idx, _), sect_idx_first = next(B_sections)
+        _, B_idx_first, sect_coords, _ = idx_pairs[sect_idx_first]
+        tail_section = None, B_idx_first, sect_coords
 
-        (curr_loop_idx, curr_seg_idx, _), section = next(B_sections)
-        B_sections_out = [section]
-        B_idx_first, _, _ = section
+        idx_in_B = 1 % len(A_sections)
+        for (loop_idx, seg_idx, _), sect_idx in B_sections:
+            A_idx, B_idx, sect_coords, _ = idx_pairs[sect_idx]
+            idx_in_B = (idx_in_B + 1) % len(A_sections)
 
-        loop_length = 1
-        for (loop_idx, seg_idx, _), section in B_sections:
             if loop_idx == curr_loop_idx:
                 # loop continuation
-                loop_length += 1
                 if seg_idx == curr_seg_idx:
                     # segment continuation
-                    _, sect_coords, exiting = B_sections_out[-1]
-                    B_sections_out[-1] = (sect_coords,), exiting
+                    A_sections[sect_idx] = A_sections[sect_idx], (sect_coords,), idx_in_B
                 else:
                     # segment start
-                    B_idx, _, _ = section
-                    tail_idx, tail_sect_coords, tail_exiting = B_sections_out[-1]
-                    B_sections_out[-1] = _iterate_section(B, tail_sect_coords, tail_idx, B_idx), tail_exiting
+                    A_sections[sect_idx] = A_sections[sect_idx], _iterate_section(B, tail_section, B_idx), idx_in_B
                     curr_seg_idx = seg_idx
             else:
+                # close current loop
+                A_sections[sect_idx_first] = A_sections[sect_idx_first], _iterate_section(B, tail_section, B_idx_first), idx_in_B
+
                 # loop start
-                B_order.add_loop(loop_length)
-                loop_length = 1
-                curr_loop_idx = loop_idx
-                curr_seg_idx = seg_idx
-                tail_idx, tail_sect_coords, tail_exiting = B_sections_out[-1]
-                B_sections_out[-1] = _iterate_section(B, tail_sect_coords, tail_idx, B_idx_first), tail_exiting
-                B_idx_first, _, _ = section
+                curr_loop_idx, curr_seg_idx = loop_idx, seg_idx
+                sect_idx_first = sect_idx
+                B_idx_first = B_idx
 
-            B_sections_out.append(section)
+            tail_section = None, B_idx, sect_coords
 
-        tail_idx, tail_sect_coords, tail_exiting = B_sections_out[-1]
-        B_sections_out[-1] = _iterate_section(B, tail_sect_coords, tail_idx, B_idx_first), tail_exiting
+        A_sections[sect_idx_first] = A_sections[sect_idx_first], _iterate_section(B, tail_section, B_idx_first), idx_in_B
 
-        print("A_sections:")
-        for section in A_sections:
-            print(section)
-
-        print("B_sections:")
-        for section in A_sections:
-            print(section)
-
-    return A_sections, A_order, B_sections_out, B_order, enclosures
+    return A_sections, idx_pairs, enclosures
 
 
-def _calc_polygon_union(A, B, A_sections, A_order, B_sections, B_order, enclosures, db_visitor=None):
+def _calc_polygon_union(A, B, sections, idx_pairs, enclosures, db_visitor=None):
     # if len(sections) > 0:
     #     raise RuntimeError("Union of intersecting polygons not yet supported")
 
@@ -566,88 +547,28 @@ def _calc_polygon_union(A, B, A_sections, A_order, B_sections, B_order, enclosur
     new_verts = []
     vertex_count = 0
 
-    for first_sect_idx in A_order.loops:
-        if sections[first_sect_idx] is None:
-            continue
+    sect_idx = 0
+    while sect_idx < len(sections):
+        _, _, _, exiting_B = idx_pairs[sect_idx]
+        if exiting_B:
+            polygon_idx = 0
+        else:
+            polygon_idx = 1
 
-        sect_idx = first_sect_idx
-        idx_A, idx_B, sp, exiting_B = sections[sect_idx]
-        sections[sect_idx] = None
-        first_idx_A = idx_A
-        first_idx_B = idx_B
-        while True:
-            new_verts.append(sp)
-            if db_visitor:
-                db_visitor.add_text(sp, str(len(new_verts)-1), color="green")
-
-            if exiting_B:
-                # follow A
-                vert_idx = idx_A
-                sect_idx = A_order.next[sect_idx]
-                print(f"follow A until {sect_idx=}")
-
-                end_of_loop = sections[sect_idx] is None
-                if end_of_loop:
-                    print("closing the loop")
-                    stay_on_segment = vert_idx == first_idx_A and sect_idx != first_sect_idx
-                    if not stay_on_segment:
-                        while True:
-                            vert_idx = A.graph.next[vert_idx]
-                            new_verts.append(A.vertices[vert_idx])
-                            if db_visitor:
-                                db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="purple")
-                            if vert_idx == first_idx_A:
-                                break
-                    break
-
-                idx_A, idx_B, sp, exiting_B = sections[sect_idx]
-                sections[sect_idx] = None
-                stay_on_segment = vert_idx == idx_A and sect_idx != first_sect_idx
-
-                if not stay_on_segment:
-                    while True:
-                        vert_idx = A.graph.next[vert_idx]
-                        new_verts.append(A.vertices[vert_idx])
-                        if db_visitor:
-                            db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="blue")
-                        if vert_idx == idx_A:
-                            break
-
+        section = sections[sect_idx][polygon_idx]
+        if (vertex := next(section, None)) is None:
+            if len(new_verts) > vertex_count:
+                new_graph.add_loop(len(new_verts) - vertex_count)
+                vertex_count = len(new_verts)
+            sect_idx += 1
+        else:
+            new_verts.append(vertex)
+            new_verts.extend(section)
+            if polygon_idx == 0:
+                sect_idx = (sect_idx + 1) % len(sections)
             else:
-                # follow B
-                vert_idx = idx_B
-                sect_idx = B_order.next[sect_idx]
-                print(f"follow B until {sect_idx=}")
+                _, _, sect_idx = sections[sect_idx]
 
-                end_of_loop = sections[sect_idx] is None
-                if end_of_loop:
-                    print("closing the loop")
-                    stay_on_segment = vert_idx == first_idx_B and sect_idx != first_sect_idx
-                    if not stay_on_segment:
-                        while True:
-                            vert_idx = B.graph.next[vert_idx]
-                            new_verts.append(B.vertices[vert_idx])
-                            if db_visitor:
-                                db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="purple")
-                            if vert_idx == first_idx_B:
-                                break
-                    break
-
-                idx_A, idx_B, sp, exiting_B = sections[sect_idx]
-                sections[sect_idx] = None
-                stay_on_segment = vert_idx == idx_B and sect_idx != first_sect_idx
-
-                if not stay_on_segment:
-                    while True:
-                        vert_idx = B.graph.next[vert_idx]
-                        new_verts.append(B.vertices[vert_idx])
-                        if db_visitor:
-                            db_visitor.add_text(new_verts[-1], str(len(new_verts)-1), color="red")
-                        if vert_idx == idx_B:
-                            break
-
-        new_graph.add_loop(len(new_verts) - vertex_count)
-        vertex_count = len(new_verts)
 
     def _add_holes(enclosures_AB):
         for hole_A, enclosure_B in enclosures_AB:
