@@ -462,15 +462,13 @@ def _find_all_intersections(A, B, db_visitor=None):
         description = f"{poly_name} section [{first_idx}, {last_idx}]"
         return SectionIterator(_iter_impl(vert_idx), description)
 
-
     # intersections sorted in traversal order of A
     A_sections = []
-    # A_order = Loops()
-    section_heads = []
 
     # intersections that will later be sorted in traversal order of B
     B_sorted = []
 
+    section_heads = []
     enclosures = []
 
     B_trav_map = _make_traversal_map(B.graph)
@@ -489,15 +487,14 @@ def _find_all_intersections(A, B, db_visitor=None):
                 continue
 
             if A_loop_has_section:
-                A_sections.append(_iterate_section(A, last_sec_head, A_idx))
+                A_sections.append((_iterate_section(A, last_sec_head, A_idx),))
             else:
                 A_loop_has_section = True
                 A_idx_first = A_idx
 
             for _, sect_coords in sections[:-1]:
                 description = f"A new coords on {A_idx}"
-                A_sections.append(SectionIterator(iter((sect_coords,)), description))
-                # A_sections.append(iter((sect_coords,)))
+                A_sections.append((SectionIterator(iter((sect_coords,)), description),))
             _, sect_coords = sections[-1]
             last_sec_head = A_idx, sect_coords
 
@@ -521,52 +518,48 @@ def _find_all_intersections(A, B, db_visitor=None):
                 exiting = not exiting
 
         if A_loop_has_section:
-            A_sections.append(_iterate_section(A, last_sec_head, A_idx_first))
+            A_sections.append((_iterate_section(A, last_sec_head, A_idx_first),))
             enclosures.append(AmbiguousEnclosure)
         else:
             enclosures.append(enclosure)
 
-
-    def _section_head(sect_idx):
+    def _section_head_at(sect_idx):
         _, sect_idx = B_sorted[sect_idx]
         idx_B, sect_coords, _ = section_heads[sect_idx]
         return idx_B, sect_coords
 
-    # ##########################################################
-    # for idx in range(len(A_sections)):
-    #     A_sections[idx] = A_sections[idx], None, None
-    # return A_sections, section_heads, enclosures
-    # ##########################################################
-
     if B_sorted:
         B_sorted.sort(key=itemgetter(0))
 
-        last_sec_head = _section_head(0)
+        last_sec_head = _section_head_at(0)
         first_B_idx, _ = last_sec_head
         for sect_idx in range(1, len(B_sorted)):
             (tail_loop_idx, tail_seg_idx, _), sect_idx_A = B_sorted[sect_idx - 1]
-            (loop_idx, seg_idx, _), _ = B_sorted[sect_idx]
+            (loop_idx, seg_idx, _), next_sect_idx_A = B_sorted[sect_idx]
             if loop_idx != tail_loop_idx:
                 # close the loop
-                last_sec_head = _section_head(sect_idx - 1)
-                A_sections[sect_idx_A] = A_sections[sect_idx_A], _iterate_section(B, last_sec_head, first_B_idx), sect_idx
+                last_sec_head = _section_head_at(sect_idx - 1)
+                section_verts = _iterate_section(B, last_sec_head, first_B_idx)
 
                 # start next loop
-                first_B_idx, _ = _section_head(sect_idx)
+                first_B_idx, _ = _section_head_at(sect_idx)
             elif seg_idx != tail_seg_idx:
                 # start new segment
-                B_idx, _ = _section_head(sect_idx)
-                A_sections[sect_idx_A] = A_sections[sect_idx_A], _iterate_section(B, last_sec_head, B_idx), sect_idx
+                B_idx, _ = _section_head_at(sect_idx)
+                section_verts = _iterate_section(B, last_sec_head, B_idx)
             else:
                 # continue current segment
                 B_idx, sect_coords = last_sec_head
                 description = f"B new coords on {B_idx}"
-                A_sections[sect_idx_A] = A_sections[sect_idx_A], SectionIterator(iter((sect_coords,)), description), sect_idx
-            last_sec_head = _section_head(sect_idx)
+                section_verts = SectionIterator(iter((sect_coords,)), description)
+
+            A_sections[sect_idx_A] += section_verts, next_sect_idx_A
+            last_sec_head = _section_head_at(sect_idx)
 
         # close the last loop
         _, sect_idx_A = B_sorted[-1]
-        A_sections[sect_idx_A] = A_sections[sect_idx_A], _iterate_section(B, last_sec_head, first_B_idx), 0
+        _, next_sect_idx_A = B_sorted[0]
+        A_sections[sect_idx_A] += _iterate_section(B, last_sec_head, first_B_idx), next_sect_idx_A
 
     for sect in A_sections:
         print(f"{sect}")
@@ -587,11 +580,11 @@ def _calc_polygon_union(A, B, sections, section_heads, enclosures, db_visitor=No
     sect_idx = 0
     while sect_idx < len(sections):
         _, _, exiting_B = section_heads[sect_idx]
-        polygon_idx = 1
-        # if exiting_B:
-        #     polygon_idx = 0
-        # else:
-        #     polygon_idx = 1
+        # polygon_idx = 1
+        if exiting_B:
+            polygon_idx = 0
+        else:
+            polygon_idx = 1
 
         section = sections[sect_idx][polygon_idx]
         if (vertex := next(section, None)) is None:
