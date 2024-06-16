@@ -67,8 +67,8 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 def _bool_impl(A, B, op, db_visitor=None):
     if op == Union:
-        sections, A_order, B_order, enclosures = _find_all_intersections(A, B)
-        return _calc_polygon_union(A, B, sections, A_order, B_order, enclosures, db_visitor)
+        A_sections, A_order, B_sections, B_order, enclosures = _find_all_intersections(A, B)
+        return _calc_polygon_union(A, B, A_sections, A_order, B_sections, B_order, enclosures, db_visitor)
 
     # if db_visitor:
         # for idx, vert in enumerate(A.vertices):
@@ -429,6 +429,16 @@ def _make_traversal_map(graph):
     return trav_map
 
 
+def _iterate_section(polygon, section_coords, start_idx, last_idx):
+    yield section_coords
+    vert_idx = start_idx
+    while True:
+        vert_idx = polygon.graph.next[vert_idx]
+        yield polygon.vertices[vert_idx]
+        if vert_idx == last_idx:
+            break
+
+
 def _find_all_intersections(A, B):
     # intersections sorted in traversal order of A
     A_sections = []
@@ -443,23 +453,34 @@ def _find_all_intersections(A, B):
 
     sections_count = 0
     for A_loop in A.graph.loops:
-        A_loop_sects_B = False
+        A_loop_has_section = False
 
         for A_idx in A.graph.loop_iterator(A_loop):
             A_p0 = A.vertices[A_idx]
             A_p1 = A.vertices[A.graph.next[A_idx]]
 
             sections, enclosure = _intersect_segment_with_polygon((A_p0, A_p1), B)
+            if not sections:
+                continue
 
-            # is the current segment exiting or entering B?
-            # (this only makes sense if we have at least 1 intersection)
+            if A_loop_has_section:
+                tail_idx, tail_sect_coords, tail_exiting = A_sections[-1]
+                A_sections[-1] = _iterate_section(A, tail_sect_coords, tail_idx, A_idx), tail_exiting
+            else:
+                A_loop_has_section = True
+                A_idx_first = A_idx
+
+            # is the 1st intersection on segment exiting or entering B?
             exiting = enclosure == B.graph.loops[0]
+            for _, _, sect_coords in sections[:-1]:
+                A_sections.append((sect_coords,), exiting)
+                exiting = not exiting
+            _, _, sect_coords = sections[-1]
+            A_sections.append((A_idx, sect_coords, exiting))
 
+
+            exiting = enclosure == B.graph.loops[0]
             for B_loop, B_idx, sect_coords in sections:
-                A_loop_sects_B = True
-                section = A_idx, B_idx, sect_coords, exiting
-                A_sections.append(section)
-
                 if exiting:
                     occlusion_key = ComparableSegment(A_p1, A_p0)
                 else:
@@ -469,49 +490,73 @@ def _find_all_intersections(A, B):
 
                 # we'll sort lexicographically, first by traversal index and then by occlusion
                 sorting_key = *B_traversal_idx, occlusion_key
-                B_sections.append((sorting_key, len(B_sections)))
+                B_section = B_idx, sect_coords, exiting
+                B_sections.append((sorting_key, B_section))
                 exiting = not exiting
 
-        A_order.add_loop(len(A_sections) - sections_count)
-        sections_count = len(A_sections)
+        if A_loop_has_section:
+            assert len(A_sections) > sections_count
+            A_order.add_loop(len(A_sections) - sections_count)
+            sections_count = len(A_sections)
 
-        if A_loop_sects_B:
+            tail_idx, tail_sect_coords, tail_exiting = A_sections[-1]
+            A_sections[-1] = _iterate_section(A, tail_sect_coords, tail_idx, A_idx_first), tail_exiting
             enclosures.append(AmbiguousEnclosure)
         else:
             enclosures.append(enclosure)
 
     B_order = Loops()
+    B_sections_out = []
     if len(B_sections) > 0:
         B_sections.sort(key=itemgetter(0))
-        B_order.next = [None]*len(B_sections)
-        B_order.prev = [None]*len(B_sections)
-
         B_sections = iter(B_sections)
-        (curr_loop_idx, _, _), idx_A = next(B_sections)
-        B_order.loops = [idx_A]
 
-        for (loop_idx, _, _), next_idx_A in B_sections:
+        (curr_loop_idx, curr_seg_idx, _), section = next(B_sections)
+        B_sections_out = [section]
+        B_idx_first, _, _ = section
+
+        loop_length = 1
+        for (loop_idx, seg_idx, _), section in B_sections:
             if loop_idx == curr_loop_idx:
-                B_order.next[idx_A] = next_idx_A
-                B_order.prev[next_idx_A] = idx_A
+                # loop continuation
+                loop_length += 1
+                if seg_idx == curr_seg_idx:
+                    # segment continuation
+                    _, sect_coords, exiting = B_sections_out[-1]
+                    B_sections_out[-1] = (sect_coords,), exiting
+                else:
+                    # segment start
+                    B_idx, _, _ = section
+                    tail_idx, tail_sect_coords, tail_exiting = B_sections_out[-1]
+                    B_sections_out[-1] = _iterate_section(B, tail_sect_coords, tail_idx, B_idx), tail_exiting
+                    curr_seg_idx = seg_idx
             else:
-                B_order.next[idx_A] = B_order.loops[-1]
-                B_order.prev[B_order.loops[-1]] = idx_A
-                B_order.loops.append(next_idx_A)
+                # loop start
+                B_order.add_loop(loop_length)
+                loop_length = 1
                 curr_loop_idx = loop_idx
-            idx_A = next_idx_A
+                curr_seg_idx = seg_idx
+                tail_idx, tail_sect_coords, tail_exiting = B_sections_out[-1]
+                B_sections_out[-1] = _iterate_section(B, tail_sect_coords, tail_idx, B_idx_first), tail_exiting
+                B_idx_first, _, _ = section
 
-        B_order.next[idx_A] = B_order.loops[-1]
-        B_order.prev[B_order.loops[-1]] = idx_A
+            B_sections_out.append(section)
+
+        tail_idx, tail_sect_coords, tail_exiting = B_sections_out[-1]
+        B_sections_out[-1] = _iterate_section(B, tail_sect_coords, tail_idx, B_idx_first), tail_exiting
 
         print("A_sections:")
         for section in A_sections:
             print(section)
 
-    return A_sections, A_order, B_order, enclosures
+        print("B_sections:")
+        for section in A_sections:
+            print(section)
+
+    return A_sections, A_order, B_sections_out, B_order, enclosures
 
 
-def _calc_polygon_union(A, B, sections, A_order, B_order, enclosures, db_visitor=None):
+def _calc_polygon_union(A, B, A_sections, A_order, B_sections, B_order, enclosures, db_visitor=None):
     # if len(sections) > 0:
     #     raise RuntimeError("Union of intersecting polygons not yet supported")
 
