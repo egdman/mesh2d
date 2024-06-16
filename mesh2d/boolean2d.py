@@ -279,7 +279,7 @@ def _intersect_segment_with_polygon(segment, polygon):
 
             sects_segment, sects_ray = _has_intersection(seg0, seg1, A, B, area_A, area_B)
             if sects_segment:
-                _add_intersection(A, B, area_A, area_B, loop, vertex_A)
+                _add_intersection(A, B, area_A, area_B, vertex_A)
             if sects_ray:
                 sects_ray_odd_times = not sects_ray_odd_times
 
@@ -295,7 +295,7 @@ def _intersect_segment_with_polygon(segment, polygon):
 
         sects_segment, sects_ray = _has_intersection(seg0, seg1, A, B, area_A, area_B)
         if sects_segment:
-            _add_intersection(A, B, area_A, area_B, loop, vertex_A)
+            _add_intersection(A, B, area_A, area_B, vertex_A)
         if sects_ray:
             sects_ray_odd_times = not sects_ray_odd_times
 
@@ -430,7 +430,7 @@ def _make_traversal_map(graph):
 
 
 def _iterate_section(polygon, section, last_idx):
-    _, vert_idx, sect_coords = section
+    vert_idx, sect_coords = section
     print("yield intersection pt")
     yield sect_coords
     while True:
@@ -471,13 +471,13 @@ def _find_all_intersections(A, B):
                 A_loop_has_section = True
                 A_idx_first = A_idx
 
-            for _, _, sect_coords in sections[:-1]:
+            for _, sect_coords in sections[:-1]:
                 A_sections.append(iter((sect_coords,)))
             last_sec_head = sections[-1]
 
             # is the 1st intersection on segment exiting or entering B?
             exiting = enclosure == B.graph.loops[0]
-            for _, B_idx, sect_coords in sections:
+            for B_idx, sect_coords in sections:
                 if exiting:
                     occlusion_key = ComparableSegment(A_p1, A_p0)
                 else:
@@ -501,13 +501,13 @@ def _find_all_intersections(A, B):
     def _section_head(sect_idx):
         _, sect_idx = B_sections[sect_idx]
         idx_B, sect_coords, _ = section_heads[sect_idx]
-        return None, idx_B, sect_coords
+        return idx_B, sect_coords
 
     if B_sections:
         B_sections.sort(key=itemgetter(0))
 
-        _, first_B_idx, _ = _section_head(0)
         last_sec_head = _section_head(0)
+        first_B_idx, _ = last_sec_head
         for sect_idx in range(1, len(B_sections)):
             (tail_loop_idx, tail_seg_idx, _), sect_idx_A = B_sections[sect_idx - 1]
             (loop_idx, seg_idx, _), _ = B_sections[sect_idx]
@@ -517,10 +517,10 @@ def _find_all_intersections(A, B):
                 A_sections[sect_idx_A] = A_sections[sect_idx_A], _iterate_section(B, last_sec_head, first_B_idx), sect_idx
 
                 # start next loop
-                _, first_B_idx, _ = _section_head(sect_idx)
+                first_B_idx, _ = _section_head(sect_idx)
             elif seg_idx != tail_seg_idx:
                 # start new segment
-                _, B_idx, _ = _section_head(sect_idx)
+                B_idx, _ = _section_head(sect_idx)
                 A_sections[sect_idx_A] = A_sections[sect_idx_A], _iterate_section(B, last_sec_head, B_idx), sect_idx
             else:
                 # continue current segment
