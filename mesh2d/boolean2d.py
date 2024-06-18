@@ -67,8 +67,8 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 def _bool_impl(A, B, op, db_visitor=None):
     if op == Union:
-        sections, section_heads, next_section, enclosures = _find_all_intersections(A, B, db_visitor)
-        return _calc_polygon_union(A, B, sections, section_heads, next_section, enclosures, db_visitor)
+        sections, next_section, column_ids, enclosures = _find_all_intersections(A, B, db_visitor)
+        return _calc_polygon_union(A, B, sections, next_section, column_ids, enclosures, db_visitor)
 
     # if db_visitor:
         # for idx, vert in enumerate(A.vertices):
@@ -450,7 +450,7 @@ def _find_all_intersections(A, B, db_visitor=None):
     def _iterate_section(polygon, head, last_idx):
         vert_idx, sect_coords = head
 
-        def _iter_impl(vert_idx):
+        def _section_iter_impl(vert_idx):
             yield sect_coords
             while True:
                 vert_idx = polygon.graph.next[vert_idx]
@@ -460,16 +460,24 @@ def _find_all_intersections(A, B, db_visitor=None):
         poly_name = "A" if polygon is A else "B"
         first_idx = polygon.graph.next[vert_idx]
         description = f"{poly_name} section [{first_idx}, {last_idx}]"
-        return SectionIterator(_iter_impl(vert_idx), description)
+        return SectionIterator(_section_iter_impl(vert_idx), description)
 
-    # intersections sorted in traversal order of A
-    A_sections = []
+    # A 'section' is one intersection point followed by all subsequent
+    # polygon vertices until the next intersection point.
+    # From each intersection point we have a choice to follow polygon A or polygon B,
+    # therefore each intersection point has 2 sections.
+    # They are arranged in 2 columns - A sections on the left, B sections on the right.
+    section_iters = []
 
-    # intersections that will later be sorted in traversal order of B
+    # For each section provides the index of the next section.
+    # Also arranged in 2 columns - left for A, right for B.
+    next_section = []
+
+    # Section indexes that will later be sorted in the traversal order of B.
     B_sorted = []
 
-    next_section = []
     section_heads = []
+    column_ids = []
     enclosures = []
 
     B_trav_map = _make_traversal_map(B.graph)
@@ -488,14 +496,14 @@ def _find_all_intersections(A, B, db_visitor=None):
                 continue
 
             if num_sections_on_loop > 0:
-                A_sections.append(_iterate_section(A, last_sec_head, A_idx))
+                section_iters.append(_iterate_section(A, last_sec_head, A_idx))
             else:
                 A_idx_first = A_idx
             num_sections_on_loop += len(sections)
 
             for _, sect_coords in sections[:-1]:
-                description = f"A new coords on {A_idx}"
-                A_sections.append(SectionIterator(iter((sect_coords,)), description))
+                description = f"A new point on {A_idx}"
+                section_iters.append(SectionIterator(iter((sect_coords,)), description))
             _, sect_coords = sections[-1]
             last_sec_head = A_idx, sect_coords
 
@@ -515,21 +523,22 @@ def _find_all_intersections(A, B, db_visitor=None):
                 # we'll sort lexicographically, first by traversal index and then by occlusion
                 sorting_key = *B_traversal_idx, occlusion_key
                 B_sorted.append((sorting_key, len(B_sorted)))
-                section_heads.append((B_idx, sect_coords, exiting))
+                section_heads.append((B_idx, sect_coords))
+                column_ids.append(0 if exiting else 1)
                 exiting = not exiting
 
         if num_sections_on_loop > 0:
             base_idx = len(next_section)
             next_section.extend(range(base_idx + 1, base_idx + num_sections_on_loop))
             next_section.append(base_idx)
-            A_sections.append(_iterate_section(A, last_sec_head, A_idx_first))
+            section_iters.append(_iterate_section(A, last_sec_head, A_idx_first))
             enclosures.append(AmbiguousEnclosure)
         else:
             enclosures.append(enclosure)
 
     def _section_head_at(sect_idx):
         _, sect_idx = B_sorted[sect_idx]
-        idx_B, sect_coords, _ = section_heads[sect_idx]
+        idx_B, sect_coords = section_heads[sect_idx]
         return idx_B, sect_coords
 
     if B_sorted:
@@ -545,7 +554,7 @@ def _find_all_intersections(A, B, db_visitor=None):
                 # close the loop
                 next_sect_idx_A = first_sect_idx_A
                 last_sec_head = _section_head_at(sect_idx - 1)
-                section_verts = _iterate_section(B, last_sec_head, first_B_idx)
+                section_iter = _iterate_section(B, last_sec_head, first_B_idx)
 
                 # start next loop
                 first_sect_idx_A = sect_idx_A
@@ -553,14 +562,14 @@ def _find_all_intersections(A, B, db_visitor=None):
             elif seg_idx != tail_seg_idx:
                 # start new segment
                 B_idx, _ = _section_head_at(sect_idx)
-                section_verts = _iterate_section(B, last_sec_head, B_idx)
+                section_iter = _iterate_section(B, last_sec_head, B_idx)
             else:
                 # continue current segment
                 B_idx, sect_coords = last_sec_head
-                description = f"B new coords on {B_idx}"
-                section_verts = SectionIterator(iter((sect_coords,)), description)
+                description = f"B new point on {B_idx}"
+                section_iter = SectionIterator(iter((sect_coords,)), description)
 
-            A_sections[sect_idx_A] = A_sections[sect_idx_A], section_verts
+            section_iters[sect_idx_A] = section_iters[sect_idx_A], section_iter
             next_section[sect_idx_A] = next_section[sect_idx_A], next_sect_idx_A
 
             last_sec_head = _section_head_at(sect_idx)
@@ -568,16 +577,15 @@ def _find_all_intersections(A, B, db_visitor=None):
         # close the last loop
         _, sect_idx_A = B_sorted[-1]
         _, next_sect_idx_A = B_sorted[0]
-        A_sections[sect_idx_A] = A_sections[sect_idx_A], _iterate_section(B, last_sec_head, first_B_idx)
+        section_iters[sect_idx_A] = section_iters[sect_idx_A], _iterate_section(B, last_sec_head, first_B_idx)
         next_section[sect_idx_A] = next_section[sect_idx_A], next_sect_idx_A
 
-    for sect in A_sections:
+    for sect in section_iters:
         print(f"{sect}")
-    return A_sections, section_heads, next_section, enclosures
+    return section_iters, next_section, column_ids, enclosures
 
 
-from itertools import chain
-def _calc_polygon_union(A, B, sections, section_heads, next_section, enclosures, db_visitor=None):
+def _calc_polygon_union(A, B, sections, next_section, column_ids, enclosures, db_visitor=None):
     assert len(A.graph.loops) == len(enclosures), f"{enclosures=}"
 
     new_graph = Loops()
@@ -586,8 +594,7 @@ def _calc_polygon_union(A, B, sections, section_heads, next_section, enclosures,
 
     sect_idx = 0
     while sect_idx < len(sections):
-        _, _, exiting_B = section_heads[sect_idx]
-        polygon_idx = 0 if exiting_B else 1
+        polygon_idx = column_ids[sect_idx]
 
         section = sections[sect_idx][polygon_idx]
         if (vertex := next(section, None)) is None:
