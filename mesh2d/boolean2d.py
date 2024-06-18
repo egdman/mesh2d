@@ -540,8 +540,8 @@ def _find_all_intersections(A, B, db_visitor=None):
         B_sorted.sort(key=itemgetter(0))
 
         last_sec_head = _section_head_at(0)
-        _, first_sect_idx_A = B_sorted[0]
         first_B_idx, _ = last_sec_head
+        _, first_sect_idx_A = B_sorted[0]
         for sect_idx in range(1, len(B_sorted)):
             (tail_loop_idx, tail_seg_idx, _), sect_idx_A = B_sorted[sect_idx - 1]
             (loop_idx, seg_idx, _), next_sect_idx_A = B_sorted[sect_idx]
@@ -589,18 +589,17 @@ def _calc_polygon_union(A, B, sections, next_section, enclosures, db_visitor=Non
     new_verts = []
     vertex_count = 0
 
-    sect_idx = 0
-    while sect_idx < len(sections):
-        section = sections[sect_idx]
-        if (vertex := next(section, None)) is None:
-            if len(new_verts) > vertex_count:
-                new_graph.add_loop(len(new_verts) - vertex_count)
-                vertex_count = len(new_verts)
-            sect_idx += 1
-        else:
-            new_verts.append(vertex)
+    for sect_idx in range(len(sections)):
+        while (section := sections[sect_idx]) is not None:
+            sections[sect_idx] = None
             new_verts.extend(section)
             sect_idx = next_section[sect_idx]
+
+        if len(new_verts) > vertex_count:
+            new_graph.add_loop(len(new_verts) - vertex_count)
+            vertex_count = len(new_verts)
+
+    return (Polygon2d(new_verts, new_graph),)
 
     def _add_holes(enclosures_AB):
         for hole_A, enclosure_B in enclosures_AB:
