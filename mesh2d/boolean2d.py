@@ -67,6 +67,9 @@ def split_poly_boundaries(this_poly, intersect_ids, other_poly, backwards):
 
 def _bool_impl(A, B, op, db_visitor=None):
     if op == Union:
+        #### for debug ####
+        A, B = B, A
+        ###################
         sections, next_section, enclosures = _find_all_intersections(A, B, db_visitor)
         return _calc_polygon_union(A, B, sections, next_section, enclosures, db_visitor)
 
@@ -432,18 +435,16 @@ def _make_traversal_map(graph):
 
 
 class SectionIterator:
-    def __init__(self, vert_iterator, description):
-        self._iter = vert_iterator
+    def __init__(self, first_vert, vert_iterator, coords, description):
+        self._ids = list(vert_iterator)
+        self._verts = [first_vert] + [coords[idx] for idx in self._ids]
         self._desc = description
 
     def __repr__(self):
-        return self._desc
+        return f"{self._desc}: {self._ids}"
 
-    def __iter__(self):
-        return self._iter
-
-    def __next__(self):
-        return next(self._iter)
+    def __getitem__(self, idx):
+        return self._verts[idx]
 
 
 def _find_all_intersections(A, B, db_visitor=None):
@@ -451,16 +452,15 @@ def _find_all_intersections(A, B, db_visitor=None):
         vert_idx, sect_coords = head
 
         def _section_iter_impl(vert_idx):
-            yield sect_coords
             while True:
                 vert_idx = polygon.graph.next[vert_idx]
-                yield polygon.vertices[vert_idx]
+                yield vert_idx
                 if vert_idx == last_idx:
                     break
         poly_name = "A" if polygon is A else "B"
         first_idx = polygon.graph.next[vert_idx]
         description = f"{poly_name} section [{first_idx}, {last_idx}]"
-        return SectionIterator(_section_iter_impl(vert_idx), description)
+        return SectionIterator(sect_coords, _section_iter_impl(vert_idx), polygon.vertices, description)
 
     # A 'section' is one intersection point followed by all subsequent
     # polygon vertices until the next intersection point.
@@ -503,8 +503,7 @@ def _find_all_intersections(A, B, db_visitor=None):
                     db_visitor.add_text(sect_coords, "X", color="gold")
 
                 if exiting:
-                    description = f"A new point on {A_idx}"
-                    section_iters.append(SectionIterator(iter((sect_coords,)), description))
+                    section_iters.append((sect_coords,))
                     occlusion_key = ComparableSegment(A_p1, A_p0)
                 else:
                     occlusion_key = ComparableSegment(A_p0, A_p1)
@@ -561,8 +560,7 @@ def _find_all_intersections(A, B, db_visitor=None):
             else:
                 # continue current segment
                 B_idx, sect_coords = last_sec_head
-                description = f"B new point on {B_idx}"
-                section_iter = SectionIterator(iter((sect_coords,)), description)
+                section_iter = (sect_coords,)
 
             if section_iters[sect_idx_A] is None:
                 section_iters[sect_idx_A] = section_iter
@@ -599,7 +597,9 @@ def _calc_polygon_union(A, B, sections, next_section, enclosures, db_visitor=Non
             new_graph.add_loop(len(new_verts) - vertex_count)
             vertex_count = len(new_verts)
 
+    ## Stop here, I don't think the code below works correctly anyway
     return (Polygon2d(new_verts, new_graph),)
+    #########################################
 
     def _add_holes(enclosures_AB):
         for hole_A, enclosure_B in enclosures_AB:
