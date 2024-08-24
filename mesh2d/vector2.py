@@ -151,28 +151,11 @@ class Geom2:
         return (point - line_start).dot(line_guide) / line_guide.dot(line_guide)
 
 
-
-    @staticmethod
-    def point_to_line_distSq(point, line):
-        """
-        line must be a Ray-like object
-        """
-        coef = Geom2.project_to_line(point, line)
-        return (line[0] + (coef * line[1]) - point).normSq()
-
-
-    @staticmethod
-    def point_to_line_dist(point, line):
-        """
-        line must be a Ray-like object
-        """
-        return math.sqrt(Geom2.point_to_line_distSq(point, line))
-
-
     @staticmethod
     def cos_angle(vect1, vect2):
         cosine = vect1.normalized().dot(vect2.normalized())
         return min(max(cosine, -1.), 1.)
+
 
     @staticmethod
     def sin_angle(vect1, vect2):
@@ -181,54 +164,14 @@ class Geom2:
 
 
     @staticmethod
-    def lines_intersect(line1, line2, angle_tolerance = 1e-8):
-        """
-        returns a tuple (coef1, coef2, distSq)
-        coef1 and coef2 are scalars that define the intersection point on line1 and line2 respectively
-        if lines are parallel, coef1 and coef2 are NaN, and distSq is the squared distance between the lines
-        if lines are non-parallel, distSq is 0
-        line1 and line2 must be Ray-like objects
-
-        s1, r1 = line1
-        s2, r2 = line2
-
-        Need to find coef a where intersection = s1 + a*r1
-        Need to find coef b where intersection = s2 + b*r2
-
-        s1 + a*r1 = s2 + b*r2
-        [r1 x s1] = [r1 x s2] + b * [r1 x r2]
-        [r2 x s1] + a * [r2 x r1] = [r2 x s2]
-
-        a = ([r2 x s2] - [r2 x s1]) / [r2 x r1]
-        b = ([r1 x s2] - [r1 x s1]) / [r2 x r1]
-        """
-        s1, r1 = line1
-        s2, r2 = line2
-
-        r2r1 = vec.cross2(r2, r1)
-        sine_angle = abs(r2r1) / (r1.norm() * r2.norm())
-
-        # if lines are nearly parallel
-        if sine_angle < angle_tolerance:
-            return float("nan"), float("nan"), Geom2.point_to_line_distSq(s1, line2)
-
-        else:
-            r1s1 = vec.cross2(r1, s1)
-            r1s2 = vec.cross2(r1, s2)
-            r2s1 = vec.cross2(r2, s1)
-            r2s2 = vec.cross2(r2, s2)
-
-            a = (r2s2 - r2s1) / r2r1
-            b = (r1s2 - r1s1) / r2r1
-            return (a, b, 0)
-
-
-    @staticmethod
     def is_origin_inside_polyline(polyline):
-        # count how many times the polyline intersects the (x>0, y=0) line
         inside = False
-        # iterate over polyline segments
-        for a, b in pairs(polyline):
+
+        polyline = iter(polyline)
+        a = next(polyline, (0, 0))
+
+        for b in chain(polyline, (a,)):
+            # see if (a, b) intersects the {x>0, y=0} ray
             if a[1] >= 0:
                 if b[1] < 0 and a[0] * b[1] < a[1] * b[0]:
                     inside = not inside
@@ -236,30 +179,11 @@ class Geom2:
             elif b[1] >= 0 and a[0] * b[1] > a[1] * b[0]:
                 inside = not inside
 
+            a = b
+
         return inside
+
 
     @staticmethod
     def is_point_inside_polyline(point, polyline):
-        inside = False
-
-        # convert polyline to a forward iterator
-        polyline = iter(polyline)
-
-        # iterate over the polyline segments,
-        # including the (p_last, p_first) segment
-        for p_first in polyline:
-            a = p_first - point
-
-            for b in chain(polyline, (p_first,)):
-                b = b - point
-                # see if (a, b) intersects the {x>0, y=0} ray
-                if a[1] >= 0:
-                    if b[1] < 0 and a[0] * b[1] < a[1] * b[0]:
-                        inside = not inside
-
-                elif b[1] >= 0 and a[0] * b[1] > a[1] * b[0]:
-                    inside = not inside
-
-                a = b
-            break
-        return inside
+        return is_origin_inside_polyline((p - point for p in polyline))
